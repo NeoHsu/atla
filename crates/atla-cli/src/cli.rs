@@ -12,19 +12,19 @@ pub struct Cli {
 
 #[derive(Debug, Args)]
 pub struct GlobalArgs {
-    #[arg(short, long, value_enum)]
+    #[arg(short, long, value_enum, global = true)]
     pub output: Option<OutputFormat>,
 
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub profile: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub verbose: bool,
 
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub dry_run: bool,
 
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub no_input: bool,
 }
 

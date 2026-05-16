@@ -29,3 +29,22 @@ cargo check
 cargo test
 ```
 
+## Configuration
+
+`atla` stores profile configuration in `~/.config/atla/config.toml` by default.
+API tokens are stored through the OS keyring and are not written to the config file.
+
+For isolated development runs, override the config path:
+
+```bash
+ATLA_CONFIG=/tmp/atla-config.toml cargo run -p atla -- config list
+```
+
+Initial auth commands:
+
+```bash
+atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+atla auth status
+atla config set default-project PROJ
+atla config list --output json
+```
