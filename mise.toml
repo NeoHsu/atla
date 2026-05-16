@@ -1,3 +1,4 @@
 [tools]
+java = "21.0.2"
 rust = "stable"
 zig = "latest"
