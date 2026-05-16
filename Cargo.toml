@@ -1,0 +1,29 @@
+[workspace]
+members = [
+    "crates/atla-cli",
+    "crates/atla-core",
+    "crates/atla-jira-api",
+    "crates/atla-confluence-api",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/NeoHsu/atla"
+rust-version = "1.90"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+comfy-table = "7"
+console = "0.15"
+dialoguer = "0.11"
+directories = "6"
+indicatif = "0.18"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+

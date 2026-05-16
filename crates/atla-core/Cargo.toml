@@ -1,0 +1,20 @@
+[package]
+name = "atla-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+directories.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+reqwest = { workspace = true, optional = true }
+
+[features]
+default = []
+http-client = ["dep:reqwest"]
+
