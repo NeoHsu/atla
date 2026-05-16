@@ -89,10 +89,29 @@ pub struct JiraCommand {
 #[derive(Debug, Subcommand)]
 pub enum JiraResource {
     Issue,
-    Project,
+    Project(ProjectCommand),
     Sprint,
     Board,
     Search { jql: String },
+}
+
+#[derive(Debug, Args)]
+pub struct ProjectCommand {
+    #[command(subcommand)]
+    pub action: ProjectAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ProjectAction {
+    List {
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    View {
+        key: String,
+    },
 }
 
 #[derive(Debug, Args)]

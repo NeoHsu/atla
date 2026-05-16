@@ -48,3 +48,11 @@ atla auth status
 atla config set default-project PROJ
 atla config list --output json
 ```
+
+First Jira command:
+
+```bash
+atla jira project list
+atla jira project list --query platform --limit 25 --output json
+atla jira project list --output keys
+```

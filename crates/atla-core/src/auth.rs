@@ -23,6 +23,7 @@ pub enum AuthState {
 
 pub trait CredentialStore {
     fn save_token(&self, credential: &CredentialRef, token: &str) -> Result<(), AuthError>;
+    fn get_token(&self, credential: &CredentialRef) -> Result<Option<String>, AuthError>;
     fn delete_token(&self, credential: &CredentialRef) -> Result<(), AuthError>;
     fn has_token(&self, credential: &CredentialRef) -> Result<bool, AuthError>;
 }
@@ -58,6 +59,14 @@ impl CredentialStore for KeyringCredentialStore {
             .map_err(|error| AuthError::Backend(error.to_string()))
     }
 
+    fn get_token(&self, credential: &CredentialRef) -> Result<Option<String>, AuthError> {
+        match self.entry(credential)?.get_password() {
+            Ok(token) => Ok(Some(token)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(AuthError::Backend(error.to_string())),
+        }
+    }
+
     fn delete_token(&self, credential: &CredentialRef) -> Result<(), AuthError> {
         match self.entry(credential)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
@@ -66,11 +75,7 @@ impl CredentialStore for KeyringCredentialStore {
     }
 
     fn has_token(&self, credential: &CredentialRef) -> Result<bool, AuthError> {
-        match self.entry(credential)?.get_password() {
-            Ok(_) => Ok(true),
-            Err(keyring::Error::NoEntry) => Ok(false),
-            Err(error) => Err(AuthError::Backend(error.to_string())),
-        }
+        self.get_token(credential).map(|token| token.is_some())
     }
 }
 
