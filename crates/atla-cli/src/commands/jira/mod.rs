@@ -61,7 +61,30 @@ async fn run_project(command: ProjectCommand, global: &GlobalArgs) -> anyhow::Re
             print_projects(&page.values, page.total, global)?;
         }
         ProjectAction::View { key } => {
-            println!("jira project view is planned: {key}");
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/project/{}",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let project = client.get_project(&key).await.with_context(|| {
+                format!(
+                    "failed to load Jira project `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+
+            print_project(&project, global)?;
         }
     }
 
@@ -132,6 +155,45 @@ fn print_projects(
             if let Some(total) = total {
                 println!();
                 println!("Showing {} of {total} projects.", projects.len());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_project(project: &JiraProject, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(project),
+        OutputFormat::Keys => {
+            if let Some(key) = &project.key {
+                println!("{key}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,name,type,style,archived,id");
+            println!(
+                "{},{},{},{},{},{}",
+                csv_cell(project.key.as_deref().unwrap_or_default()),
+                csv_cell(project.name.as_deref().unwrap_or_default()),
+                csv_cell(project.project_type_key.as_deref().unwrap_or_default()),
+                csv_cell(project.style.as_deref().unwrap_or_default()),
+                csv_cell(&project.archived.unwrap_or(false).to_string()),
+                csv_cell(project.id.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Key: {}", project.key.as_deref().unwrap_or("-"));
+            println!("Name: {}", project.name.as_deref().unwrap_or("-"));
+            println!(
+                "Type: {}",
+                project.project_type_key.as_deref().unwrap_or("-")
+            );
+            println!("Style: {}", project.style.as_deref().unwrap_or("-"));
+            println!("Archived: {}", project.archived.unwrap_or(false));
+            if let Some(id) = &project.id {
+                println!("ID: {id}");
             }
             Ok(())
         }

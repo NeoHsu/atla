@@ -55,4 +55,6 @@ First Jira command:
 atla jira project list
 atla jira project list --query platform --limit 25 --output json
 atla jira project list --output keys
+atla jira project view PROJ
+atla jira project view PROJ --output json
 ```

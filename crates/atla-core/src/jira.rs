@@ -31,6 +31,14 @@ impl JiraClient {
 
         read_json(request).await
     }
+
+    pub async fn get_project(&self, project_id_or_key: &str) -> Result<JiraProject, ApiError> {
+        read_json(
+            self.client
+                .get(&format!("/rest/api/3/project/{project_id_or_key}")),
+        )
+        .await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -106,5 +114,25 @@ mod tests {
 
         assert_eq!(page.values[0].key.as_deref(), Some("PROJ"));
         assert_eq!(page.total, Some(1));
+    }
+
+    #[test]
+    fn parses_project_detail() {
+        let project: JiraProject = serde_json::from_str(
+            r#"{
+                "id": "10000",
+                "key": "PROJ",
+                "name": "Project",
+                "projectTypeKey": "software",
+                "style": "classic",
+                "simplified": false,
+                "archived": false
+            }"#,
+        )
+        .expect("parse project detail");
+
+        assert_eq!(project.id.as_deref(), Some("10000"));
+        assert_eq!(project.key.as_deref(), Some("PROJ"));
+        assert_eq!(project.project_type_key.as_deref(), Some("software"));
     }
 }
