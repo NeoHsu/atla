@@ -84,6 +84,7 @@ atla confluence blog view 24680
 atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
 atla confluence search "type=page AND space=DEV"
 atla confluence attachment list 67890
+atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
 ```
 
-Confluence v2 attachment upload is not exposed yet because Atlassian's v2 OpenAPI spec does not include an upload endpoint.
+Confluence v2 remains the primary generated client. Confluence search and attachment upload use a scoped Confluence v1 generated client because Atlassian's v2 OpenAPI spec does not expose those endpoints.

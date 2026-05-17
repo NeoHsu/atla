@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 atla-confluence-api = { path = "../atla-confluence-api" }
+atla-confluence-v1-api = { path = "../atla-confluence-v1-api" }
 directories.workspace = true
 keyring.workspace = true
 serde.workspace = true

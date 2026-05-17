@@ -9,13 +9,13 @@ in_place=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/generate.sh [--product jira|confluence|all] [--out DIR] [--in-place]
+Usage: scripts/generate.sh [--product jira|confluence|confluence-v1|all] [--out DIR] [--in-place]
 
 Generates Rust clients with openapi-generator-cli 7.22.0.
 
 Default output is target/openapi/ so generated code can be inspected before
 replacing workspace crates. Use --in-place only when intentionally refreshing
-crates/atla-jira-api and crates/atla-confluence-api.
+workspace generated API crates.
 USAGE
 }
 
@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${product}" in
-  jira|confluence|all) ;;
+  jira|confluence|confluence-v1|all) ;;
   *)
     echo "invalid product: ${product}" >&2
     exit 2
@@ -110,7 +110,7 @@ generate_client() {
   fi
 
   case "${out_dir}" in
-    "${repo_root}/target/"*|"/tmp/"*|"${repo_root}/crates/atla-jira-api"|"${repo_root}/crates/atla-confluence-api") ;;
+    "${repo_root}/target/"*|"/tmp/"*|"${repo_root}/crates/atla-jira-api"|"${repo_root}/crates/atla-confluence-api"|"${repo_root}/crates/atla-confluence-v1-api") ;;
     *)
       echo "refusing to remove unsafe output directory: ${out_dir}" >&2
       exit 1
@@ -140,4 +140,8 @@ fi
 
 if [[ "${product}" == "confluence" || "${product}" == "all" ]]; then
   generate_client "confluence" "${repo_root}/specs/confluence-v2.json" "atla-confluence-api"
+fi
+
+if [[ "${product}" == "confluence-v1" || "${product}" == "all" ]]; then
+  generate_client "confluence-v1" "${repo_root}/specs/confluence-v1-partial.json" "atla-confluence-v1-api"
 fi

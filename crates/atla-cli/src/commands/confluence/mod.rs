@@ -2,10 +2,11 @@ use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
     AtlaConfig, AtlassianClient, ConfigStore, ConfluenceAttachment, ConfluenceAttachmentSearch,
-    ConfluenceBlogPost, ConfluenceBlogPostCreate, ConfluenceBlogPostSearch,
-    ConfluenceBodyRepresentation, ConfluenceClient, ConfluenceContentStatus, ConfluencePage,
-    ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch,
-    ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceSearch, Profile,
+    ConfluenceAttachmentUpload, ConfluenceBlogPost, ConfluenceBlogPostCreate,
+    ConfluenceBlogPostSearch, ConfluenceBodyRepresentation, ConfluenceClient,
+    ConfluenceContentStatus, ConfluencePage, ConfluencePageCreate, ConfluencePageSearch,
+    ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchResult, ConfluenceSpace,
+    ConfluenceSpaceSearch, Profile,
 };
 use std::fs;
 use std::path::Path;
@@ -95,6 +96,46 @@ async fn run_attachment(command: AttachmentCommand, global: &GlobalArgs) -> anyh
                 .with_context(|| {
                     format!(
                         "failed to list Confluence page attachments from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_attachments(&page.results, global)?;
+        }
+        AttachmentAction::Upload {
+            page_id,
+            file,
+            comment,
+            minor_edit,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let upload = ConfluenceAttachmentUpload {
+                page_id,
+                file,
+                comment,
+                minor_edit,
+            };
+
+            if global.dry_run {
+                println!(
+                    "Would PUT {}/wiki/rest/api/content/{}/child/attachment with file `{}` using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    upload.page_id,
+                    upload.file.display()
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let page = client
+                .upload_page_attachment(&upload)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to upload Confluence page attachment to {}",
                         client.instance_url()
                     )
                 })?;

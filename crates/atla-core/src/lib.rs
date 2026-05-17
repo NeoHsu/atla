@@ -8,12 +8,13 @@ pub mod profile;
 pub use auth::{AuthState, CredentialRef, KeyringCredentialStore};
 pub use client::{AtlassianClient, AtlassianInstance};
 pub use confluence::{
-    ConfluenceAttachment, ConfluenceAttachmentPage, ConfluenceAttachmentSearch, ConfluenceBlogPost,
-    ConfluenceBlogPostCreate, ConfluenceBlogPostPage, ConfluenceBlogPostSearch,
-    ConfluenceBodyRepresentation, ConfluenceClient, ConfluenceContentStatus, ConfluencePage,
-    ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch, ConfluencePageUpdate,
-    ConfluenceSearch, ConfluenceSearchPage, ConfluenceSearchResult, ConfluenceSpace,
-    ConfluenceSpacePage, ConfluenceSpaceSearch,
+    ConfluenceAttachment, ConfluenceAttachmentPage, ConfluenceAttachmentSearch,
+    ConfluenceAttachmentUpload, ConfluenceBlogPost, ConfluenceBlogPostCreate,
+    ConfluenceBlogPostPage, ConfluenceBlogPostSearch, ConfluenceBodyRepresentation,
+    ConfluenceClient, ConfluenceContentStatus, ConfluencePage, ConfluencePageCreate,
+    ConfluencePagePage, ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch,
+    ConfluenceSearchPage, ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpacePage,
+    ConfluenceSpaceSearch,
 };
 pub use jira::{
     JiraClient, JiraIssue, JiraIssueSearch, JiraIssueSearchPage, JiraProject, JiraProjectPage,

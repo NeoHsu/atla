@@ -310,4 +310,12 @@ pub enum AttachmentAction {
         #[arg(long, default_value_t = 25)]
         limit: u32,
     },
+    Upload {
+        page_id: String,
+        file: PathBuf,
+        #[arg(long)]
+        comment: Option<String>,
+        #[arg(long)]
+        minor_edit: bool,
+    },
 }

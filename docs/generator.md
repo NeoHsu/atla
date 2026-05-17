@@ -21,6 +21,7 @@ The generator jar is cached outside the repository under:
 scripts/openapi-generator.sh version
 scripts/generate.sh --product jira
 scripts/generate.sh --product confluence
+scripts/generate.sh --product confluence-v1
 ```
 
 By default, generated output goes to `target/openapi/` so it can be inspected before replacing workspace crates.
@@ -30,6 +31,7 @@ To intentionally refresh the generated crates:
 ```bash
 scripts/generate.sh --product jira --in-place
 scripts/generate.sh --product confluence --in-place
+scripts/generate.sh --product confluence-v1 --in-place
 ```
 
 ## Current Finding
@@ -47,6 +49,13 @@ Confluence Cloud v2 generation is smaller and is now generated in-place under `c
 - Around 550 generated files including generated endpoint/model docs and OpenAPI generator metadata.
 - Around 3.3 MB.
 - `cargo check --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` pass with the generated crate included.
+
+Confluence Cloud v1 is generated as a scoped partial client under `crates/atla-confluence-v1-api` from `specs/confluence-v1-partial.json`. The partial spec is built by `scripts/confluence-v1-partial-spec.js` from Atlassian's v1 spec and currently includes:
+
+- CQL search endpoints used by `atla confluence search`.
+- Create/update attachment endpoint used by `atla confluence attachment upload`.
+
+The v1 partial builder intentionally patches the generated-facing spec without changing the downloaded source spec: it removes a query parameter named `_` that generates invalid Rust, narrows the response models to the fields Atla consumes, and corrects attachment multipart fields so `minorEdit`, `comment`, and `X-Atlassian-Token: nocheck` generate as usable Rust client parameters.
 
 The generated `Cargo.toml` also needs a small post-process fix: generator `7.22.0` emits `default = ["rustls-tls"]`, while the generated feature is named `rustls`. `scripts/generate.sh` applies that fix automatically.
 

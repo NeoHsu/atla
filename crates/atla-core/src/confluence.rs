@@ -1,12 +1,15 @@
 use atla_confluence_api::{apis as generated_apis, models as generated_models};
+use atla_confluence_v1_api::{apis as generated_v1_apis, models as generated_v1_models};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
-use crate::client::{ApiError, AtlassianClient, read_json};
+use crate::client::{ApiError, AtlassianClient};
 
 #[derive(Debug, Clone)]
 pub struct ConfluenceClient {
     raw_client: AtlassianClient,
     generated: generated_apis::configuration::Configuration,
+    generated_v1: generated_v1_apis::configuration::Configuration,
 }
 
 impl ConfluenceClient {
@@ -17,10 +20,17 @@ impl ConfluenceClient {
             basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
             ..Default::default()
         };
+        let generated_v1 = generated_v1_apis::configuration::Configuration {
+            base_path: client.instance().base_url.clone(),
+            user_agent: Some("atla".to_owned()),
+            basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
+            ..Default::default()
+        };
 
         Self {
             raw_client: client,
             generated,
+            generated_v1,
         }
     }
 
@@ -320,13 +330,50 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceSearch,
     ) -> Result<ConfluenceSearchPage, ApiError> {
-        read_json(
-            self.raw_client
-                .get("/wiki/rest/api/search")
-                .query(&[("cql", search.cql.as_str())])
-                .query(&[("limit", search.limit.to_string())]),
+        let page = generated_v1_apis::search_api::search_by_cql(
+            &self.generated_v1,
+            &search.cql,
+            None,
+            None,
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
         .await
+        .map_err(generated_v1_error)?;
+
+        Ok(page.into())
+    }
+
+    pub async fn upload_page_attachment(
+        &self,
+        upload: &ConfluenceAttachmentUpload,
+    ) -> Result<ConfluenceAttachmentPage, ApiError> {
+        let page = generated_v1_apis::content_attachments_api::create_or_update_attachments(
+            &self.generated_v1,
+            &upload.page_id,
+            "nocheck",
+            upload.file.clone(),
+            upload.minor_edit,
+            Some("current"),
+            upload.comment.as_deref(),
+        )
+        .await
+        .map_err(generated_v1_error)?;
+
+        Ok(ConfluenceAttachmentPage {
+            results: page
+                .results
+                .into_iter()
+                .map(ConfluenceAttachment::from)
+                .collect(),
+        })
     }
 
     pub async fn list_page_attachments(
@@ -684,6 +731,14 @@ pub struct ConfluenceAttachmentSearch {
     pub limit: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceAttachmentUpload {
+    pub page_id: String,
+    pub file: PathBuf,
+    pub comment: Option<String>,
+    pub minor_edit: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfluenceAttachmentPage {
@@ -733,6 +788,18 @@ fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
     }
 }
 
+fn generated_v1_error<T>(error: generated_v1_apis::Error<T>) -> ApiError {
+    match error {
+        generated_v1_apis::Error::Reqwest(error) => ApiError::Decode(error.to_string()),
+        generated_v1_apis::Error::Serde(error) => ApiError::Decode(error.to_string()),
+        generated_v1_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
+        generated_v1_apis::Error::ResponseError(response) => ApiError::Http {
+            status: response.status,
+            body: response.content,
+        },
+    }
+}
+
 fn version_from_generated(
     version: Option<Box<generated_models::Version>>,
 ) -> Option<ConfluenceVersion> {
@@ -741,6 +808,23 @@ fn version_from_generated(
         message: version.message,
         created_at: version.created_at.map(|created_at| created_at.to_rfc3339()),
     })
+}
+
+fn version_from_generated_v1(
+    version: Option<Box<generated_v1_models::Version>>,
+) -> Option<ConfluenceVersion> {
+    version.map(|version| ConfluenceVersion {
+        number: Some(version.number as u64),
+        message: version.message,
+        created_at: version.when.map(|created_at| created_at.to_rfc3339()),
+    })
+}
+
+fn v1_link(
+    links: &Option<std::collections::HashMap<String, String>>,
+    name: &str,
+) -> Option<String> {
+    links.as_ref().and_then(|links| links.get(name).cloned())
 }
 
 fn body_from_generated(body: Option<Box<generated_models::BodySingle>>) -> Option<String> {
@@ -829,6 +913,44 @@ impl From<generated_models::CreateBlogPost200Response> for ConfluenceBlogPost {
     }
 }
 
+impl From<generated_v1_models::SearchPageResponseSearchResult> for ConfluenceSearchPage {
+    fn from(page: generated_v1_models::SearchPageResponseSearchResult) -> Self {
+        Self {
+            results: page
+                .results
+                .into_iter()
+                .map(ConfluenceSearchResult::from)
+                .collect(),
+            size: Some(page.size as u64),
+            total_size: Some(page.total_size as u64),
+        }
+    }
+}
+
+impl From<generated_v1_models::SearchResult> for ConfluenceSearchResult {
+    fn from(result: generated_v1_models::SearchResult) -> Self {
+        Self {
+            title: Some(result.title),
+            url: Some(result.url),
+            excerpt: Some(result.excerpt),
+            content: result
+                .content
+                .map(|content| ConfluenceSearchContent::from(*content)),
+        }
+    }
+}
+
+impl From<generated_v1_models::Content> for ConfluenceSearchContent {
+    fn from(content: generated_v1_models::Content) -> Self {
+        Self {
+            id: content.id,
+            content_type: Some(content.r#type),
+            status: Some(content.status),
+            title: content.title,
+        }
+    }
+}
+
 impl From<generated_models::AttachmentBulk> for ConfluenceAttachment {
     fn from(attachment: generated_models::AttachmentBulk) -> Self {
         Self {
@@ -844,6 +966,25 @@ impl From<generated_models::AttachmentBulk> for ConfluenceAttachment {
             webui_link: attachment.webui_link,
             download_link: attachment.download_link,
             version: version_from_generated(attachment.version),
+        }
+    }
+}
+
+impl From<generated_v1_models::Content> for ConfluenceAttachment {
+    fn from(content: generated_v1_models::Content) -> Self {
+        Self {
+            id: content.id,
+            status: Some(content.status),
+            title: content.title,
+            page_id: None,
+            blog_post_id: None,
+            media_type: None,
+            media_type_description: None,
+            file_id: None,
+            file_size: None,
+            webui_link: v1_link(&content._links, "webui"),
+            download_link: v1_link(&content._links, "download"),
+            version: version_from_generated_v1(content.version),
         }
     }
 }
@@ -1033,5 +1174,70 @@ mod tests {
         assert_eq!(attachment.id.as_deref(), Some("att123"));
         assert_eq!(attachment.media_type.as_deref(), Some("image/png"));
         assert_eq!(attachment.file_size, Some(2048));
+    }
+
+    #[test]
+    fn converts_v1_search_page() {
+        let page = generated_v1_models::SearchPageResponseSearchResult::new(
+            vec![generated_v1_models::SearchResult {
+                title: "Runbook".to_owned(),
+                excerpt: "Useful page".to_owned(),
+                url: "/wiki/spaces/DEV/pages/111/Runbook".to_owned(),
+                content: Some(Box::new(generated_v1_models::Content {
+                    id: Some("111".to_owned()),
+                    r#type: "page".to_owned(),
+                    status: "current".to_owned(),
+                    title: Some("Runbook".to_owned()),
+                    version: None,
+                    _links: None,
+                })),
+            }],
+            1,
+            1,
+        );
+
+        let page = ConfluenceSearchPage::from(page);
+        let result = &page.results[0];
+        assert_eq!(page.total_size, Some(1));
+        assert_eq!(result.title.as_deref(), Some("Runbook"));
+        assert_eq!(
+            result
+                .content
+                .as_ref()
+                .and_then(|content| content.content_type.as_deref()),
+            Some("page")
+        );
+    }
+
+    #[test]
+    fn converts_v1_attachment_upload_result() {
+        let mut links = std::collections::HashMap::new();
+        links.insert(
+            "download".to_owned(),
+            "/download/attachments/111/diagram.png".to_owned(),
+        );
+
+        let attachment = ConfluenceAttachment::from(generated_v1_models::Content {
+            id: Some("att123".to_owned()),
+            r#type: "attachment".to_owned(),
+            status: "current".to_owned(),
+            title: Some("diagram.png".to_owned()),
+            version: Some(Box::new(generated_v1_models::Version::new(2))),
+            _links: Some(links),
+        });
+
+        assert_eq!(attachment.id.as_deref(), Some("att123"));
+        assert_eq!(attachment.title.as_deref(), Some("diagram.png"));
+        assert_eq!(
+            attachment.download_link.as_deref(),
+            Some("/download/attachments/111/diagram.png")
+        );
+        assert_eq!(
+            attachment
+                .version
+                .as_ref()
+                .and_then(|version| version.number),
+            Some(2)
+        );
     }
 }

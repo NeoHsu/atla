@@ -4,6 +4,7 @@ members = [
     "crates/atla-core",
     "crates/atla-jira-api",
     "crates/atla-confluence-api",
+    "crates/atla-confluence-v1-api",
 ]
 resolver = "3"
 

@@ -1,0 +1,10 @@
+pub mod content;
+pub use self::content::Content;
+pub mod content_array;
+pub use self::content_array::ContentArray;
+pub mod search_page_response_search_result;
+pub use self::search_page_response_search_result::SearchPageResponseSearchResult;
+pub mod search_result;
+pub use self::search_result::SearchResult;
+pub mod version;
+pub use self::version::Version;

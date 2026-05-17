@@ -1,0 +1,951 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "The Confluence Cloud REST API - Atla v1 partial",
+    "description": "This document describes the REST API and resources provided by Confluence. The REST APIs are for developers who want to integrate Confluence into their application and for administrators who want to script interactions with the Confluence server.Confluence's REST APIs provide access to resources (data entities) via URI paths. To use a REST API, your application will make an HTTP request and parse the response. The response format is JSON. Your methods will be the standard HTTP methods like GET, PUT, POST and DELETE. Because the REST API is based on open standards, you can use any web development language to access the API.",
+    "termsOfService": "https://atlassian.com/terms/",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "//your-domain.atlassian.net"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Content - attachments",
+      "description": ""
+    },
+    {
+      "name": "Search",
+      "description": ""
+    }
+  ],
+  "paths": {
+    "/wiki/rest/api/content/search": {
+      "get": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Search content by CQL",
+        "description": "Returns the list of content that matches a Confluence Query Language\n(CQL) query. For information on CQL, see:\n[Advanced searching using CQL](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/).\n\nExample initial call:\n```\n/wiki/rest/api/content/search?cql=type=page&limit=25\n```\n\nExample response:\n```\n{\n  \"results\": [\n    { ... },\n    { ... },\n    ...\n    { ... }\n  ],\n  \"limit\": 25,\n  \"size\": 25,\n  ...\n  \"_links\": {\n    \"base\": \"<url>\",\n    \"context\": \"<url>\",\n    \"next\": \"/rest/api/content/search?cql=type=page&limit=25&cursor=raNDoMsTRiNg\",\n    \"self\": \"<url>\"\n  }\n}\n```\n\nWhen additional results are available, returns `next` and `prev` URLs to retrieve them in subsequent calls. The URLs each contain a cursor that points to the appropriate set of results. Use `limit` to specify the number of results returned in each call.\nExample subsequent call (taken from example response):\n```\n/wiki/rest/api/content/search?cql=type=page&limit=25&cursor=raNDoMsTRiNg\n```\nThe response to this will have a `prev` URL similar to the `next` in the example response.\n\nIf the expand query parameter is used with the `body.export_view` and/or `body.styled_view` properties, then the query limit parameter will be restricted to a maximum value of 25.\n\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\nPermission to access the Confluence site ('Can use' global permission).\nOnly content that the user has permission to view will be returned.",
+        "operationId": "searchContentByCQL",
+        "parameters": [
+          {
+            "name": "cql",
+            "in": "query",
+            "description": "The CQL string that is used to find the requested content.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cqlcontext",
+            "in": "query",
+            "description": "The space, content, and content status to execute the search against.\nSpecify this as an object with the following properties:\n\n- `spaceKey` Key of the space to search against. Optional.\n- `contentId` ID of the content to search against. Optional. Must\nbe in the space spacified by `spaceKey`.\n- `contentStatuses` Content statuses to search against. Optional.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/contentExpand"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pointer to a set of search results, returned as part of the `next` or `prev` URL from the previous search call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of content objects to return per page.\nNote, this may be restricted by fixed system limits.",
+            "schema": {
+              "minimum": 0,
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returned if the requested list of content is returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentArray"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Returned if the CQL is invalid or missing.",
+            "content": {}
+          },
+          "401": {
+            "description": "Returned if the authentication credentials are incorrect or missing\nfrom the request.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "search:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "search:confluence"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:content-details:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      }
+    },
+    "/wiki/rest/api/search": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search content",
+        "description": "Searches for content using the\n[Confluence Query Language (CQL)](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/).\n\n**Note that CQL input queries submitted through the `/wiki/rest/api/search` endpoint no longer support user-specific fields like `user`, `user.fullname`, `user.accountid`, and `user.userkey`.** \nSee this [deprecation notice](https://developer.atlassian.com/cloud/confluence/deprecation-notice-search-api/) for more details.\n\nExample initial call:\n```\n/wiki/rest/api/search?cql=type=page&limit=25\n```\n\nExample response:\n```\n{\n  \"results\": [\n    { ... },\n    { ... },\n    ...\n    { ... }\n  ],\n  \"limit\": 25,\n  \"size\": 25,\n  ...\n  \"_links\": {\n    \"base\": \"<url>\",\n    \"context\": \"<url>\",\n    \"next\": \"/rest/api/search?cql=type=page&limit=25&cursor=raNDoMsTRiNg\",\n    \"self\": \"<url>\"\n  }\n}\n```\n\nWhen additional results are available, returns `next` and `prev` URLs to retrieve them in subsequent calls. The URLs each contain a cursor that points to the appropriate set of results. Use `limit` to specify the number of results returned in each call.\n\nExample subsequent call (taken from example response):\n```\n/wiki/rest/api/search?cql=type=page&limit=25&cursor=raNDoMsTRiNg\n```\nThe response to this will have a `prev` URL similar to the `next` in the example response.\n\nIf the expand query parameter is used with the `body.export_view` and/or `body.styled_view` properties, then the query limit parameter will be restricted to a maximum value of 25.\n\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\nPermission to view the entities. Note, only entities that the user has\npermission to view will be returned.",
+        "operationId": "searchByCQL",
+        "parameters": [
+          {
+            "name": "cql",
+            "in": "query",
+            "description": "The CQL query to be used for the search. See\n[Advanced Searching using CQL](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/)\nfor instructions on how to build a CQL query.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cqlcontext",
+            "in": "query",
+            "description": "The space, content, and content status to execute the search\nagainst.\n\n- `spaceKey` Key of the space to search against. Optional.\n- `contentId` ID of the content to search against. Optional. Must be\nin the space specified by `spaceKey`.\n- `contentStatuses` Content statuses to search against. Optional.\n\nSpecify these values in an object. For example,\n`cqlcontext={%22spaceKey%22:%22TEST%22, %22contentId%22:%22123%22}`",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Pointer to a set of search results, returned as part of the `next` or `prev` URL from the previous search call.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "next",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "prev",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of content objects to return per page.\nNote, this may be restricted by fixed system limits.",
+            "schema": {
+              "minimum": 0,
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "description": "The start point of the collection to return",
+            "schema": {
+              "minimum": 0,
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "includeArchivedSpaces",
+            "in": "query",
+            "description": "Whether to include content from archived spaces in the results.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "excludeCurrentSpaces",
+            "in": "query",
+            "description": "Whether to exclude current spaces and only show archived spaces.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "excerpt",
+            "in": "query",
+            "description": "The excerpt strategy to apply to the result",
+            "schema": {
+              "type": "string",
+              "default": "highlight",
+              "enum": [
+                "highlight",
+                "indexed",
+                "none",
+                "highlight_unescaped",
+                "indexed_unescaped"
+              ]
+            }
+          },
+          {
+            "name": "sitePermissionTypeFilter",
+            "in": "query",
+            "description": "Filters users by permission type. Use `none` to default to licensed users, `externalCollaborator`\nfor external/guest users, and `all` to include all permission types.",
+            "schema": {
+              "type": "string",
+              "default": "none",
+              "enum": [
+                "all",
+                "externalCollaborator",
+                "none"
+              ]
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returned if the requested results are returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchPageResponseSearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Returned if the CQL query cannot be parsed.",
+            "content": {}
+          },
+          "403": {
+            "description": "Returned if the calling user does not have permission to access\nConfluence.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "search:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "search:confluence"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:content-details:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      }
+    },
+    "/wiki/rest/api/search/user": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search users",
+        "description": "Searches for users using user-specific queries from the\n[Confluence Query Language (CQL)](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/).\n\nNote that CQL input queries submitted through the `/wiki/rest/api/search/user` endpoint only support user-specific fields like `user`, `user.fullname`, `user.accountid`, and `user.userkey`.\n\nNote that some user fields may be set to null depending on the user's privacy settings.\nThese are: email, profilePicture, displayName, and timeZone.",
+        "operationId": "searchUser",
+        "parameters": [
+          {
+            "name": "cql",
+            "in": "query",
+            "description": "The CQL query to be used for the search. See\n[Advanced Searching using CQL](https://developer.atlassian.com/cloud/confluence/advanced-searching-using-cql/)\nfor instructions on how to build a CQL query.\n\nExample queries:\n          cql=type=user will return up to 10k users\n          cql=user=\"1234\" will return user with accountId \"1234\"\n          You can also use IN, NOT IN, != operators\n          cql=user IN (\"12\", \"34\") will return users with accountids \"12\" and \"34\"\n          cql=user.fullname~jo will return users with nickname/full name starting with \"jo\"\n          cql=user.accountid=\"123\" will return user with accountId \"123\"",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "description": "The starting index of the returned users.",
+            "schema": {
+              "minimum": 0,
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "The maximum number of user objects to return per page.\nNote, this may be restricted by fixed system limits.",
+            "schema": {
+              "minimum": 0,
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "description": "A multi-value parameter indicating which properties of the user to expand.\n\n- `operations` returns the operations for the user, which are used\nwhen setting permissions.\n- `personalSpace` returns the personal space of the user.",
+            "style": "form",
+            "explode": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "sitePermissionTypeFilter",
+            "in": "query",
+            "description": "Filters users by permission type. Use `none` to default to licensed users, `externalCollaborator`\nfor external/guest users, and `all` to include all permission types.",
+            "schema": {
+              "type": "string",
+              "default": "none",
+              "enum": [
+                "all",
+                "externalCollaborator",
+                "none"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returned if the requested results are returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchPageResponseSearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Returned if the CQL query cannot be parsed.",
+            "content": {}
+          },
+          "403": {
+            "description": "Returned if the calling user does not have permission to access\nConfluence.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "read:content-details:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "read:content-details:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": true
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      }
+    },
+    "/wiki/rest/api/content/{id}/child/attachment": {
+      "put": {
+        "tags": [
+          "Content - attachments"
+        ],
+        "summary": "Create or update attachment",
+        "description": "Adds an attachment to a piece of content. If the attachment already exists\nfor the content, then the attachment is updated (i.e. a new version of the\nattachment is created).\n\nNote, you must set a `X-Atlassian-Token: nocheck` header on the request\nfor this method, otherwise it will be blocked. This protects against XSRF\nattacks, which is necessary as this method accepts multipart/form-data.\n\nThe media type 'multipart/form-data' is defined in [RFC 7578](https://www.ietf.org/rfc/rfc7578.txt).\nMost client libraries have classes that make it easier to implement\nmultipart posts, like the [MultipartEntityBuilder](https://hc.apache.org/httpcomponents-client-5.1.x/current/httpclient5/apidocs/)\nJava class provided by Apache HTTP Components.\n\nNote, according to [RFC 7578](https://tools.ietf.org/html/rfc7578#section-4.5),\nin the case where the form data is text,\nthe charset parameter for the \"text/plain\" Content-Type may be used to\nindicate the character encoding used in that part. In the case of this\nAPI endpoint, the `comment` body parameter should be sent with `type=text/plain`\nand `charset=utf-8` values. This will force the charset to be UTF-8.\n\nExample: This curl command attaches a file ('example.txt') to a piece of\ncontent (id='123') with a comment and `minorEdits`=true. If the 'example.txt'\nfile already exists, it will update it with a new version of the attachment.\n\n``` bash\ncurl -D- \\\n  -u admin:admin \\\n  -X PUT \\\n  -H 'X-Atlassian-Token: nocheck' \\\n  -F 'file=@\"example.txt\"' \\\n  -F 'minorEdit=\"true\"' \\\n  -F 'comment=\"Example attachment comment\"; type=text/plain; charset=utf-8' \\\n  http://myhost/rest/api/content/123/child/attachment\n```\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\nPermission to update the content.",
+        "operationId": "createOrUpdateAttachments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the content to add the attachment to.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "The status of the content that the attachment is being added to.\nThis should always be set to 'current'.",
+            "schema": {
+              "type": "string",
+              "default": "current",
+              "enum": [
+                "current",
+                "draft"
+              ]
+            }
+          },
+          {
+            "name": "X-Atlassian-Token",
+            "in": "header",
+            "description": "Required by Confluence for attachment multipart requests. Use `nocheck`.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "nocheck"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file",
+                  "minorEdit"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "The relative location and name of the attachment to be added to\nthe content.",
+                    "format": "binary"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "description": "The comment for the attachment that is being added.\nIf you specify a comment, then every file must have a comment and\nthe comments must be in the same order as the files. Alternatively,\ndon't specify any comments."
+                  },
+                  "minorEdit": {
+                    "type": "boolean",
+                    "description": "If `minorEdits` is set to 'true', no notification email or activity stream\nwill be generated when the attachment is added to the content.",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Returned if the attachments were added to the content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentArray"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Returned if;\n\n- Attachments are disabled.\n- The calling user does not have permission to add attachments to the\ncontent.",
+            "content": {}
+          },
+          "404": {
+            "description": "Returned if;\n\n- The requested content is not found.\n- The user does not have permission to view it.\n- The attachment exceeds the maximum configured attachment size.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "write:confluence-file"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "write:confluence-file"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:content-details:confluence",
+              "write:attachment:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      },
+      "post": {
+        "tags": [
+          "Content - attachments"
+        ],
+        "summary": "Create attachment",
+        "description": "Adds an attachment to a piece of content. This method only adds a new\nattachment. If you want to update an existing attachment, use\n[Create or update attachments](#api-content-id-child-attachment-put).\n\nNote, you must set a `X-Atlassian-Token: nocheck` header on the request\nfor this method, otherwise it will be blocked. This protects against XSRF\nattacks, which is necessary as this method accepts multipart/form-data.\n\nThe media type 'multipart/form-data' is defined in [RFC 7578](https://www.ietf.org/rfc/rfc7578.txt).\nMost client libraries have classes that make it easier to implement\nmultipart posts, like the [MultipartEntityBuilder](https://hc.apache.org/httpcomponents-client-5.1.x/current/httpclient5/apidocs/)\nJava class provided by Apache HTTP Components.\n\nNote, according to [RFC 7578](https://tools.ietf.org/html/rfc7578#section-4.5),\nin the case where the form data is text,\nthe charset parameter for the \"text/plain\" Content-Type may be used to\nindicate the character encoding used in that part. In the case of this\nAPI endpoint, the `comment` body parameter should be sent with `type=text/plain`\nand `charset=utf-8` values. This will force the charset to be UTF-8.\n\nExample: This curl command attaches a file ('example.txt') to a container\n(id='123') with a comment and `minorEdits`=true.\n\n``` bash\ncurl -D- \\\n  -u admin:admin \\\n  -X POST \\\n  -H 'X-Atlassian-Token: nocheck' \\\n  -F 'file=@\"example.txt\"' \\\n  -F 'minorEdit=\"true\"' \\\n  -F 'comment=\"Example attachment comment\"; type=text/plain; charset=utf-8' \\\n  https://myhost/wiki/rest/api/content/123/child/attachment\n```\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\nPermission to update the content.",
+        "operationId": "createAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the content to add the attachment to.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "The status of the content that the attachment is being added to.",
+            "schema": {
+              "type": "string",
+              "default": "current",
+              "enum": [
+                "current",
+                "draft"
+              ]
+            }
+          },
+          {
+            "name": "X-Atlassian-Token",
+            "in": "header",
+            "description": "Required by Confluence for attachment multipart requests. Use `nocheck`.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "default": "nocheck"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "file",
+                  "minorEdit"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "description": "The relative location and name of the attachment to be added to\nthe content.",
+                    "format": "binary"
+                  },
+                  "comment": {
+                    "type": "string",
+                    "description": "The comment for the attachment that is being added.\nIf you specify a comment, then every file must have a comment and\nthe comments must be in the same order as the files. Alternatively,\ndon't specify any comments."
+                  },
+                  "minorEdit": {
+                    "type": "boolean",
+                    "description": "If `minorEdits` is set to 'true', no notification email or activity stream\nwill be generated when the attachment is added to the content.",
+                    "default": false
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Returned if the attachments were added to the content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentArray"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Returned if the content already has an attachment with the same filename.",
+            "content": {}
+          },
+          "403": {
+            "description": "Returned if;\n\n- Attachments are disabled in Confluence.\n- The calling user does not have permission to add attachments to the\ncontent.",
+            "content": {}
+          },
+          "404": {
+            "description": "Returned if;\n\n- The requested content is not found.\n- The user does not have permission to view it\n- The attachment exceeds the maximum configured attachment size.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "write:confluence-file"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "write:confluence-file"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:content-details:confluence",
+              "write:attachment:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Content": {
+        "type": "object",
+        "required": [
+          "type",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "_links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ContentArray": {
+        "type": "object",
+        "required": [
+          "results",
+          "size"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Content"
+            }
+          },
+          "start": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "_links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchPageResponseSearchResult": {
+        "type": "object",
+        "required": [
+          "results",
+          "size",
+          "totalSize"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            }
+          },
+          "start": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cqlQuery": {
+            "type": "string"
+          },
+          "searchDuration": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "_links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchResult": {
+        "type": "object",
+        "required": [
+          "title",
+          "excerpt",
+          "url"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/components/schemas/Content"
+          }
+        }
+      },
+      "Version": {
+        "type": "object",
+        "required": [
+          "number"
+        ],
+        "properties": {
+          "when": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "minorEdit": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "contentExpand": {
+        "name": "expand",
+        "in": "query",
+        "description": "A multi-value parameter indicating which properties of the content to expand.\n\n- `childTypes.all` returns whether the content has attachments, comments, or child pages/whiteboards.\nUse this if you only need to check whether the content has children of a particular type.\n- `childTypes.attachment` returns whether the content has attachments.\n- `childTypes.comment` returns whether the content has comments.\n- `childTypes.page` returns whether the content has child pages.\n- `childTypes.whiteboard` returns whether the content has child whiteboards.\n- `childTypes.database` returns whether the content has child databases.\n- `childTypes.embed` returns whether the content has child embeds (smartlinks).\n- `childTypes.folder` returns whether the content has child folders.\n- `container` returns the space that the content is in. This is the same as the information\nreturned by [Get space](#api-space-spaceKey-get).\n- `metadata.currentuser` returns information about the current user in relation to the content,\nincluding when they last viewed it, modified it, contributed to it, or added it as a favorite.\n- `metadata.properties` returns content properties that have been set via the Confluence REST API.\n- `metadata.labels` returns the labels that have been added to the content.\n- `metadata.frontend` this property is only used by Atlassian.\n- `operations` returns the operations for the content, which are used when setting permissions.\n- `children.page` returns pages that are descendants at the level immediately below the content.\n- `children.whiteboard` returns whiteboards that are descendants at the level immediately below the content.\n- `children.database` returns databases that are descendants at the level immediately below the content.\n- `children.embed` returns embeds (smartlinks) that are descendants at the level immediately below the content.\n- `children.folder` returns folders that are descendants at the level immediately below the content.\n- `children.attachment` returns all attachments for the content.\n- `children.comment` returns all comments on the content.\n- `restrictions.read.restrictions.user` returns the users that have permission to read the content.\n- `restrictions.read.restrictions.group` returns the groups that have permission to read the content. Note that\nthis may return deleted groups, because deleting a group doesn't remove associated restrictions.\n- `restrictions.update.restrictions.user` returns the users that have permission to update the content.\n- `restrictions.update.restrictions.group` returns the groups that have permission to update the content. Note that\nthis may return deleted groups because deleting a group doesn't remove associated restrictions.\n- `history` returns the history of the content, including the date it was created.\n- `history.lastUpdated` returns information about the most recent update of the content, including\nwho updated it and when it was updated.\n- `history.previousVersion` returns information about the update prior to the current content update.\n- `history.contributors` returns all of the users who have contributed to the content.\n- `history.nextVersion` returns information about the update after to the current content update.\n- `ancestors` returns the parent content, if the content is a page or whiteboard.\n- `body` returns the body of the content in different formats, including the editor format,\nview format, and export format.\n- `body.storage` returns the body of content in storage format.\n- `body.view` returns the body of content in view format.\n- `version` returns information about the most recent update of the content, including who updated it\nand when it was updated.\n- `descendants.page` returns pages that are descendants at any level below the content.\n- `descendants.whiteboard` returns whiteboards that are descendants at any level below the content.\n- `descendants.database` returns databases that are descendants at any level below the content.\n- `descendants.embed` returns embeds (smartlinks) that are descendants at any level below the content.\n- `descendants.folder` returns folders that are descendants at any level below the content.\n- `descendants.attachment` returns all attachments for the content, same as `children.attachment`.\n- `descendants.comment` returns all comments on the content, same as `children.comment`.\n- `space` returns the space that the content is in. This is the same as the information returned by\n[Get space](#api-space-spaceKey-get).\n\nIn addition, the following comment-specific expansions can be used:\n- `extensions.inlineProperties` returns inline comment-specific properties.\n- `extensions.resolution` returns the resolution status of each comment.",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "basicAuth": {
+        "type": "http",
+        "description": "You can access this resource via basic auth.",
+        "scheme": "basic"
+      },
+      "oAuthDefinitions": {
+        "type": "oauth2",
+        "description": "This API uses OAuth 2 with the authorizationCode grant flow.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://auth.atlassian.com/authorize",
+            "tokenUrl": "https://auth.atlassian.com/oauth/token",
+            "scopes": {
+              "read:confluence-content.all": "Read all content, including content body (expansions permitted). Note, APIs using this scope may also return data allowed by read:confluence-space.summary. However, this scope is not a substitute for read:confluence-space.summary.",
+              "read:confluence-content.permission": "Read content permissions.",
+              "read:confluence-content.summary": "Read a summary of the content, which is the content without expansions. Note, APIs using this scope may also return data allowed by read:confluence-space.summary. However, this scope is not a substitute for read:confluence-space.summary.",
+              "write:confluence-content": "Permits the creation of pages, blogs, comments and questions.",
+              "read:confluence-space.summary": "Read a summary of space information without expansions.",
+              "write:confluence-space": "Create, update and delete space information.",
+              "write:confluence-file": "Upload attachments.",
+              "read:confluence-props": "Read content properties.",
+              "write:confluence-props": "Write content properties.",
+              "search:confluence": "Search Confluence. Note, APIs using this scope may also return data allowed by read:confluence-space.summary and read:confluence-content.summary. However, this scope is not a substitute for read:confluence-space.summary or read:confluence-content.summary.",
+              "manage:confluence-configuration": "Manage global settings.",
+              "read:confluence-groups": "Read user groups.",
+              "write:confluence-groups": "Create, remove and update user groups.",
+              "read:confluence-user": "Read users.",
+              "readonly:content.attachment:confluence": "Download attachments of a Confluence page or blogpost that you have access to.",
+              "read:content:confluence": "View content.",
+              "read:content-details:confluence": "View content details.",
+              "write:content:confluence": "Create and update content.",
+              "delete:content:confluence": "Delete content.",
+              "read:space-details:confluence": "View space details.",
+              "read:analytics.content:confluence": "View analytics for content.",
+              "read:audit-log:confluence": "View audit records.",
+              "write:audit-log:confluence": "Create audit records.",
+              "read:configuration:confluence": "View Confluence settings.",
+              "write:configuration:confluence": "Update Confluence settings.",
+              "read:page:confluence": "View pages.",
+              "write:page:confluence": "Create and update pages.",
+              "delete:page:confluence": "Delete pages.",
+              "read:blogpost:confluence": "View blogposts.",
+              "write:blogpost:confluence": "Create and update blogposts.",
+              "delete:blogpost:confluence": "Delete blogposts.",
+              "read:whiteboard:confluence": "View whiteboards.",
+              "write:whiteboard:confluence": "Create and update whiteboards.",
+              "delete:whiteboard:confluence": "Delete whiteboards.",
+              "read:custom-content:confluence": "View custom content.",
+              "write:custom-content:confluence": "Create and update custom content.",
+              "delete:custom-content:confluence": "Delete custom content.",
+              "read:attachment:confluence": "View and download content attachments.",
+              "write:attachment:confluence": "Create and update attachments.",
+              "delete:attachment:confluence": "Delete attachments.",
+              "read:comment:confluence": "View comments.",
+              "write:comment:confluence": "Create and update comments.",
+              "delete:comment:confluence": "Delete comments.",
+              "read:template:confluence": "View content templates.",
+              "write:template:confluence": "Create, update and delete content templates.",
+              "read:label:confluence": "View labels.",
+              "write:label:confluence": "Add and remove labels.",
+              "read:content.permission:confluence": "Check content permissions.",
+              "read:content.property:confluence": "View content properties.",
+              "write:content.property:confluence": "Create, update and delete content properties.",
+              "read:content.restriction:confluence": "View content restrictions.",
+              "write:content.restriction:confluence": "Update content restrictions.",
+              "read:content.metadata:confluence": "View content summaries.",
+              "read:watcher:confluence": "View content watchers.",
+              "write:watcher:confluence": "Add and remove content watchers.",
+              "read:group:confluence": "View groups.",
+              "write:group:confluence": "Create and delete groups.",
+              "read:inlinetask:confluence": "View tasks.",
+              "write:inlinetask:confluence": "Update tasks.",
+              "read:relation:confluence": "View entity relationships.",
+              "write:relation:confluence": "Create and update entity relationships.",
+              "read:space:confluence": "View spaces.",
+              "write:space:confluence": "Create and update spaces.",
+              "delete:space:confluence": "Delete spaces.",
+              "read:space.permission:confluence": "View space permissions.",
+              "write:space.permission:confluence": "Update space permissions.",
+              "read:space.property:confluence": "View space properties.",
+              "write:space.property:confluence": "Create, update and delete space properties.",
+              "read:user.property:confluence": "View user properties.",
+              "write:user.property:confluence": "Create, update and delete user properties.",
+              "read:space.setting:confluence": "View space settings.",
+              "write:space.setting:confluence": "Update space settings.",
+              "read:user:confluence": "View user details.",
+              "moderate:core-content:confluence": "Moderate core contents",
+              "moderate:comment:confluence": "Moderate comments",
+              "read:email-address:confluence": "View email addresses of all users regardless of the user’s profile visibility settings."
+            }
+          }
+        }
+      }
+    }
+  }
+}
