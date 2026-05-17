@@ -1,7 +1,8 @@
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
-    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraProject, JiraProjectSearch, Profile,
+    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraIssue, JiraIssueSearch, JiraProject,
+    JiraProjectSearch, Profile,
 };
 
 use crate::cli::{
@@ -16,9 +17,44 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
         JiraResource::Project(command) => run_project(command, global).await?,
         JiraResource::Sprint => println!("jira sprint commands are planned"),
         JiraResource::Board => println!("jira board commands are planned"),
-        JiraResource::Search { jql } => println!("jira search is planned: {jql}"),
+        JiraResource::Search { jql, limit } => run_search(jql, limit, global).await?,
     }
 
+    Ok(())
+}
+
+async fn run_search(jql: String, limit: u32, global: &GlobalArgs) -> anyhow::Result<()> {
+    let store = ConfigStore::default_store().context("failed to find config location")?;
+    let atla_config = store.load().context("failed to load config")?;
+    let (profile_name, profile) = active_profile(&atla_config, global)?;
+    let search = JiraIssueSearch {
+        jql,
+        max_results: limit.clamp(1, 5000),
+    };
+
+    if global.dry_run {
+        let url = format!(
+            "{}/rest/api/3/search/jql?maxResults={}&fields=summary,status,assignee,issuetype,priority",
+            profile.instance.trim_end_matches('/'),
+            search.max_results
+        );
+        println!(
+            "Would GET {url} with JQL `{}` using profile `{profile_name}`",
+            search.jql
+        );
+        return Ok(());
+    }
+
+    let token = token_for_profile(profile_name, profile)?;
+    let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+    let page = client.search_issues(&search).await.with_context(|| {
+        format!(
+            "failed to search Jira issues from {}",
+            client.instance_url()
+        )
+    })?;
+
+    print_issues(&page.issues, global)?;
     Ok(())
 }
 
@@ -155,6 +191,49 @@ fn print_projects(
             if let Some(total) = total {
                 println!();
                 println!("Showing {} of {total} projects.", projects.len());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_issues(issues: &[JiraIssue], global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(issues),
+        OutputFormat::Keys => {
+            for issue in issues {
+                if let Some(key) = &issue.key {
+                    println!("{key}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,summary,status,assignee,type,priority,id");
+            for issue in issues {
+                println!(
+                    "{},{},{},{},{},{},{}",
+                    csv_cell(issue.key.as_deref().unwrap_or_default()),
+                    csv_cell(issue.summary().unwrap_or_default()),
+                    csv_cell(issue.status_name().unwrap_or_default()),
+                    csv_cell(issue.assignee_display_name().unwrap_or_default()),
+                    csv_cell(issue.issue_type_name().unwrap_or_default()),
+                    csv_cell(issue.priority_name().unwrap_or_default()),
+                    csv_cell(issue.id.as_deref().unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<14} {:<16} {:<20} SUMMARY", "KEY", "STATUS", "ASSIGNEE");
+            for issue in issues {
+                println!(
+                    "{:<14} {:<16} {:<20} {}",
+                    issue.key.as_deref().unwrap_or("-"),
+                    issue.status_name().unwrap_or("-"),
+                    issue.assignee_display_name().unwrap_or("-"),
+                    issue.summary().unwrap_or("-")
+                );
             }
             Ok(())
         }

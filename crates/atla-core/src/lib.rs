@@ -10,5 +10,8 @@ pub use client::{AtlassianClient, AtlassianInstance};
 pub use confluence::{
     ConfluenceClient, ConfluenceSpace, ConfluenceSpacePage, ConfluenceSpaceSearch,
 };
-pub use jira::{JiraClient, JiraProject, JiraProjectPage, JiraProjectSearch};
+pub use jira::{
+    JiraClient, JiraIssue, JiraIssueSearch, JiraIssueSearchPage, JiraProject, JiraProjectPage,
+    JiraProjectSearch,
+};
 pub use profile::{AtlaConfig, ConfigStore, Profile};

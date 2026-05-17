@@ -92,7 +92,11 @@ pub enum JiraResource {
     Project(ProjectCommand),
     Sprint,
     Board,
-    Search { jql: String },
+    Search {
+        jql: String,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
 }
 
 #[derive(Debug, Args)]

@@ -57,6 +57,8 @@ atla jira project list --query platform --limit 25 --output json
 atla jira project list --output keys
 atla jira project view PROJ
 atla jira project view PROJ --output json
+atla jira search "project = PROJ order by created desc"
+atla jira search "assignee = currentUser() and status != Done" --limit 25 --output keys
 ```
 
 First Confluence commands:

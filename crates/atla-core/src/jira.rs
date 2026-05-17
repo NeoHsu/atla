@@ -39,6 +39,23 @@ impl JiraClient {
         )
         .await
     }
+
+    pub async fn search_issues(
+        &self,
+        search: &JiraIssueSearch,
+    ) -> Result<JiraIssueSearchPage, ApiError> {
+        let query = [
+            ("jql", search.jql.clone()),
+            ("maxResults", search.max_results.to_string()),
+            (
+                "fields",
+                "summary,status,assignee,issuetype,priority".to_owned(),
+            ),
+        ];
+        let request = self.client.get("/rest/api/3/search/jql").query(&query);
+
+        read_json(request).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +72,62 @@ impl Default for JiraProjectSearch {
             max_results: 50,
             query: None,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraIssueSearch {
+    pub jql: String,
+    pub max_results: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueSearchPage {
+    #[serde(default)]
+    pub is_last: Option<bool>,
+    #[serde(default)]
+    pub next_page_token: Option<String>,
+    #[serde(default)]
+    pub issues: Vec<JiraIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssue {
+    pub id: Option<String>,
+    pub key: Option<String>,
+    #[serde(default)]
+    pub fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl JiraIssue {
+    pub fn summary(&self) -> Option<&str> {
+        self.field_string("summary")
+    }
+
+    pub fn status_name(&self) -> Option<&str> {
+        self.field_object_string("status", "name")
+    }
+
+    pub fn assignee_display_name(&self) -> Option<&str> {
+        self.field_object_string("assignee", "displayName")
+    }
+
+    pub fn issue_type_name(&self) -> Option<&str> {
+        self.field_object_string("issuetype", "name")
+    }
+
+    pub fn priority_name(&self) -> Option<&str> {
+        self.field_object_string("priority", "name")
+    }
+
+    fn field_string(&self, name: &str) -> Option<&str> {
+        self.fields.get(name)?.as_str()
+    }
+
+    fn field_object_string(&self, object: &str, name: &str) -> Option<&str> {
+        self.fields.get(object)?.get(name)?.as_str()
     }
 }
 
@@ -134,5 +207,36 @@ mod tests {
         assert_eq!(project.id.as_deref(), Some("10000"));
         assert_eq!(project.key.as_deref(), Some("PROJ"));
         assert_eq!(project.project_type_key.as_deref(), Some("software"));
+    }
+
+    #[test]
+    fn parses_issue_search_page() {
+        let page: JiraIssueSearchPage = serde_json::from_str(
+            r#"{
+                "isLast": true,
+                "issues": [
+                    {
+                        "id": "10002",
+                        "key": "PROJ-1",
+                        "fields": {
+                            "summary": "Fix login",
+                            "status": { "name": "In Progress" },
+                            "assignee": { "displayName": "Neo" },
+                            "issuetype": { "name": "Bug" },
+                            "priority": { "name": "High" }
+                        }
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse issue search page");
+
+        let issue = &page.issues[0];
+        assert_eq!(issue.key.as_deref(), Some("PROJ-1"));
+        assert_eq!(issue.summary(), Some("Fix login"));
+        assert_eq!(issue.status_name(), Some("In Progress"));
+        assert_eq!(issue.assignee_display_name(), Some("Neo"));
+        assert_eq!(issue.issue_type_name(), Some("Bug"));
+        assert_eq!(issue.priority_name(), Some("High"));
     }
 }
