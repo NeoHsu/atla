@@ -42,6 +42,30 @@ impl ConfluenceClient {
 
         Ok(page.results.into_iter().next())
     }
+
+    pub async fn list_pages(
+        &self,
+        search: &ConfluencePageSearch,
+    ) -> Result<ConfluencePagePage, ApiError> {
+        let mut request = self
+            .client
+            .get("/wiki/api/v2/pages")
+            .query(&[("limit", search.limit.to_string())]);
+
+        if let Some(space_id) = &search.space_id {
+            request = request.query(&[("space-id", space_id)]);
+        }
+
+        if let Some(title) = &search.title {
+            request = request.query(&[("title", title)]);
+        }
+
+        read_json(request).await
+    }
+
+    pub async fn get_page(&self, id: &str) -> Result<ConfluencePage, ApiError> {
+        read_json(self.client.get(&format!("/wiki/api/v2/pages/{id}"))).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +103,52 @@ pub struct ConfluenceSpace {
     pub current_active_alias: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluencePageSearch {
+    pub space_id: Option<String>,
+    pub title: Option<String>,
+    pub limit: u32,
+}
+
+impl Default for ConfluencePageSearch {
+    fn default() -> Self {
+        Self {
+            space_id: None,
+            title: None,
+            limit: 25,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluencePagePage {
+    #[serde(default)]
+    pub results: Vec<ConfluencePage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluencePage {
+    pub id: Option<String>,
+    pub status: Option<String>,
+    pub title: Option<String>,
+    pub space_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub author_id: Option<String>,
+    pub owner_id: Option<String>,
+    pub created_at: Option<String>,
+    pub version: Option<ConfluenceVersion>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceVersion {
+    pub number: Option<u64>,
+    pub message: Option<String>,
+    pub created_at: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +175,39 @@ mod tests {
         assert_eq!(page.results[0].key.as_deref(), Some("DEV"));
         assert_eq!(page.results[0].space_type.as_deref(), Some("global"));
         assert_eq!(page.results[0].homepage_id.as_deref(), Some("67890"));
+    }
+
+    #[test]
+    fn parses_page_page() {
+        let page: ConfluencePagePage = serde_json::from_str(
+            r#"{
+                "results": [
+                    {
+                        "id": "111",
+                        "status": "current",
+                        "title": "Runbook",
+                        "spaceId": "12345",
+                        "parentId": "100",
+                        "authorId": "abc",
+                        "createdAt": "2026-05-17T00:00:00.000Z",
+                        "version": {
+                            "number": 3,
+                            "message": "Update",
+                            "createdAt": "2026-05-17T01:00:00.000Z"
+                        }
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse page page");
+
+        let page = &page.results[0];
+        assert_eq!(page.id.as_deref(), Some("111"));
+        assert_eq!(page.title.as_deref(), Some("Runbook"));
+        assert_eq!(page.space_id.as_deref(), Some("12345"));
+        assert_eq!(
+            page.version.as_ref().and_then(|version| version.number),
+            Some(3)
+        );
     }
 }
