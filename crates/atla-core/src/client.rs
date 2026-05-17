@@ -49,6 +49,14 @@ impl AtlassianClient {
         &self.instance
     }
 
+    pub(crate) fn email(&self) -> &str {
+        &self.email
+    }
+
+    pub(crate) fn token(&self) -> &str {
+        &self.token
+    }
+
     pub fn get(&self, path: &str) -> reqwest::RequestBuilder {
         self.http
             .get(self.url(path))
@@ -90,6 +98,8 @@ impl AtlassianClient {
 pub enum ApiError {
     #[error("request failed: {0}")]
     Request(#[from] reqwest::Error),
+    #[error("failed to decode response: {0}")]
+    Decode(String),
     #[error("Atlassian API returned {status}: {body}")]
     Http {
         status: reqwest::StatusCode,

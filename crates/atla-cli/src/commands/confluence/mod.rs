@@ -2,11 +2,10 @@ use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
     AtlaConfig, AtlassianClient, ConfigStore, ConfluenceAttachment, ConfluenceAttachmentSearch,
-    ConfluenceAttachmentUpload, ConfluenceAttachmentUploadPage, ConfluenceBlogPost,
-    ConfluenceBlogPostCreate, ConfluenceBlogPostSearch, ConfluenceBodyRepresentation,
-    ConfluenceClient, ConfluenceContentStatus, ConfluencePage, ConfluencePageCreate,
-    ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchResult,
-    ConfluenceSpace, ConfluenceSpaceSearch, Profile,
+    ConfluenceBlogPost, ConfluenceBlogPostCreate, ConfluenceBlogPostSearch,
+    ConfluenceBodyRepresentation, ConfluenceClient, ConfluenceContentStatus, ConfluencePage,
+    ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch,
+    ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceSearch, Profile,
 };
 use std::fs;
 use std::path::Path;
@@ -101,55 +100,6 @@ async fn run_attachment(command: AttachmentCommand, global: &GlobalArgs) -> anyh
                 })?;
 
             print_attachments(&page.results, global)?;
-        }
-        AttachmentAction::Upload {
-            page_id,
-            file,
-            filename,
-            media_type,
-            comment,
-        } => {
-            let store = ConfigStore::default_store().context("failed to find config location")?;
-            let atla_config = store.load().context("failed to load config")?;
-            let (profile_name, profile) = active_profile(&atla_config, global)?;
-
-            if global.dry_run {
-                println!(
-                    "Would POST {}/wiki/rest/api/content/{}/child/attachment using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
-                    page_id
-                );
-                return Ok(());
-            }
-
-            let bytes = fs::read(&file)
-                .with_context(|| format!("failed to read attachment file `{}`", file.display()))?;
-            let file_name = filename
-                .or_else(|| {
-                    file.file_name()
-                        .and_then(|name| name.to_str())
-                        .map(ToOwned::to_owned)
-                })
-                .ok_or_else(|| anyhow::anyhow!("attachment file requires a valid file name"))?;
-            let token = token_for_profile(profile_name, profile)?;
-            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
-            let page = client
-                .upload_page_attachment(ConfluenceAttachmentUpload {
-                    page_id,
-                    file_name,
-                    bytes,
-                    media_type,
-                    comment,
-                })
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to upload Confluence attachment to {}",
-                        client.instance_url()
-                    )
-                })?;
-
-            print_uploaded_attachments(&page, global)?;
         }
     }
 
@@ -576,7 +526,12 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
 
             if global.dry_run {
                 println!(
-                    "Would PUT {}/wiki/rest/api/content/{}/move/append/{} using profile `{profile_name}`",
+                    "Would GET {}/wiki/api/v2/pages/{}?body-format=storage using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    id
+                );
+                println!(
+                    "Would PUT {}/wiki/api/v2/pages/{} with parentId `{}` using profile `{profile_name}`",
                     profile.instance.trim_end_matches('/'),
                     id,
                     parent
@@ -586,13 +541,13 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
 
             let token = token_for_profile(profile_name, profile)?;
             let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
-            client.move_page(&id, &parent).await.with_context(|| {
+            let page = client.move_page(&id, &parent).await.with_context(|| {
                 format!(
                     "failed to move Confluence page `{id}` under `{parent}` from {}",
                     client.instance_url()
                 )
             })?;
-            println!("Moved Confluence page {id} under {parent}");
+            print_page(&page, global)?;
         }
     }
 
@@ -871,80 +826,6 @@ fn print_attachments(
                     attachment.media_type.as_deref().unwrap_or("-"),
                     attachment
                         .file_size
-                        .map(|size| size.to_string())
-                        .as_deref()
-                        .unwrap_or("-"),
-                    attachment.title.as_deref().unwrap_or("-")
-                );
-            }
-            Ok(())
-        }
-    }
-}
-
-fn print_uploaded_attachments(
-    page: &ConfluenceAttachmentUploadPage,
-    global: &GlobalArgs,
-) -> anyhow::Result<()> {
-    match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(page),
-        OutputFormat::Keys => {
-            for attachment in &page.results {
-                if let Some(id) = &attachment.id {
-                    println!("{id}");
-                }
-            }
-            Ok(())
-        }
-        OutputFormat::Csv => {
-            println!("id,title,status,media_type,file_size,download_link");
-            for attachment in &page.results {
-                println!(
-                    "{},{},{},{},{},{}",
-                    csv_cell(attachment.id.as_deref().unwrap_or_default()),
-                    csv_cell(attachment.title.as_deref().unwrap_or_default()),
-                    csv_cell(attachment.status.as_deref().unwrap_or_default()),
-                    csv_cell(
-                        attachment
-                            .metadata
-                            .as_ref()
-                            .and_then(|metadata| metadata.media_type.as_deref())
-                            .unwrap_or_default()
-                    ),
-                    csv_cell(
-                        &attachment
-                            .extensions
-                            .as_ref()
-                            .and_then(|extensions| extensions.file_size)
-                            .unwrap_or_default()
-                            .to_string()
-                    ),
-                    csv_cell(
-                        attachment
-                            .links
-                            .as_ref()
-                            .and_then(|links| links.download.as_deref())
-                            .unwrap_or_default()
-                    )
-                );
-            }
-            Ok(())
-        }
-        OutputFormat::Table => {
-            println!("{:<14} {:<18} {:<10} TITLE", "ID", "MEDIA TYPE", "SIZE");
-            for attachment in &page.results {
-                println!(
-                    "{:<14} {:<18} {:<10} {}",
-                    attachment.id.as_deref().unwrap_or("-"),
-                    attachment
-                        .metadata
-                        .as_ref()
-                        .and_then(|metadata| metadata.media_type.as_deref())
-                        .unwrap_or("-"),
-                    attachment
-                        .extensions
-                        .as_ref()
-                        .and_then(|extensions| extensions.file_size)
                         .map(|size| size.to_string())
                         .as_deref()
                         .unwrap_or("-"),

@@ -1,37 +1,64 @@
-use reqwest::multipart;
+use atla_confluence_api::{apis as generated_apis, models as generated_models};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
 
-use crate::client::{ApiError, AtlassianClient, read_empty, read_json};
+use crate::client::{ApiError, AtlassianClient, read_json};
 
 #[derive(Debug, Clone)]
 pub struct ConfluenceClient {
-    client: AtlassianClient,
+    raw_client: AtlassianClient,
+    generated: generated_apis::configuration::Configuration,
 }
 
 impl ConfluenceClient {
     pub fn new(client: AtlassianClient) -> Self {
-        Self { client }
+        let generated = generated_apis::configuration::Configuration {
+            base_path: format!("{}/wiki/api/v2", client.instance().base_url),
+            user_agent: Some("atla".to_owned()),
+            basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
+            ..Default::default()
+        };
+
+        Self {
+            raw_client: client,
+            generated,
+        }
     }
 
     pub fn instance_url(&self) -> &str {
-        &self.client.instance().base_url
+        &self.raw_client.instance().base_url
     }
 
     pub async fn list_spaces(
         &self,
         search: &ConfluenceSpaceSearch,
     ) -> Result<ConfluenceSpacePage, ApiError> {
-        let mut request = self
-            .client
-            .get("/wiki/api/v2/spaces")
-            .query(&[("limit", search.limit.to_string())]);
+        let keys = search.key.as_ref().map(|key| vec![key.clone()]);
+        let page = generated_apis::space_api::get_spaces(
+            &self.generated,
+            None,
+            keys,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
 
-        if let Some(key) = &search.key {
-            request = request.query(&[("keys", key)]);
-        }
-
-        read_json(request).await
+        Ok(ConfluenceSpacePage {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceSpace::from)
+                .collect(),
+        })
     }
 
     pub async fn get_space_by_key(&self, key: &str) -> Result<Option<ConfluenceSpace>, ApiError> {
@@ -49,41 +76,72 @@ impl ConfluenceClient {
         &self,
         search: &ConfluencePageSearch,
     ) -> Result<ConfluencePagePage, ApiError> {
-        let mut request = self
-            .client
-            .get("/wiki/api/v2/pages")
-            .query(&[("limit", search.limit.to_string())]);
+        let space_id = optional_i64_vec(search.space_id.as_deref())?;
+        let page = generated_apis::page_api::get_pages(
+            &self.generated,
+            None,
+            space_id,
+            None,
+            None,
+            search.title.as_deref(),
+            None,
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
 
-        if let Some(space_id) = &search.space_id {
-            request = request.query(&[("space-id", space_id)]);
-        }
-
-        if let Some(title) = &search.title {
-            request = request.query(&[("title", title)]);
-        }
-
-        read_json(request).await
+        Ok(ConfluencePagePage {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluencePage::from)
+                .collect(),
+        })
     }
 
     pub async fn get_page(&self, id: &str) -> Result<ConfluencePage, ApiError> {
-        read_json(self.client.get(&format!("/wiki/api/v2/pages/{id}"))).await
+        let page = generated_apis::page_api::get_page_by_id(
+            &self.generated,
+            parse_i64_id(id)?,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
     }
 
     pub async fn create_page(
         &self,
         page: &ConfluencePageCreate,
     ) -> Result<ConfluencePage, ApiError> {
-        let mut request = self.client.post("/wiki/api/v2/pages");
+        let page = generated_apis::page_api::create_page(
+            &self.generated,
+            page.to_generated(),
+            None,
+            page.private,
+            page.root_level,
+        )
+        .await
+        .map_err(generated_error)?;
 
-        if let Some(private) = page.private {
-            request = request.query(&[("private", private.to_string())]);
-        }
-
-        if let Some(root_level) = page.root_level {
-            request = request.query(&[("root-level", root_level.to_string())]);
-        }
-
-        read_json(request.json(&page.to_payload())).await
+        Ok(page.into())
     }
 
     pub async fn update_page_title(
@@ -92,51 +150,101 @@ impl ConfluenceClient {
         title: &str,
         status: ConfluenceContentStatus,
     ) -> Result<ConfluencePage, ApiError> {
-        read_json(
-            self.client
-                .put(&format!("/wiki/api/v2/pages/{id}/title"))
-                .json(&json!({
-                    "status": status.as_str(),
-                    "title": title,
-                })),
+        let page = generated_apis::page_api::update_page_title(
+            &self.generated,
+            parse_i64_id(id)?,
+            generated_models::UpdatePageTitleRequest::new(
+                status.into_update_page_title_status(),
+                title.to_owned(),
+            ),
         )
         .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
     }
 
     pub async fn update_page(
         &self,
         page: &ConfluencePageUpdate,
     ) -> Result<ConfluencePage, ApiError> {
-        read_json(
-            self.client
-                .put(&format!("/wiki/api/v2/pages/{}", page.id))
-                .json(&page.to_payload()),
+        let updated = generated_apis::page_api::update_page(
+            &self.generated,
+            parse_i64_id(&page.id)?,
+            page.to_generated(),
         )
         .await
+        .map_err(generated_error)?;
+
+        Ok(updated.into())
     }
 
     pub async fn delete_page(&self, id: &str, purge: bool, draft: bool) -> Result<(), ApiError> {
-        let mut request = self.client.delete(&format!("/wiki/api/v2/pages/{id}"));
-
-        if purge {
-            request = request.query(&[("purge", "true")]);
-        }
-
-        if draft {
-            request = request.query(&[("draft", "true")]);
-        }
-
-        read_empty(request).await
+        generated_apis::page_api::delete_page(
+            &self.generated,
+            parse_i64_id(id)?,
+            Some(purge),
+            Some(draft),
+        )
+        .await
+        .map_err(generated_error)
     }
 
-    pub async fn move_page(&self, id: &str, parent_id: &str) -> Result<(), ApiError> {
-        read_empty(
-            self.client
-                .put(&format!(
-                    "/wiki/rest/api/content/{id}/move/append/{parent_id}"
-                ))
-                .json(&json!({})),
+    pub async fn move_page(&self, id: &str, parent_id: &str) -> Result<ConfluencePage, ApiError> {
+        let existing = generated_apis::page_api::get_page_by_id(
+            &self.generated,
+            parse_i64_id(id)?,
+            Some(generated_models::PrimaryBodyRepresentationSingle::Storage),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+            None,
         )
+        .await
+        .map_err(generated_error)?;
+
+        let body = existing
+            .body
+            .as_ref()
+            .and_then(|body| body.storage.as_ref())
+            .and_then(|body| body.value.clone())
+            .ok_or_else(|| {
+                ApiError::Decode(format!("page `{id}` did not include a storage body"))
+            })?;
+        let title = existing
+            .title
+            .clone()
+            .ok_or_else(|| ApiError::Decode(format!("page `{id}` did not include a title")))?;
+        let version = existing
+            .version
+            .as_ref()
+            .and_then(|version| version.number)
+            .ok_or_else(|| ApiError::Decode(format!("page `{id}` did not include a version")))?;
+        let status = match existing.status {
+            Some(generated_models::ContentStatus::Draft) => ConfluenceContentStatus::Draft,
+            _ => ConfluenceContentStatus::Current,
+        };
+
+        self.update_page(&ConfluencePageUpdate {
+            id: id.to_owned(),
+            status,
+            title,
+            space_id: existing.space_id,
+            parent_id: Some(parent_id.to_owned()),
+            body,
+            representation: ConfluenceBodyRepresentation::Storage,
+            version: version as u64 + 1,
+            message: Some(format!("Move under {parent_id}")),
+        })
         .await
     }
 
@@ -144,37 +252,68 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceBlogPostSearch,
     ) -> Result<ConfluenceBlogPostPage, ApiError> {
-        let mut request = self
-            .client
-            .get("/wiki/api/v2/blogposts")
-            .query(&[("limit", search.limit.to_string())]);
+        let space_id = optional_i64_vec(search.space_id.as_deref())?;
+        let page = generated_apis::blog_post_api::get_blog_posts(
+            &self.generated,
+            None,
+            space_id,
+            None,
+            None,
+            search.title.as_deref(),
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
 
-        if let Some(space_id) = &search.space_id {
-            request = request.query(&[("space-id", space_id)]);
-        }
-
-        if let Some(title) = &search.title {
-            request = request.query(&[("title", title)]);
-        }
-
-        read_json(request).await
+        Ok(ConfluenceBlogPostPage {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceBlogPost::from)
+                .collect(),
+        })
     }
 
     pub async fn get_blog_post(&self, id: &str) -> Result<ConfluenceBlogPost, ApiError> {
-        read_json(self.client.get(&format!("/wiki/api/v2/blogposts/{id}"))).await
+        let post = generated_apis::blog_post_api::get_blog_post_by_id(
+            &self.generated,
+            parse_i64_id(id)?,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+            None,
+            None,
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(post.into())
     }
 
     pub async fn create_blog_post(
         &self,
         post: &ConfluenceBlogPostCreate,
     ) -> Result<ConfluenceBlogPost, ApiError> {
-        let mut request = self.client.post("/wiki/api/v2/blogposts");
+        let post = generated_apis::blog_post_api::create_blog_post(
+            &self.generated,
+            post.to_generated(),
+            post.private,
+        )
+        .await
+        .map_err(generated_error)?;
 
-        if let Some(private) = post.private {
-            request = request.query(&[("private", private.to_string())]);
-        }
-
-        read_json(request.json(&post.to_payload())).await
+        Ok(post.into())
     }
 
     pub async fn search(
@@ -182,7 +321,7 @@ impl ConfluenceClient {
         search: &ConfluenceSearch,
     ) -> Result<ConfluenceSearchPage, ApiError> {
         read_json(
-            self.client
+            self.raw_client
                 .get("/wiki/rest/api/search")
                 .query(&[("cql", search.cql.as_str())])
                 .query(&[("limit", search.limit.to_string())]),
@@ -194,45 +333,27 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceAttachmentSearch,
     ) -> Result<ConfluenceAttachmentPage, ApiError> {
-        let mut request = self
-            .client
-            .get(&format!(
-                "/wiki/api/v2/pages/{}/attachments",
-                search.page_id
-            ))
-            .query(&[("limit", search.limit.to_string())]);
-
-        if let Some(filename) = &search.filename {
-            request = request.query(&[("filename", filename)]);
-        }
-
-        read_json(request).await
-    }
-
-    pub async fn upload_page_attachment(
-        &self,
-        upload: ConfluenceAttachmentUpload,
-    ) -> Result<ConfluenceAttachmentUploadPage, ApiError> {
-        let mut part = multipart::Part::bytes(upload.bytes).file_name(upload.file_name);
-        if let Some(media_type) = upload.media_type {
-            part = part.mime_str(&media_type).map_err(ApiError::Request)?;
-        }
-
-        let mut form = multipart::Form::new().part("file", part);
-        if let Some(comment) = upload.comment {
-            form = form.text("comment", comment);
-        }
-
-        read_json(
-            self.client
-                .post(&format!(
-                    "/wiki/rest/api/content/{}/child/attachment",
-                    upload.page_id
-                ))
-                .header("X-Atlassian-Token", "no-check")
-                .multipart(form),
+        let page = generated_apis::attachment_api::get_page_attachments(
+            &self.generated,
+            parse_i64_id(&search.page_id)?,
+            None,
+            None,
+            None,
+            None,
+            search.filename.as_deref(),
+            Some(limit_i32(search.limit)),
         )
         .await
+        .map_err(generated_error)?;
+
+        Ok(ConfluenceAttachmentPage {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceAttachment::from)
+                .collect(),
+        })
     }
 }
 
@@ -244,11 +365,23 @@ pub enum ConfluenceBodyRepresentation {
 }
 
 impl ConfluenceBodyRepresentation {
-    pub fn as_str(self) -> &'static str {
+    fn as_page_body_write(self) -> generated_models::page_body_write::Representation {
         match self {
-            Self::Storage => "storage",
-            Self::Wiki => "wiki",
-            Self::AtlasDocFormat => "atlas_doc_format",
+            Self::Storage => generated_models::page_body_write::Representation::Storage,
+            Self::Wiki => generated_models::page_body_write::Representation::Wiki,
+            Self::AtlasDocFormat => {
+                generated_models::page_body_write::Representation::AtlasDocFormat
+            }
+        }
+    }
+
+    fn as_blog_post_body_write(self) -> generated_models::blog_post_body_write::Representation {
+        match self {
+            Self::Storage => generated_models::blog_post_body_write::Representation::Storage,
+            Self::Wiki => generated_models::blog_post_body_write::Representation::Wiki,
+            Self::AtlasDocFormat => {
+                generated_models::blog_post_body_write::Representation::AtlasDocFormat
+            }
         }
     }
 }
@@ -260,10 +393,31 @@ pub enum ConfluenceContentStatus {
 }
 
 impl ConfluenceContentStatus {
-    pub fn as_str(self) -> &'static str {
+    fn into_create_page_status(self) -> generated_models::create_page_request::Status {
         match self {
-            Self::Current => "current",
-            Self::Draft => "draft",
+            Self::Current => generated_models::create_page_request::Status::Current,
+            Self::Draft => generated_models::create_page_request::Status::Draft,
+        }
+    }
+
+    fn into_update_page_status(self) -> generated_models::update_page_request::Status {
+        match self {
+            Self::Current => generated_models::update_page_request::Status::Current,
+            Self::Draft => generated_models::update_page_request::Status::Draft,
+        }
+    }
+
+    fn into_update_page_title_status(self) -> generated_models::update_page_title_request::Status {
+        match self {
+            Self::Current => generated_models::update_page_title_request::Status::Current,
+            Self::Draft => generated_models::update_page_title_request::Status::Draft,
+        }
+    }
+
+    fn into_create_blog_post_status(self) -> generated_models::create_blog_post_request::Status {
+        match self {
+            Self::Current => generated_models::create_blog_post_request::Status::Current,
+            Self::Draft => generated_models::create_blog_post_request::Status::Draft,
         }
     }
 }
@@ -281,25 +435,20 @@ pub struct ConfluencePageCreate {
 }
 
 impl ConfluencePageCreate {
-    fn to_payload(&self) -> Value {
-        let mut payload = json!({
-            "spaceId": self.space_id,
-            "status": self.status.as_str(),
-            "title": self.title,
+    fn to_generated(&self) -> generated_models::CreatePageRequest {
+        let mut request = generated_models::CreatePageRequest::new(self.space_id.clone());
+        request.status = Some(self.status.into_create_page_status());
+        request.title = Some(self.title.clone());
+        request.parent_id.clone_from(&self.parent_id);
+        request.body = self.body.as_ref().map(|body| {
+            Box::new(generated_models::CreatePageRequestBody::PageBodyWrite(
+                Box::new(generated_models::PageBodyWrite {
+                    representation: Some(self.representation.as_page_body_write()),
+                    value: Some(body.clone()),
+                }),
+            ))
         });
-
-        if let Some(parent_id) = &self.parent_id {
-            payload["parentId"] = json!(parent_id);
-        }
-
-        if let Some(body) = &self.body {
-            payload["body"] = json!({
-                "representation": self.representation.as_str(),
-                "value": body,
-            });
-        }
-
-        payload
+        request
     }
 }
 
@@ -317,33 +466,33 @@ pub struct ConfluencePageUpdate {
 }
 
 impl ConfluencePageUpdate {
-    fn to_payload(&self) -> Value {
-        let mut payload = json!({
-            "id": self.id,
-            "status": self.status.as_str(),
-            "title": self.title,
-            "body": {
-                "representation": self.representation.as_str(),
-                "value": self.body,
-            },
-            "version": {
-                "number": self.version,
-            },
-        });
+    fn to_generated(&self) -> generated_models::UpdatePageRequest {
+        let mut version = generated_models::UpdatePageRequestVersion::new();
+        version.number = Some(self.version as i32);
+        version.message.clone_from(&self.message);
 
-        if let Some(space_id) = &self.space_id {
-            payload["spaceId"] = json!(space_id);
-        }
+        let mut request = generated_models::UpdatePageRequest::new(
+            self.id.clone(),
+            self.status.into_update_page_status(),
+            self.title.clone(),
+            generated_models::CreatePageRequestBody::PageBodyWrite(Box::new(
+                generated_models::PageBodyWrite {
+                    representation: Some(self.representation.as_page_body_write()),
+                    value: Some(self.body.clone()),
+                },
+            )),
+            version,
+        );
 
-        if let Some(parent_id) = &self.parent_id {
-            payload["parentId"] = json!(parent_id);
-        }
-
-        if let Some(message) = &self.message {
-            payload["version"]["message"] = json!(message);
-        }
-
-        payload
+        request.space_id = self
+            .space_id
+            .as_ref()
+            .map(|space_id| Some(serde_json::Value::String(space_id.clone())));
+        request.parent_id = self
+            .parent_id
+            .as_ref()
+            .map(|parent_id| Some(serde_json::Value::String(parent_id.clone())));
+        request
     }
 }
 
@@ -358,21 +507,21 @@ pub struct ConfluenceBlogPostCreate {
 }
 
 impl ConfluenceBlogPostCreate {
-    fn to_payload(&self) -> Value {
-        let mut payload = json!({
-            "spaceId": self.space_id,
-            "status": self.status.as_str(),
-            "title": self.title,
+    fn to_generated(&self) -> generated_models::CreateBlogPostRequest {
+        let mut request = generated_models::CreateBlogPostRequest::new(self.space_id.clone());
+        request.status = Some(self.status.into_create_blog_post_status());
+        request.title = Some(self.title.clone());
+        request.body = self.body.as_ref().map(|body| {
+            Box::new(
+                generated_models::CreateBlogPostRequestBody::BlogPostBodyWrite(Box::new(
+                    generated_models::BlogPostBodyWrite {
+                        representation: Some(self.representation.as_blog_post_body_write()),
+                        value: Some(body.clone()),
+                    },
+                )),
+            )
         });
-
-        if let Some(body) = &self.body {
-            payload["body"] = json!({
-                "representation": self.representation.as_str(),
-                "value": body,
-            });
-        }
-
-        payload
+        request
     }
 }
 
@@ -447,6 +596,7 @@ pub struct ConfluencePage {
     pub owner_id: Option<String>,
     pub created_at: Option<String>,
     pub version: Option<ConfluenceVersion>,
+    pub body: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -558,52 +708,144 @@ pub struct ConfluenceAttachment {
     pub version: Option<ConfluenceVersion>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfluenceAttachmentUpload {
-    pub page_id: String,
-    pub file_name: String,
-    pub bytes: Vec<u8>,
-    pub media_type: Option<String>,
-    pub comment: Option<String>,
+fn limit_i32(limit: u32) -> i32 {
+    limit.min(i32::MAX as u32) as i32
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConfluenceAttachmentUploadPage {
-    #[serde(default)]
-    pub results: Vec<ConfluenceAttachmentUploadResult>,
+fn parse_i64_id(id: &str) -> Result<i64, ApiError> {
+    id.parse()
+        .map_err(|_| ApiError::Decode(format!("expected numeric Confluence id, got `{id}`")))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConfluenceAttachmentUploadResult {
-    pub id: Option<String>,
-    pub title: Option<String>,
-    pub status: Option<String>,
-    pub version: Option<ConfluenceVersion>,
-    pub metadata: Option<ConfluenceAttachmentMetadata>,
-    pub extensions: Option<ConfluenceAttachmentExtensions>,
-    #[serde(rename = "_links")]
-    pub links: Option<ConfluenceAttachmentUploadLinks>,
+fn optional_i64_vec(id: Option<&str>) -> Result<Option<Vec<i64>>, ApiError> {
+    id.map(|id| parse_i64_id(id).map(|id| vec![id])).transpose()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConfluenceAttachmentMetadata {
-    pub media_type: Option<String>,
+fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
+    match error {
+        generated_apis::Error::Reqwest(error) => ApiError::Decode(error.to_string()),
+        generated_apis::Error::Serde(error) => ApiError::Decode(error.to_string()),
+        generated_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
+        generated_apis::Error::ResponseError(response) => ApiError::Http {
+            status: response.status,
+            body: response.content,
+        },
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConfluenceAttachmentExtensions {
-    pub file_size: Option<i64>,
+fn version_from_generated(
+    version: Option<Box<generated_models::Version>>,
+) -> Option<ConfluenceVersion> {
+    version.map(|version| ConfluenceVersion {
+        number: version.number.map(|number| number as u64),
+        message: version.message,
+        created_at: version.created_at.map(|created_at| created_at.to_rfc3339()),
+    })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConfluenceAttachmentUploadLinks {
-    pub download: Option<String>,
-    pub webui: Option<String>,
+fn body_from_generated(body: Option<Box<generated_models::BodySingle>>) -> Option<String> {
+    body.and_then(|body| {
+        let body = *body;
+        body.storage
+            .and_then(|body| body.value)
+            .or_else(|| body.atlas_doc_format.and_then(|body| body.value))
+            .or_else(|| body.view.and_then(|body| body.value))
+    })
+}
+
+impl From<generated_models::SpaceBulk> for ConfluenceSpace {
+    fn from(space: generated_models::SpaceBulk) -> Self {
+        Self {
+            id: space.id,
+            key: space.key,
+            name: space.name,
+            space_type: space.r#type.map(|space_type| space_type.to_string()),
+            status: space.status.map(|status| status.to_string()),
+            homepage_id: space.homepage_id,
+            current_active_alias: space.current_active_alias,
+        }
+    }
+}
+
+impl From<generated_models::PageBulk> for ConfluencePage {
+    fn from(page: generated_models::PageBulk) -> Self {
+        Self {
+            id: page.id,
+            status: page.status.map(|status| status.to_string()),
+            title: page.title,
+            space_id: page.space_id,
+            parent_id: page.parent_id,
+            author_id: page.author_id,
+            owner_id: page.owner_id.flatten(),
+            created_at: page.created_at.map(|created_at| created_at.to_rfc3339()),
+            version: version_from_generated(page.version),
+            body: None,
+        }
+    }
+}
+
+impl From<generated_models::CreatePage200Response> for ConfluencePage {
+    fn from(page: generated_models::CreatePage200Response) -> Self {
+        Self {
+            id: page.id,
+            status: page.status.map(|status| status.to_string()),
+            title: page.title,
+            space_id: page.space_id,
+            parent_id: page.parent_id,
+            author_id: page.author_id,
+            owner_id: page.owner_id.flatten(),
+            created_at: page.created_at.map(|created_at| created_at.to_rfc3339()),
+            version: version_from_generated(page.version),
+            body: body_from_generated(page.body),
+        }
+    }
+}
+
+impl From<generated_models::BlogPostBulk> for ConfluenceBlogPost {
+    fn from(post: generated_models::BlogPostBulk) -> Self {
+        Self {
+            id: post.id,
+            status: post.status.map(|status| status.to_string()),
+            title: post.title,
+            space_id: post.space_id,
+            author_id: post.author_id,
+            created_at: post.created_at.map(|created_at| created_at.to_rfc3339()),
+            version: version_from_generated(post.version),
+        }
+    }
+}
+
+impl From<generated_models::CreateBlogPost200Response> for ConfluenceBlogPost {
+    fn from(post: generated_models::CreateBlogPost200Response) -> Self {
+        Self {
+            id: post.id,
+            status: post.status.map(|status| status.to_string()),
+            title: post.title,
+            space_id: post.space_id,
+            author_id: post.author_id,
+            created_at: post.created_at.map(|created_at| created_at.to_rfc3339()),
+            version: version_from_generated(post.version),
+        }
+    }
+}
+
+impl From<generated_models::AttachmentBulk> for ConfluenceAttachment {
+    fn from(attachment: generated_models::AttachmentBulk) -> Self {
+        Self {
+            id: attachment.id,
+            status: attachment.status.map(|status| status.to_string()),
+            title: attachment.title,
+            page_id: attachment.page_id,
+            blog_post_id: attachment.blog_post_id,
+            media_type: attachment.media_type,
+            media_type_description: attachment.media_type_description,
+            file_id: attachment.file_id,
+            file_size: attachment.file_size,
+            webui_link: attachment.webui_link,
+            download_link: attachment.download_link,
+            version: version_from_generated(attachment.version),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -702,8 +944,8 @@ mod tests {
     }
 
     #[test]
-    fn builds_create_page_payload() {
-        let payload = ConfluencePageCreate {
+    fn builds_generated_create_page_request() {
+        let request = ConfluencePageCreate {
             space_id: "12345".to_owned(),
             title: "Meeting Notes".to_owned(),
             parent_id: Some("100".to_owned()),
@@ -713,13 +955,23 @@ mod tests {
             private: None,
             root_level: None,
         }
-        .to_payload();
+        .to_generated();
 
-        assert_eq!(payload["spaceId"], "12345");
-        assert_eq!(payload["title"], "Meeting Notes");
-        assert_eq!(payload["parentId"], "100");
-        assert_eq!(payload["body"]["representation"], "storage");
-        assert_eq!(payload["body"]["value"], "<p>Hello</p>");
+        assert_eq!(request.space_id, "12345");
+        assert_eq!(request.title.as_deref(), Some("Meeting Notes"));
+        assert_eq!(request.parent_id.as_deref(), Some("100"));
+
+        let Some(body) = request.body else {
+            panic!("expected generated body");
+        };
+        let generated_models::CreatePageRequestBody::PageBodyWrite(body) = *body else {
+            panic!("expected page body write");
+        };
+        assert_eq!(body.value.as_deref(), Some("<p>Hello</p>"));
+        assert_eq!(
+            body.representation,
+            Some(generated_models::page_body_write::Representation::Storage)
+        );
     }
 
     #[test]

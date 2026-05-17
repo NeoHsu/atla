@@ -8,8 +8,7 @@ pub mod profile;
 pub use auth::{AuthState, CredentialRef, KeyringCredentialStore};
 pub use client::{AtlassianClient, AtlassianInstance};
 pub use confluence::{
-    ConfluenceAttachment, ConfluenceAttachmentPage, ConfluenceAttachmentSearch,
-    ConfluenceAttachmentUpload, ConfluenceAttachmentUploadPage, ConfluenceBlogPost,
+    ConfluenceAttachment, ConfluenceAttachmentPage, ConfluenceAttachmentSearch, ConfluenceBlogPost,
     ConfluenceBlogPostCreate, ConfluenceBlogPostPage, ConfluenceBlogPostSearch,
     ConfluenceBodyRepresentation, ConfluenceClient, ConfluenceContentStatus, ConfluencePage,
     ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch, ConfluencePageUpdate,
