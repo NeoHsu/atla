@@ -88,7 +88,7 @@ pub struct JiraCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum JiraResource {
-    Issue,
+    Issue(IssueCommand),
     Project(ProjectCommand),
     Sprint,
     Board,
@@ -97,6 +97,17 @@ pub enum JiraResource {
         #[arg(long, default_value_t = 50)]
         limit: u32,
     },
+}
+
+#[derive(Debug, Args)]
+pub struct IssueCommand {
+    #[command(subcommand)]
+    pub action: IssueAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IssueAction {
+    View { key: String },
 }
 
 #[derive(Debug, Args)]

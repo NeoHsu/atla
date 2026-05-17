@@ -6,18 +6,52 @@ use atla_core::{
 };
 
 use crate::cli::{
-    GlobalArgs, JiraCommand, JiraResource, OutputFormat, ProjectAction, ProjectCommand,
+    GlobalArgs, IssueAction, IssueCommand, JiraCommand, JiraResource, OutputFormat, ProjectAction,
+    ProjectCommand,
 };
 use crate::config;
 use crate::output;
 
 pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     match command.resource {
-        JiraResource::Issue => println!("jira issue commands are planned"),
+        JiraResource::Issue(command) => run_issue(command, global).await?,
         JiraResource::Project(command) => run_project(command, global).await?,
         JiraResource::Sprint => println!("jira sprint commands are planned"),
         JiraResource::Board => println!("jira board commands are planned"),
         JiraResource::Search { jql, limit } => run_search(jql, limit, global).await?,
+    }
+
+    Ok(())
+}
+
+async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+    match command.action {
+        IssueAction::View { key } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{}?fields=summary,status,assignee,issuetype,priority",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let issue = client.get_issue(&key).await.with_context(|| {
+                format!(
+                    "failed to load Jira issue `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+
+            print_issue(&issue, global)?;
+        }
     }
 
     Ok(())
@@ -234,6 +268,44 @@ fn print_issues(issues: &[JiraIssue], global: &GlobalArgs) -> anyhow::Result<()>
                     issue.assignee_display_name().unwrap_or("-"),
                     issue.summary().unwrap_or("-")
                 );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_issue(issue: &JiraIssue, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(issue),
+        OutputFormat::Keys => {
+            if let Some(key) = &issue.key {
+                println!("{key}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,summary,status,assignee,type,priority,id");
+            println!(
+                "{},{},{},{},{},{},{}",
+                csv_cell(issue.key.as_deref().unwrap_or_default()),
+                csv_cell(issue.summary().unwrap_or_default()),
+                csv_cell(issue.status_name().unwrap_or_default()),
+                csv_cell(issue.assignee_display_name().unwrap_or_default()),
+                csv_cell(issue.issue_type_name().unwrap_or_default()),
+                csv_cell(issue.priority_name().unwrap_or_default()),
+                csv_cell(issue.id.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Key: {}", issue.key.as_deref().unwrap_or("-"));
+            println!("Summary: {}", issue.summary().unwrap_or("-"));
+            println!("Status: {}", issue.status_name().unwrap_or("-"));
+            println!("Assignee: {}", issue.assignee_display_name().unwrap_or("-"));
+            println!("Type: {}", issue.issue_type_name().unwrap_or("-"));
+            println!("Priority: {}", issue.priority_name().unwrap_or("-"));
+            if let Some(id) = &issue.id {
+                println!("ID: {id}");
             }
             Ok(())
         }

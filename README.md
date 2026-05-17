@@ -59,6 +59,8 @@ atla jira project view PROJ
 atla jira project view PROJ --output json
 atla jira search "project = PROJ order by created desc"
 atla jira search "assignee = currentUser() and status != Done" --limit 25 --output keys
+atla jira issue view PROJ-123
+atla jira issue view PROJ-123 --output json
 ```
 
 First Confluence commands:

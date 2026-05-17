@@ -56,6 +56,16 @@ impl JiraClient {
 
         read_json(request).await
     }
+
+    pub async fn get_issue(&self, issue_id_or_key: &str) -> Result<JiraIssue, ApiError> {
+        let query = [("fields", "summary,status,assignee,issuetype,priority")];
+        let request = self
+            .client
+            .get(&format!("/rest/api/3/issue/{issue_id_or_key}"))
+            .query(&query);
+
+        read_json(request).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,5 +248,30 @@ mod tests {
         assert_eq!(issue.assignee_display_name(), Some("Neo"));
         assert_eq!(issue.issue_type_name(), Some("Bug"));
         assert_eq!(issue.priority_name(), Some("High"));
+    }
+
+    #[test]
+    fn parses_issue_detail() {
+        let issue: JiraIssue = serde_json::from_str(
+            r#"{
+                "id": "10002",
+                "key": "PROJ-1",
+                "fields": {
+                    "summary": "Fix login",
+                    "status": { "name": "Done" },
+                    "assignee": null,
+                    "issuetype": { "name": "Task" },
+                    "priority": { "name": "Medium" }
+                }
+            }"#,
+        )
+        .expect("parse issue detail");
+
+        assert_eq!(issue.key.as_deref(), Some("PROJ-1"));
+        assert_eq!(issue.summary(), Some("Fix login"));
+        assert_eq!(issue.status_name(), Some("Done"));
+        assert_eq!(issue.assignee_display_name(), None);
+        assert_eq!(issue.issue_type_name(), Some("Task"));
+        assert_eq!(issue.priority_name(), Some("Medium"));
     }
 }
