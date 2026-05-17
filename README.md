@@ -74,4 +74,6 @@ atla confluence page list --space DEV
 atla confluence page list --space-id 12345 --title "Meeting Notes"
 atla confluence page view 67890
 atla confluence page view 67890 --output json
+atla confluence blog list --space DEV
+atla confluence blog view 24680
 ```

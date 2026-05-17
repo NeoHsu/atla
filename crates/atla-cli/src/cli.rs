@@ -139,7 +139,7 @@ pub struct ConfluenceCommand {
 pub enum ConfluenceResource {
     Page(PageCommand),
     Space(SpaceCommand),
-    Blog,
+    Blog(BlogCommand),
     Search { cql: String },
     Attachment,
 }
@@ -152,6 +152,29 @@ pub struct PageCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PageAction {
+    List {
+        #[arg(short = 's', long)]
+        space: Option<String>,
+        #[arg(long)]
+        space_id: Option<String>,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    View {
+        id: String,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct BlogCommand {
+    #[command(subcommand)]
+    pub action: BlogAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BlogAction {
     List {
         #[arg(short = 's', long)]
         space: Option<String>,

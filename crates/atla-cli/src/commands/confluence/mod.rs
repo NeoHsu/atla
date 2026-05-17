@@ -1,13 +1,14 @@
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
-    AtlaConfig, AtlassianClient, ConfigStore, ConfluenceClient, ConfluencePage,
-    ConfluencePageSearch, ConfluenceSpace, ConfluenceSpaceSearch, Profile,
+    AtlaConfig, AtlassianClient, ConfigStore, ConfluenceBlogPost, ConfluenceBlogPostSearch,
+    ConfluenceClient, ConfluencePage, ConfluencePageSearch, ConfluenceSpace, ConfluenceSpaceSearch,
+    Profile,
 };
 
 use crate::cli::{
-    ConfluenceCommand, ConfluenceResource, GlobalArgs, OutputFormat, PageAction, PageCommand,
-    SpaceAction, SpaceCommand,
+    BlogAction, BlogCommand, ConfluenceCommand, ConfluenceResource, GlobalArgs, OutputFormat,
+    PageAction, PageCommand, SpaceAction, SpaceCommand,
 };
 use crate::config;
 use crate::output;
@@ -16,9 +17,95 @@ pub async fn run(command: ConfluenceCommand, global: &GlobalArgs) -> anyhow::Res
     match command.resource {
         ConfluenceResource::Page(command) => run_page(command, global).await?,
         ConfluenceResource::Space(command) => run_space(command, global).await?,
-        ConfluenceResource::Blog => println!("confluence blog commands are planned"),
+        ConfluenceResource::Blog(command) => run_blog(command, global).await?,
         ConfluenceResource::Search { cql } => println!("confluence search is planned: {cql}"),
         ConfluenceResource::Attachment => println!("confluence attachment commands are planned"),
+    }
+
+    Ok(())
+}
+
+async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+    match command.action {
+        BlogAction::List {
+            space,
+            space_id,
+            title,
+            limit,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let limit = limit.clamp(1, 250);
+
+            if global.dry_run {
+                if let Some(space) = &space {
+                    let space_url = format!(
+                        "{}/wiki/api/v2/spaces?keys={space}&limit=1",
+                        profile.instance.trim_end_matches('/')
+                    );
+                    println!("Would GET {space_url} using profile `{profile_name}`");
+                }
+
+                let mut url = format!(
+                    "{}/wiki/api/v2/blogposts?limit={limit}",
+                    profile.instance.trim_end_matches('/')
+                );
+                if let Some(space_id) = &space_id {
+                    url.push_str(&format!("&space-id={space_id}"));
+                } else if space.is_some() {
+                    url.push_str("&space-id=<resolved-space-id>");
+                }
+                if let Some(title) = &title {
+                    url.push_str(&format!("&title={title}"));
+                }
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let resolved_space_id = resolve_space_id(&client, space.as_deref(), space_id).await?;
+            let search = ConfluenceBlogPostSearch {
+                space_id: resolved_space_id,
+                title,
+                limit,
+            };
+            let page = client.list_blog_posts(&search).await.with_context(|| {
+                format!(
+                    "failed to list Confluence blog posts from {}",
+                    client.instance_url()
+                )
+            })?;
+
+            print_blog_posts(&page.results, global)?;
+        }
+        BlogAction::View { id } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/wiki/api/v2/blogposts/{}",
+                    profile.instance.trim_end_matches('/'),
+                    id
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let post = client.get_blog_post(&id).await.with_context(|| {
+                format!(
+                    "failed to load Confluence blog post `{id}` from {}",
+                    client.instance_url()
+                )
+            })?;
+
+            print_blog_post(&post, global)?;
+        }
     }
 
     Ok(())
@@ -302,6 +389,89 @@ fn print_page(page: &ConfluencePage, global: &GlobalArgs) -> anyhow::Result<()> 
 
 fn page_version(page: &ConfluencePage) -> Option<String> {
     page.version
+        .as_ref()
+        .and_then(|version| version.number)
+        .map(|number| number.to_string())
+}
+
+fn print_blog_posts(posts: &[ConfluenceBlogPost], global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(posts),
+        OutputFormat::Keys => {
+            for post in posts {
+                if let Some(id) = &post.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,title,status,space_id,version");
+            for post in posts {
+                println!(
+                    "{},{},{},{},{}",
+                    csv_cell(post.id.as_deref().unwrap_or_default()),
+                    csv_cell(post.title.as_deref().unwrap_or_default()),
+                    csv_cell(post.status.as_deref().unwrap_or_default()),
+                    csv_cell(post.space_id.as_deref().unwrap_or_default()),
+                    csv_cell(&blog_post_version(post).unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<14} {:<12} {:<10} TITLE", "ID", "STATUS", "VERSION");
+            for post in posts {
+                println!(
+                    "{:<14} {:<12} {:<10} {}",
+                    post.id.as_deref().unwrap_or("-"),
+                    post.status.as_deref().unwrap_or("-"),
+                    blog_post_version(post).as_deref().unwrap_or("-"),
+                    post.title.as_deref().unwrap_or("-")
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_blog_post(post: &ConfluenceBlogPost, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(post),
+        OutputFormat::Keys => {
+            if let Some(id) = &post.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,title,status,space_id,version");
+            println!(
+                "{},{},{},{},{}",
+                csv_cell(post.id.as_deref().unwrap_or_default()),
+                csv_cell(post.title.as_deref().unwrap_or_default()),
+                csv_cell(post.status.as_deref().unwrap_or_default()),
+                csv_cell(post.space_id.as_deref().unwrap_or_default()),
+                csv_cell(&blog_post_version(post).unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("ID: {}", post.id.as_deref().unwrap_or("-"));
+            println!("Title: {}", post.title.as_deref().unwrap_or("-"));
+            println!("Status: {}", post.status.as_deref().unwrap_or("-"));
+            println!("Space ID: {}", post.space_id.as_deref().unwrap_or("-"));
+            println!(
+                "Version: {}",
+                blog_post_version(post).as_deref().unwrap_or("-")
+            );
+            Ok(())
+        }
+    }
+}
+
+fn blog_post_version(post: &ConfluenceBlogPost) -> Option<String> {
+    post.version
         .as_ref()
         .and_then(|version| version.number)
         .map(|number| number.to_string())

@@ -8,8 +8,9 @@ pub mod profile;
 pub use auth::{AuthState, CredentialRef, KeyringCredentialStore};
 pub use client::{AtlassianClient, AtlassianInstance};
 pub use confluence::{
-    ConfluenceClient, ConfluencePage, ConfluencePagePage, ConfluencePageSearch, ConfluenceSpace,
-    ConfluenceSpacePage, ConfluenceSpaceSearch,
+    ConfluenceBlogPost, ConfluenceBlogPostPage, ConfluenceBlogPostSearch, ConfluenceClient,
+    ConfluencePage, ConfluencePagePage, ConfluencePageSearch, ConfluenceSpace, ConfluenceSpacePage,
+    ConfluenceSpaceSearch,
 };
 pub use jira::{
     JiraClient, JiraIssue, JiraIssueSearch, JiraIssueSearchPage, JiraProject, JiraProjectPage,

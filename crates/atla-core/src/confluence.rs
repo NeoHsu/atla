@@ -66,6 +66,30 @@ impl ConfluenceClient {
     pub async fn get_page(&self, id: &str) -> Result<ConfluencePage, ApiError> {
         read_json(self.client.get(&format!("/wiki/api/v2/pages/{id}"))).await
     }
+
+    pub async fn list_blog_posts(
+        &self,
+        search: &ConfluenceBlogPostSearch,
+    ) -> Result<ConfluenceBlogPostPage, ApiError> {
+        let mut request = self
+            .client
+            .get("/wiki/api/v2/blogposts")
+            .query(&[("limit", search.limit.to_string())]);
+
+        if let Some(space_id) = &search.space_id {
+            request = request.query(&[("space-id", space_id)]);
+        }
+
+        if let Some(title) = &search.title {
+            request = request.query(&[("title", title)]);
+        }
+
+        read_json(request).await
+    }
+
+    pub async fn get_blog_post(&self, id: &str) -> Result<ConfluenceBlogPost, ApiError> {
+        read_json(self.client.get(&format!("/wiki/api/v2/blogposts/{id}"))).await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,6 +173,42 @@ pub struct ConfluenceVersion {
     pub created_at: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceBlogPostSearch {
+    pub space_id: Option<String>,
+    pub title: Option<String>,
+    pub limit: u32,
+}
+
+impl Default for ConfluenceBlogPostSearch {
+    fn default() -> Self {
+        Self {
+            space_id: None,
+            title: None,
+            limit: 25,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceBlogPostPage {
+    #[serde(default)]
+    pub results: Vec<ConfluenceBlogPost>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceBlogPost {
+    pub id: Option<String>,
+    pub status: Option<String>,
+    pub title: Option<String>,
+    pub space_id: Option<String>,
+    pub author_id: Option<String>,
+    pub created_at: Option<String>,
+    pub version: Option<ConfluenceVersion>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +268,39 @@ mod tests {
         assert_eq!(
             page.version.as_ref().and_then(|version| version.number),
             Some(3)
+        );
+    }
+
+    #[test]
+    fn parses_blog_post_page() {
+        let page: ConfluenceBlogPostPage = serde_json::from_str(
+            r#"{
+                "results": [
+                    {
+                        "id": "222",
+                        "status": "current",
+                        "title": "Release Notes",
+                        "spaceId": "12345",
+                        "authorId": "abc",
+                        "createdAt": "2026-05-17T00:00:00.000Z",
+                        "version": {
+                            "number": 2,
+                            "message": "Publish",
+                            "createdAt": "2026-05-17T01:00:00.000Z"
+                        }
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse blog post page");
+
+        let post = &page.results[0];
+        assert_eq!(post.id.as_deref(), Some("222"));
+        assert_eq!(post.title.as_deref(), Some("Release Notes"));
+        assert_eq!(post.space_id.as_deref(), Some("12345"));
+        assert_eq!(
+            post.version.as_ref().and_then(|version| version.number),
+            Some(2)
         );
     }
 }
