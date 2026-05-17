@@ -58,3 +58,12 @@ atla jira project list --output keys
 atla jira project view PROJ
 atla jira project view PROJ --output json
 ```
+
+First Confluence commands:
+
+```bash
+atla confluence space list
+atla confluence space list --key DEV --output json
+atla confluence space view DEV
+atla confluence space view DEV --output json
+```

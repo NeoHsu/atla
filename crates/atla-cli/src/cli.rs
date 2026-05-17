@@ -123,8 +123,27 @@ pub struct ConfluenceCommand {
 #[derive(Debug, Subcommand)]
 pub enum ConfluenceResource {
     Page,
-    Space,
+    Space(SpaceCommand),
     Blog,
     Search { cql: String },
     Attachment,
+}
+
+#[derive(Debug, Args)]
+pub struct SpaceCommand {
+    #[command(subcommand)]
+    pub action: SpaceAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SpaceAction {
+    List {
+        #[arg(long)]
+        key: Option<String>,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    View {
+        key: String,
+    },
 }
