@@ -40,13 +40,24 @@ Full Jira Cloud v3 generation succeeds with openapi-generator `7.22.0`, but the 
 - Around 12 MB for Jira alone.
 - A temporary `cargo check` of the full Jira generated crate exceeded 8 minutes on the current ARM container and one `rustc` process used around 1.8 GB RSS before the check was stopped.
 
-Confluence Cloud v2 generation is smaller and passes a temporary crate check:
+Confluence Cloud v2 generation is smaller and is now generated in-place under `crates/atla-confluence-api`:
 
-- Around 280 generated files.
-- `cargo check --manifest-path /tmp/atla-gen-script-test/confluence/Cargo.toml` finished in about 1.5 minutes.
-- The generated crate currently emits Rust naming warnings for a few model modules, but no compile errors.
+- 31 generated API modules.
+- 243 generated model modules.
+- Around 550 generated files including generated endpoint/model docs and OpenAPI generator metadata.
+- Around 3.3 MB.
+- `cargo check --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` pass with the generated crate included.
 
 The generated `Cargo.toml` also needs a small post-process fix: generator `7.22.0` emits `default = ["rustls-tls"]`, while the generated feature is named `rustls`. `scripts/generate.sh` applies that fix automatically.
+
+Generated crates also run through post-processing that:
+
+- Adds crate-level lint allowances for generator output that is valid Rust but not hand-written style.
+- Runs `cargo fmt` for the generated crate.
+- Removes standalone scaffold files that do not belong in this monorepo (`.gitignore`, `.travis.yml`, and `git_push.sh`).
+- Normalizes generated Markdown docs by stripping trailing whitespace and extra final blank lines.
+
+The full Confluence generated crate is expensive to build as a test artifact. On the current ARM container, `cargo test --workspace` spent more than 6 minutes compiling `atla-confluence-api` test artifacts with two `rustc` processes near 1 GB RSS each before being stopped. Use `cargo test --workspace --exclude atla-confluence-api` for the default hand-written crate test gate, while keeping generated client verification on `cargo check` and clippy.
 
 For now, keep the generated crates as explicit workspace boundaries and avoid placing full generated output into default CI until we choose one of:
 

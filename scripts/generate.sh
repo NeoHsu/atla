@@ -65,6 +65,38 @@ fix_generated_manifest() {
   sed -i 's/default = \["rustls-tls"\]/default = ["rustls"]/g' "${manifest}"
 }
 
+fix_generated_lints() {
+  local lib_rs="$1"
+
+  # The Confluence spec produces a handful of model modules with double
+  # underscores. They compile correctly but violate Rust's non_snake_case lint.
+  if ! grep -q '#!\[allow(non_snake_case)\]' "${lib_rs}"; then
+    sed -i '1i#![allow(non_snake_case)]' "${lib_rs}"
+  fi
+
+  if ! grep -q '#!\[allow(clippy::all)\]' "${lib_rs}"; then
+    sed -i '1i#![allow(clippy::all)]' "${lib_rs}"
+  fi
+}
+
+format_generated_crate() {
+  local manifest="$1"
+
+  cargo fmt --manifest-path "${manifest}"
+}
+
+remove_standalone_scaffold() {
+  local out_dir="$1"
+
+  rm -f "${out_dir}/.gitignore" "${out_dir}/.travis.yml" "${out_dir}/git_push.sh"
+}
+
+fix_generated_docs() {
+  local out_dir="$1"
+
+  find "${out_dir}" -name '*.md' -exec perl -0pi -e 's/[ \t]+$//mg; s/\n+\z/\n/' {} +
+}
+
 generate_client() {
   local name="$1"
   local spec="$2"
@@ -95,6 +127,10 @@ generate_client() {
     --global-property apis,models,supportingFiles
 
   fix_generated_manifest "${out_dir}/Cargo.toml"
+  fix_generated_lints "${out_dir}/src/lib.rs"
+  format_generated_crate "${out_dir}/Cargo.toml"
+  remove_standalone_scaffold "${out_dir}"
+  fix_generated_docs "${out_dir}"
   echo "generated ${name}: ${out_dir}"
 }
 

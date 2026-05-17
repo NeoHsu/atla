@@ -1,10 +1,23 @@
 [package]
 name = "atla-confluence-api"
 version = "0.1.0"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
-rust-version.workspace = true
+authors = ["OpenAPI Generator team and contributors"]
+description = "This document describes Confluence's v2 APIs. This is intended to be an iteration on the existing Confluence Cloud REST API with improvements in both endpoint definitions and performance."
+# Override this license by providing a License Object in the OpenAPI.
+license = "Unlicense"
+edition = "2021"
 
 [dependencies]
+serde = { version = "^1.0", features = ["derive"] }
+serde_with = { version = "^3.8", default-features = false, features = ["base64", "std", "macros"] }
+serde_json = "^1.0"
+serde_repr = "^0.1"
+url = "^2.5"
+uuid = { version = "^1.8", features = ["serde", "v4"] }
+chrono = { version = "^0.4",  features = ["serde"] }
+reqwest = { version = "^0.13", default-features = false, features = ["json", "multipart", "query", "form"] }
 
+[features]
+default = ["rustls"]
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls"]

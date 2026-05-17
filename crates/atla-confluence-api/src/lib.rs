@@ -1,5 +1,13 @@
-//! Placeholder crate for generated Confluence Cloud v2 OpenAPI client code.
-//!
-//! Do not add handwritten API logic here. Regenerate this crate from `specs/confluence-v2.json`.
+#![allow(clippy::all)]
+#![allow(non_snake_case)]
+#![allow(unused_imports)]
+#![allow(clippy::too_many_arguments)]
 
-pub const API_NAME: &str = "confluence-cloud-v2";
+extern crate reqwest;
+extern crate serde;
+extern crate serde_json;
+extern crate serde_repr;
+extern crate url;
+
+pub mod apis;
+pub mod models;
