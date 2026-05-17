@@ -74,6 +74,15 @@ atla confluence page list --space DEV
 atla confluence page list --space-id 12345 --title "Meeting Notes"
 atla confluence page view 67890
 atla confluence page view 67890 --output json
+atla confluence page create --space DEV --title "Meeting Notes" --body-file notes.html
+atla confluence page update 67890 --title "Updated Notes"
+atla confluence page update 67890 --body-file updated.html
+atla confluence page move 67890 --parent 12345
+atla confluence page delete 67890 --yes
 atla confluence blog list --space DEV
 atla confluence blog view 24680
+atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
+atla confluence search "type=page AND space=DEV"
+atla confluence attachment list 67890
+atla confluence attachment upload 67890 ./diagram.png
 ```

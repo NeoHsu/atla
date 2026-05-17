@@ -56,6 +56,27 @@ impl AtlassianClient {
             .header(reqwest::header::ACCEPT, "application/json")
     }
 
+    pub fn post(&self, path: &str) -> reqwest::RequestBuilder {
+        self.http
+            .post(self.url(path))
+            .basic_auth(&self.email, Some(&self.token))
+            .header(reqwest::header::ACCEPT, "application/json")
+    }
+
+    pub fn put(&self, path: &str) -> reqwest::RequestBuilder {
+        self.http
+            .put(self.url(path))
+            .basic_auth(&self.email, Some(&self.token))
+            .header(reqwest::header::ACCEPT, "application/json")
+    }
+
+    pub fn delete(&self, path: &str) -> reqwest::RequestBuilder {
+        self.http
+            .delete(self.url(path))
+            .basic_auth(&self.email, Some(&self.token))
+            .header(reqwest::header::ACCEPT, "application/json")
+    }
+
     pub fn url(&self, path: &str) -> String {
         format!(
             "{}/{}",
@@ -88,6 +109,18 @@ pub async fn read_json<T: serde::de::DeserializeOwned>(
     }
 
     response.json::<T>().await.map_err(ApiError::Request)
+}
+
+pub async fn read_empty(request: reqwest::RequestBuilder) -> Result<(), ApiError> {
+    let response = request.send().await?;
+    let status = response.status();
+
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(ApiError::Http { status, body });
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

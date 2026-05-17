@@ -1,14 +1,20 @@
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
-    AtlaConfig, AtlassianClient, ConfigStore, ConfluenceBlogPost, ConfluenceBlogPostSearch,
-    ConfluenceClient, ConfluencePage, ConfluencePageSearch, ConfluenceSpace, ConfluenceSpaceSearch,
-    Profile,
+    AtlaConfig, AtlassianClient, ConfigStore, ConfluenceAttachment, ConfluenceAttachmentSearch,
+    ConfluenceAttachmentUpload, ConfluenceAttachmentUploadPage, ConfluenceBlogPost,
+    ConfluenceBlogPostCreate, ConfluenceBlogPostSearch, ConfluenceBodyRepresentation,
+    ConfluenceClient, ConfluenceContentStatus, ConfluencePage, ConfluencePageCreate,
+    ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchResult,
+    ConfluenceSpace, ConfluenceSpaceSearch, Profile,
 };
+use std::fs;
+use std::path::Path;
 
 use crate::cli::{
-    BlogAction, BlogCommand, ConfluenceCommand, ConfluenceResource, GlobalArgs, OutputFormat,
-    PageAction, PageCommand, SpaceAction, SpaceCommand,
+    AttachmentAction, AttachmentCommand, BlogAction, BlogCommand, BodyRepresentation,
+    ConfluenceCommand, ConfluenceResource, GlobalArgs, OutputFormat, PageAction, PageCommand,
+    SpaceAction, SpaceCommand,
 };
 use crate::config;
 use crate::output;
@@ -18,8 +24,133 @@ pub async fn run(command: ConfluenceCommand, global: &GlobalArgs) -> anyhow::Res
         ConfluenceResource::Page(command) => run_page(command, global).await?,
         ConfluenceResource::Space(command) => run_space(command, global).await?,
         ConfluenceResource::Blog(command) => run_blog(command, global).await?,
-        ConfluenceResource::Search { cql } => println!("confluence search is planned: {cql}"),
-        ConfluenceResource::Attachment => println!("confluence attachment commands are planned"),
+        ConfluenceResource::Search { cql, limit } => run_search(cql, limit, global).await?,
+        ConfluenceResource::Attachment(command) => run_attachment(command, global).await?,
+    }
+
+    Ok(())
+}
+
+async fn run_search(cql: String, limit: u32, global: &GlobalArgs) -> anyhow::Result<()> {
+    let store = ConfigStore::default_store().context("failed to find config location")?;
+    let atla_config = store.load().context("failed to load config")?;
+    let (profile_name, profile) = active_profile(&atla_config, global)?;
+    let search = ConfluenceSearch {
+        cql,
+        limit: limit.clamp(1, 250),
+    };
+
+    if global.dry_run {
+        println!(
+            "Would GET {}/wiki/rest/api/search?limit={} with CQL `{}` using profile `{profile_name}`",
+            profile.instance.trim_end_matches('/'),
+            search.limit,
+            search.cql
+        );
+        return Ok(());
+    }
+
+    let token = token_for_profile(profile_name, profile)?;
+    let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+    let page = client.search(&search).await.with_context(|| {
+        format!(
+            "failed to search Confluence content from {}",
+            client.instance_url()
+        )
+    })?;
+
+    print_search_results(&page.results, global)
+}
+
+async fn run_attachment(command: AttachmentCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+    match command.action {
+        AttachmentAction::List {
+            page_id,
+            filename,
+            limit,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let search = ConfluenceAttachmentSearch {
+                page_id,
+                filename,
+                limit: limit.clamp(1, 250),
+            };
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/wiki/api/v2/pages/{}/attachments?limit={} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    search.page_id,
+                    search.limit
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let page = client
+                .list_page_attachments(&search)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to list Confluence page attachments from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_attachments(&page.results, global)?;
+        }
+        AttachmentAction::Upload {
+            page_id,
+            file,
+            filename,
+            media_type,
+            comment,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/wiki/rest/api/content/{}/child/attachment using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    page_id
+                );
+                return Ok(());
+            }
+
+            let bytes = fs::read(&file)
+                .with_context(|| format!("failed to read attachment file `{}`", file.display()))?;
+            let file_name = filename
+                .or_else(|| {
+                    file.file_name()
+                        .and_then(|name| name.to_str())
+                        .map(ToOwned::to_owned)
+                })
+                .ok_or_else(|| anyhow::anyhow!("attachment file requires a valid file name"))?;
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let page = client
+                .upload_page_attachment(ConfluenceAttachmentUpload {
+                    page_id,
+                    file_name,
+                    bytes,
+                    media_type,
+                    comment,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to upload Confluence attachment to {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_uploaded_attachments(&page, global)?;
+        }
     }
 
     Ok(())
@@ -27,6 +158,58 @@ pub async fn run(command: ConfluenceCommand, global: &GlobalArgs) -> anyhow::Res
 
 async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     match command.action {
+        BlogAction::Create {
+            space,
+            space_id,
+            title,
+            body,
+            body_file,
+            representation,
+            draft,
+            private,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                if let Some(space) = &space {
+                    let space_url = format!(
+                        "{}/wiki/api/v2/spaces?keys={space}&limit=1",
+                        profile.instance.trim_end_matches('/')
+                    );
+                    println!("Would GET {space_url} using profile `{profile_name}`");
+                }
+                println!(
+                    "Would POST {}/wiki/api/v2/blogposts using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let body = read_body(body, body_file.as_deref())?;
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
+            let post = client
+                .create_blog_post(&ConfluenceBlogPostCreate {
+                    space_id,
+                    title,
+                    body,
+                    representation: representation.into(),
+                    status: status_from_draft(draft),
+                    private: private.then_some(true),
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to create Confluence blog post in {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_blog_post(&post, global)?;
+        }
         BlogAction::List {
             space,
             space_id,
@@ -113,6 +296,62 @@ async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<(
 
 async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     match command.action {
+        PageAction::Create {
+            space,
+            space_id,
+            title,
+            parent,
+            body,
+            body_file,
+            representation,
+            draft,
+            private,
+            root_level,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                if let Some(space) = &space {
+                    let space_url = format!(
+                        "{}/wiki/api/v2/spaces?keys={space}&limit=1",
+                        profile.instance.trim_end_matches('/')
+                    );
+                    println!("Would GET {space_url} using profile `{profile_name}`");
+                }
+                println!(
+                    "Would POST {}/wiki/api/v2/pages using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let body = read_body(body, body_file.as_deref())?;
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
+            let page = client
+                .create_page(&ConfluencePageCreate {
+                    space_id,
+                    title,
+                    parent_id: parent,
+                    body,
+                    representation: representation.into(),
+                    status: status_from_draft(draft),
+                    private: private.then_some(true),
+                    root_level: root_level.then_some(true),
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to create Confluence page in {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_page(&page, global)?;
+        }
         PageAction::List {
             space,
             space_id,
@@ -191,6 +430,169 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
             })?;
 
             print_page(&page, global)?;
+        }
+        PageAction::Update {
+            id,
+            title,
+            parent,
+            body,
+            body_file,
+            representation,
+            version,
+            message,
+            draft,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                let endpoint = if body.is_none() && body_file.is_none() && parent.is_none() {
+                    format!(
+                        "{}/wiki/api/v2/pages/{}/title",
+                        profile.instance.trim_end_matches('/'),
+                        id
+                    )
+                } else {
+                    format!(
+                        "{}/wiki/api/v2/pages/{}",
+                        profile.instance.trim_end_matches('/'),
+                        id
+                    )
+                };
+                println!("Would PUT {endpoint} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let existing = client.get_page(&id).await.with_context(|| {
+                format!(
+                    "failed to load Confluence page `{id}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            let status = status_from_draft(draft);
+
+            if body.is_none() && body_file.is_none() && parent.is_none() {
+                let title = title.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "nothing to update; provide --title, --body-file, --body, or --parent"
+                    )
+                })?;
+                let page = client
+                    .update_page_title(&id, &title, status)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to update Confluence page title `{id}` from {}",
+                            client.instance_url()
+                        )
+                    })?;
+                print_page(&page, global)?;
+                return Ok(());
+            }
+
+            let body = read_body(body, body_file.as_deref())?.ok_or_else(|| {
+                anyhow::anyhow!("page body update and move require --body or --body-file")
+            })?;
+            let title = title
+                .or(existing.title)
+                .ok_or_else(|| anyhow::anyhow!("page `{id}` did not include a title"))?;
+            let next_version = version
+                .or_else(|| {
+                    existing
+                        .version
+                        .as_ref()
+                        .and_then(|version| version.number)
+                        .map(|number| number + 1)
+                })
+                .ok_or_else(|| {
+                    anyhow::anyhow!("page `{id}` did not include a version; pass --version")
+                })?;
+
+            let page = client
+                .update_page(&ConfluencePageUpdate {
+                    id: id.clone(),
+                    status,
+                    title,
+                    space_id: existing.space_id,
+                    parent_id: parent,
+                    body,
+                    representation: representation.into(),
+                    version: next_version,
+                    message,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to update Confluence page `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_page(&page, global)?;
+        }
+        PageAction::Delete {
+            id,
+            purge,
+            draft,
+            yes,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                println!(
+                    "Would DELETE {}/wiki/api/v2/pages/{} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    id
+                );
+                return Ok(());
+            }
+
+            if !yes {
+                anyhow::bail!("refusing to delete page `{id}` without --yes");
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            client
+                .delete_page(&id, purge, draft)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to delete Confluence page `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            println!("Deleted Confluence page {id}");
+        }
+        PageAction::Move { id, parent } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                println!(
+                    "Would PUT {}/wiki/rest/api/content/{}/move/append/{} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    id,
+                    parent
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            client.move_page(&id, &parent).await.with_context(|| {
+                format!(
+                    "failed to move Confluence page `{id}` under `{parent}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            println!("Moved Confluence page {id} under {parent}");
         }
     }
 
@@ -309,6 +711,249 @@ async fn resolve_space_id(
         .ok_or_else(|| anyhow::anyhow!("Confluence space `{space_key}` did not include an id"))?;
 
     Ok(Some(space_id))
+}
+
+async fn resolve_required_space_id(
+    client: &ConfluenceClient,
+    space: Option<&str>,
+    space_id: Option<String>,
+) -> anyhow::Result<String> {
+    resolve_space_id(client, space, space_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("provide --space or --space-id"))
+}
+
+fn read_body(body: Option<String>, body_file: Option<&Path>) -> anyhow::Result<Option<String>> {
+    match (body, body_file) {
+        (Some(body), None) => Ok(Some(body)),
+        (None, Some(path)) => fs::read_to_string(path)
+            .with_context(|| format!("failed to read body file `{}`", path.display()))
+            .map(Some),
+        (None, None) => Ok(None),
+        (Some(_), Some(_)) => unreachable!("clap prevents --body and --body-file together"),
+    }
+}
+
+fn status_from_draft(draft: bool) -> ConfluenceContentStatus {
+    if draft {
+        ConfluenceContentStatus::Draft
+    } else {
+        ConfluenceContentStatus::Current
+    }
+}
+
+impl From<BodyRepresentation> for ConfluenceBodyRepresentation {
+    fn from(value: BodyRepresentation) -> Self {
+        match value {
+            BodyRepresentation::Storage => Self::Storage,
+            BodyRepresentation::Wiki => Self::Wiki,
+            BodyRepresentation::AtlasDocFormat => Self::AtlasDocFormat,
+        }
+    }
+}
+
+fn print_search_results(
+    results: &[ConfluenceSearchResult],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(results),
+        OutputFormat::Keys => {
+            for result in results {
+                if let Some(id) = result
+                    .content
+                    .as_ref()
+                    .and_then(|content| content.id.as_ref())
+                {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,type,title,status,url");
+            for result in results {
+                let content = result.content.as_ref();
+                println!(
+                    "{},{},{},{},{}",
+                    csv_cell(
+                        content
+                            .and_then(|content| content.id.as_deref())
+                            .unwrap_or_default()
+                    ),
+                    csv_cell(
+                        content
+                            .and_then(|content| content.content_type.as_deref())
+                            .unwrap_or_default()
+                    ),
+                    csv_cell(search_title(result)),
+                    csv_cell(
+                        content
+                            .and_then(|content| content.status.as_deref())
+                            .unwrap_or_default()
+                    ),
+                    csv_cell(result.url.as_deref().unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<14} {:<14} {:<12} TITLE", "ID", "TYPE", "STATUS");
+            for result in results {
+                let content = result.content.as_ref();
+                println!(
+                    "{:<14} {:<14} {:<12} {}",
+                    content
+                        .and_then(|content| content.id.as_deref())
+                        .unwrap_or("-"),
+                    content
+                        .and_then(|content| content.content_type.as_deref())
+                        .unwrap_or("-"),
+                    content
+                        .and_then(|content| content.status.as_deref())
+                        .unwrap_or("-"),
+                    search_title(result)
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn search_title(result: &ConfluenceSearchResult) -> &str {
+    result
+        .title
+        .as_deref()
+        .or_else(|| {
+            result
+                .content
+                .as_ref()
+                .and_then(|content| content.title.as_deref())
+        })
+        .unwrap_or("-")
+}
+
+fn print_attachments(
+    attachments: &[ConfluenceAttachment],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(attachments),
+        OutputFormat::Keys => {
+            for attachment in attachments {
+                if let Some(id) = &attachment.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,title,status,media_type,file_size,download_link");
+            for attachment in attachments {
+                println!(
+                    "{},{},{},{},{},{}",
+                    csv_cell(attachment.id.as_deref().unwrap_or_default()),
+                    csv_cell(attachment.title.as_deref().unwrap_or_default()),
+                    csv_cell(attachment.status.as_deref().unwrap_or_default()),
+                    csv_cell(attachment.media_type.as_deref().unwrap_or_default()),
+                    csv_cell(&attachment.file_size.unwrap_or_default().to_string()),
+                    csv_cell(attachment.download_link.as_deref().unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<14} {:<18} {:<10} TITLE", "ID", "MEDIA TYPE", "SIZE");
+            for attachment in attachments {
+                println!(
+                    "{:<14} {:<18} {:<10} {}",
+                    attachment.id.as_deref().unwrap_or("-"),
+                    attachment.media_type.as_deref().unwrap_or("-"),
+                    attachment
+                        .file_size
+                        .map(|size| size.to_string())
+                        .as_deref()
+                        .unwrap_or("-"),
+                    attachment.title.as_deref().unwrap_or("-")
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_uploaded_attachments(
+    page: &ConfluenceAttachmentUploadPage,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(page),
+        OutputFormat::Keys => {
+            for attachment in &page.results {
+                if let Some(id) = &attachment.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,title,status,media_type,file_size,download_link");
+            for attachment in &page.results {
+                println!(
+                    "{},{},{},{},{},{}",
+                    csv_cell(attachment.id.as_deref().unwrap_or_default()),
+                    csv_cell(attachment.title.as_deref().unwrap_or_default()),
+                    csv_cell(attachment.status.as_deref().unwrap_or_default()),
+                    csv_cell(
+                        attachment
+                            .metadata
+                            .as_ref()
+                            .and_then(|metadata| metadata.media_type.as_deref())
+                            .unwrap_or_default()
+                    ),
+                    csv_cell(
+                        &attachment
+                            .extensions
+                            .as_ref()
+                            .and_then(|extensions| extensions.file_size)
+                            .unwrap_or_default()
+                            .to_string()
+                    ),
+                    csv_cell(
+                        attachment
+                            .links
+                            .as_ref()
+                            .and_then(|links| links.download.as_deref())
+                            .unwrap_or_default()
+                    )
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<14} {:<18} {:<10} TITLE", "ID", "MEDIA TYPE", "SIZE");
+            for attachment in &page.results {
+                println!(
+                    "{:<14} {:<18} {:<10} {}",
+                    attachment.id.as_deref().unwrap_or("-"),
+                    attachment
+                        .metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.media_type.as_deref())
+                        .unwrap_or("-"),
+                    attachment
+                        .extensions
+                        .as_ref()
+                        .and_then(|extensions| extensions.file_size)
+                        .map(|size| size.to_string())
+                        .as_deref()
+                        .unwrap_or("-"),
+                    attachment.title.as_deref().unwrap_or("-")
+                );
+            }
+            Ok(())
+        }
+    }
 }
 
 fn print_pages(pages: &[ConfluencePage], global: &GlobalArgs) -> anyhow::Result<()> {

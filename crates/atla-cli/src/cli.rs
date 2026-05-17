@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Debug, Parser)]
@@ -34,6 +36,13 @@ pub enum OutputFormat {
     Table,
     Csv,
     Keys,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum BodyRepresentation {
+    Storage,
+    Wiki,
+    AtlasDocFormat,
 }
 
 #[derive(Debug, Subcommand)]
@@ -140,8 +149,12 @@ pub enum ConfluenceResource {
     Page(PageCommand),
     Space(SpaceCommand),
     Blog(BlogCommand),
-    Search { cql: String },
-    Attachment,
+    Search {
+        cql: String,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Attachment(AttachmentCommand),
 }
 
 #[derive(Debug, Args)]
@@ -152,6 +165,28 @@ pub struct PageCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum PageAction {
+    Create {
+        #[arg(short = 's', long)]
+        space: Option<String>,
+        #[arg(long)]
+        space_id: Option<String>,
+        #[arg(long)]
+        title: String,
+        #[arg(long, conflicts_with = "root_level")]
+        parent: Option<String>,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        draft: bool,
+        #[arg(long)]
+        private: bool,
+        #[arg(long, conflicts_with = "parent")]
+        root_level: bool,
+    },
     List {
         #[arg(short = 's', long)]
         space: Option<String>,
@@ -165,6 +200,39 @@ pub enum PageAction {
     View {
         id: String,
     },
+    Update {
+        id: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        version: Option<u64>,
+        #[arg(long)]
+        message: Option<String>,
+        #[arg(long)]
+        draft: bool,
+    },
+    Delete {
+        id: String,
+        #[arg(long)]
+        purge: bool,
+        #[arg(long)]
+        draft: bool,
+        #[arg(long)]
+        yes: bool,
+    },
+    Move {
+        id: String,
+        #[arg(long)]
+        parent: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -175,6 +243,24 @@ pub struct BlogCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum BlogAction {
+    Create {
+        #[arg(short = 's', long)]
+        space: Option<String>,
+        #[arg(long)]
+        space_id: Option<String>,
+        #[arg(long)]
+        title: String,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        draft: bool,
+        #[arg(long)]
+        private: bool,
+    },
     List {
         #[arg(short = 's', long)]
         space: Option<String>,
@@ -206,5 +292,32 @@ pub enum SpaceAction {
     },
     View {
         key: String,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct AttachmentCommand {
+    #[command(subcommand)]
+    pub action: AttachmentAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AttachmentAction {
+    List {
+        page_id: String,
+        #[arg(long)]
+        filename: Option<String>,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Upload {
+        page_id: String,
+        file: PathBuf,
+        #[arg(long)]
+        filename: Option<String>,
+        #[arg(long)]
+        media_type: Option<String>,
+        #[arg(long)]
+        comment: Option<String>,
     },
 }
