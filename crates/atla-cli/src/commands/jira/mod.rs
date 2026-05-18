@@ -3,10 +3,12 @@ use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
     AtlaConfig, AtlassianClient, ConfigStore, JiraAssigneeTarget, JiraBoardPage, JiraBoardSearch,
     JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign,
-    JiraIssueCreate, JiraIssueList, JiraIssueSearch, JiraIssueUpdate, JiraProject,
-    JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch, JiraTransition, JiraUser,
-    Profile,
+    JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueList, JiraIssueSearch, JiraIssueUpdate,
+    JiraProject, JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch, JiraTransition,
+    JiraUser, Profile,
 };
+use dialoguer::Select;
+use std::io::{IsTerminal, stdin, stdout};
 use std::path::Path;
 
 use crate::cli::{
@@ -115,19 +117,21 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             description,
             description_file,
             fields,
+            labels,
         } => {
             let store = ConfigStore::default_store().context("failed to find config location")?;
             let atla_config = store.load().context("failed to load config")?;
             let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let label_update = parse_label_update(&key, labels.as_deref())?;
             let issue = JiraIssueUpdate {
                 issue_id_or_key: key,
                 summary,
                 description: read_optional_text(description, description_file.as_deref())?,
                 fields: parse_fields(&fields)?,
             };
-            if issue.is_empty() {
+            if issue.is_empty() && label_update.is_empty() {
                 anyhow::bail!(
-                    "nothing to update; provide --summary, --description, --description-file, or --field"
+                    "nothing to update; provide --summary, --description, --description-file, --field, or --labels"
                 );
             }
 
@@ -143,28 +147,59 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
             let token = token_for_profile(profile_name, profile)?;
             let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
-            client.update_issue(&issue).await.with_context(|| {
-                format!(
-                    "failed to update Jira issue `{}` from {}",
-                    issue.issue_id_or_key,
-                    client.instance_url()
-                )
-            })?;
+            if !issue.is_empty() {
+                client.update_issue(&issue).await.with_context(|| {
+                    format!(
+                        "failed to update Jira issue `{}` from {}",
+                        issue.issue_id_or_key,
+                        client.instance_url()
+                    )
+                })?;
+            }
+            if !label_update.is_empty() {
+                client
+                    .update_issue_labels(&label_update)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to update labels for Jira issue `{}` from {}",
+                            label_update.issue_id_or_key,
+                            client.instance_url()
+                        )
+                    })?;
+            }
 
             print_issue_update(&issue.issue_id_or_key, global)?;
         }
-        IssueAction::View { key } => {
+        IssueAction::View { key, web } => {
             let store = ConfigStore::default_store().context("failed to find config location")?;
             let atla_config = store.load().context("failed to load config")?;
             let (profile_name, profile) = active_profile(&atla_config, global)?;
 
             if global.dry_run {
+                if web {
+                    println!(
+                        "Would open {}/browse/{} using profile `{profile_name}`",
+                        profile.instance.trim_end_matches('/'),
+                        key
+                    );
+                    return Ok(());
+                }
                 let url = format!(
                     "{}/rest/api/3/issue/{}?fields=summary,status,assignee,issuetype,priority",
                     profile.instance.trim_end_matches('/'),
                     key
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            if web {
+                open_web_url(&format!(
+                    "{}/browse/{}",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                ))?;
                 return Ok(());
             }
 
@@ -296,7 +331,28 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                         client.instance_url()
                     )
                 })?;
-                print_transitions(&transitions, global)?;
+                if can_prompt(global) && !transitions.is_empty() {
+                    let selected = select_transition(&transitions)?;
+                    let transition_id = selected
+                        .id
+                        .as_deref()
+                        .or(selected.name.as_deref())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("selected transition did not include an id or name")
+                        })?;
+                    let transition = client
+                        .transition_issue(&key, transition_id)
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "failed to transition Jira issue `{key}` from {}",
+                                client.instance_url()
+                            )
+                        })?;
+                    print_transition_update(&key, &transition, global)?;
+                } else {
+                    print_transitions(&transitions, global)?;
+                }
             }
         }
         IssueAction::Comment { action } => match action {
@@ -1267,6 +1323,40 @@ fn read_required_text(
     read_optional_text(value, file)?.ok_or_else(|| anyhow::anyhow!("missing {name}"))
 }
 
+fn parse_label_update(
+    issue_id_or_key: &str,
+    labels: Option<&str>,
+) -> anyhow::Result<JiraIssueLabelUpdate> {
+    let mut update = JiraIssueLabelUpdate {
+        issue_id_or_key: issue_id_or_key.to_owned(),
+        add: Vec::new(),
+        remove: Vec::new(),
+    };
+    let Some(labels) = labels else {
+        return Ok(update);
+    };
+
+    for operation in labels
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
+        let (action, label) = operation.split_once(':').ok_or_else(|| {
+            anyhow::anyhow!("expected --labels add:name,remove:name, got `{operation}`")
+        })?;
+        if label.is_empty() {
+            anyhow::bail!("label cannot be empty in `{operation}`");
+        }
+        match action {
+            "add" => update.add.push(label.to_owned()),
+            "remove" => update.remove.push(label.to_owned()),
+            _ => anyhow::bail!("unsupported label operation `{action}`; use add or remove"),
+        }
+    }
+
+    Ok(update)
+}
+
 fn parse_fields(fields: &[String]) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
     let mut parsed = serde_json::Map::new();
     for field in fields {
@@ -1282,4 +1372,63 @@ fn parse_fields(fields: &[String]) -> anyhow::Result<serde_json::Map<String, ser
     }
 
     Ok(parsed)
+}
+
+fn select_transition(transitions: &[JiraTransition]) -> anyhow::Result<&JiraTransition> {
+    let items = transitions
+        .iter()
+        .map(transition_display)
+        .collect::<Vec<_>>();
+    let index = Select::new()
+        .with_prompt("Transition")
+        .items(&items)
+        .default(0)
+        .interact()
+        .context("failed to read transition selection")?;
+
+    transitions
+        .get(index)
+        .ok_or_else(|| anyhow::anyhow!("selected transition was out of range"))
+}
+
+fn transition_display(transition: &JiraTransition) -> String {
+    let name = transition.name.as_deref().unwrap_or("-");
+    let to_status = transition
+        .to_status
+        .as_ref()
+        .and_then(|status| status.name.as_deref());
+    if let Some(to_status) = to_status {
+        format!("{name} -> {to_status}")
+    } else {
+        name.to_owned()
+    }
+}
+
+fn can_prompt(global: &GlobalArgs) -> bool {
+    !global.no_input && stdin().is_terminal() && stdout().is_terminal()
+}
+
+fn open_web_url(url: &str) -> anyhow::Result<()> {
+    let command = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "xdg-open"
+    };
+    let status = if cfg!(target_os = "windows") {
+        std::process::Command::new(command)
+            .args(["/C", "start", "", url])
+            .status()
+    } else {
+        std::process::Command::new(command).arg(url).status()
+    };
+
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        _ => {
+            println!("{url}");
+            Ok(())
+        }
+    }
 }

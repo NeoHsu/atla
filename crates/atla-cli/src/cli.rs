@@ -149,6 +149,7 @@ pub enum IssueAction {
         #[arg(long = "field")]
         fields: Vec<String>,
     },
+    #[command(alias = "edit")]
     Update {
         key: String,
         #[arg(long)]
@@ -159,9 +160,13 @@ pub enum IssueAction {
         description_file: Option<PathBuf>,
         #[arg(long = "field")]
         fields: Vec<String>,
+        #[arg(long)]
+        labels: Option<String>,
     },
     View {
         key: String,
+        #[arg(long)]
+        web: bool,
     },
     Delete {
         key: String,

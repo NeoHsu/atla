@@ -65,8 +65,10 @@ atla jira issue create --project PROJ --type Task --summary "Fix login"
 atla jira issue create --project PROJ --type Bug --summary "Checkout fails" --description "Steps to reproduce..."
 atla jira issue update PROJ-123 --summary "Updated summary"
 atla jira issue update PROJ-123 --field 'priority={"name":"High"}'
+atla jira issue edit PROJ-123 --labels add:urgent,remove:low
 atla jira issue view PROJ-123
 atla jira issue view PROJ-123 --output json
+atla jira issue view PROJ-123 --web
 atla jira issue assign PROJ-123 --to me
 atla jira issue assign PROJ-123 --to "Jane Doe"
 atla jira issue assign PROJ-123 --to 5b10ac8d82e05b22cc7d4ef5 --account-id

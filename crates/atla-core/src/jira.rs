@@ -71,6 +71,15 @@ impl JiraClient {
         .map_err(generated_error)
     }
 
+    pub async fn update_issue_labels(&self, labels: &JiraIssueLabelUpdate) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .put(&format!("/rest/api/3/issue/{}", labels.issue_id_or_key))
+                .json(&labels.to_json()),
+        )
+        .await
+    }
+
     pub async fn search_issues(
         &self,
         search: &JiraIssueSearch,
@@ -446,6 +455,35 @@ pub struct JiraIssueUpdate {
     pub summary: Option<String>,
     pub description: Option<String>,
     pub fields: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraIssueLabelUpdate {
+    pub issue_id_or_key: String,
+    pub add: Vec<String>,
+    pub remove: Vec<String>,
+}
+
+impl JiraIssueLabelUpdate {
+    pub fn is_empty(&self) -> bool {
+        self.add.is_empty() && self.remove.is_empty()
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        let mut operations = Vec::new();
+        for label in &self.add {
+            operations.push(serde_json::json!({ "add": label }));
+        }
+        for label in &self.remove {
+            operations.push(serde_json::json!({ "remove": label }));
+        }
+
+        serde_json::json!({
+            "update": {
+                "labels": operations
+            }
+        })
+    }
 }
 
 impl JiraIssueUpdate {
@@ -1044,6 +1082,27 @@ mod tests {
         assert_eq!(fields["summary"], serde_json::json!("Updated summary"));
         assert_eq!(fields["labels"], serde_json::json!(["cli"]));
         assert_eq!(fields.get("description"), None);
+    }
+
+    #[test]
+    fn builds_label_update_request() {
+        let update = JiraIssueLabelUpdate {
+            issue_id_or_key: "PROJ-1".to_owned(),
+            add: vec!["urgent".to_owned()],
+            remove: vec!["low".to_owned()],
+        };
+
+        assert_eq!(
+            update.to_json(),
+            serde_json::json!({
+                "update": {
+                    "labels": [
+                        { "add": "urgent" },
+                        { "remove": "low" }
+                    ]
+                }
+            })
+        );
     }
 
     #[test]

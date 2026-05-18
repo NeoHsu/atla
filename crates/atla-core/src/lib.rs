@@ -20,9 +20,9 @@ pub use confluence::{
 };
 pub use jira::{
     JiraAssigneeTarget, JiraBoard, JiraBoardPage, JiraBoardSearch, JiraClient, JiraComment,
-    JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate, JiraIssueList,
-    JiraIssueSearch, JiraIssueSearchPage, JiraIssueUpdate, JiraProject, JiraProjectPage,
-    JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch, JiraStatus, JiraTransition,
-    JiraUser,
+    JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate,
+    JiraIssueLabelUpdate, JiraIssueList, JiraIssueSearch, JiraIssueSearchPage, JiraIssueUpdate,
+    JiraProject, JiraProjectPage, JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch,
+    JiraStatus, JiraTransition, JiraUser,
 };
 pub use profile::{AtlaConfig, ConfigStore, Profile};
