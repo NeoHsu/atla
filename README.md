@@ -93,17 +93,28 @@ atla confluence page list --space DEV
 atla confluence page list --space-id 12345 --title "Meeting Notes"
 atla confluence page view 67890
 atla confluence page view 67890 --output json
+atla confluence page view 67890 --format markdown
+atla confluence page view 67890 --web
 atla confluence page create --space DEV --title "Meeting Notes" --body-file notes.html
 atla confluence page update 67890 --title "Updated Notes"
 atla confluence page update 67890 --body-file updated.html
 atla confluence page move 67890 --parent 12345
+atla confluence page label list 67890
+atla confluence page label add 67890 runbook urgent
+atla confluence page label remove 67890 urgent
+atla confluence page comment add 67890 "Looks good"
+atla confluence page comment list 67890
 atla confluence page delete 67890 --yes
 atla confluence blog list --space DEV
 atla confluence blog view 24680
 atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
+atla confluence blog update 24680 --title "Updated Release Notes"
+atla confluence blog delete 24680 --yes
 atla confluence search "type=page AND space=DEV"
 atla confluence attachment list 67890
 atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
+atla confluence attachment download 13579 --output ./diagram.png
+atla confluence attachment delete 13579 --yes
 ```
 
-Confluence v2 remains the primary generated client. Confluence search and attachment upload use a scoped Confluence v1 generated client because Atlassian's v2 OpenAPI spec does not expose those endpoints.
+Confluence v2 remains the primary generated client. Confluence search, attachment upload, and page label mutation use scoped Confluence v1 REST endpoints where v2 does not expose the required operation.

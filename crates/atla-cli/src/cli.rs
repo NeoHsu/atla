@@ -45,6 +45,13 @@ pub enum BodyRepresentation {
     AtlasDocFormat,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum ContentViewFormat {
+    Markdown,
+    Storage,
+    AtlasDocFormat,
+}
+
 #[derive(Debug, Subcommand)]
 pub enum Command {
     Auth(AuthCommand),
@@ -324,6 +331,10 @@ pub enum PageAction {
     },
     View {
         id: String,
+        #[arg(long)]
+        web: bool,
+        #[arg(long, value_enum)]
+        format: Option<ContentViewFormat>,
     },
     Update {
         id: String,
@@ -357,6 +368,53 @@ pub enum PageAction {
         id: String,
         #[arg(long)]
         parent: String,
+    },
+    Label {
+        #[command(subcommand)]
+        action: PageLabelAction,
+    },
+    Comment {
+        #[command(subcommand)]
+        action: PageCommentAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PageLabelAction {
+    List {
+        page_id: String,
+        #[arg(long)]
+        prefix: Option<String>,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Add {
+        page_id: String,
+        labels: Vec<String>,
+    },
+    Remove {
+        page_id: String,
+        label: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PageCommentAction {
+    List {
+        page_id: String,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Add {
+        page_id: String,
+        #[arg(conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
     },
 }
 
@@ -398,6 +456,32 @@ pub enum BlogAction {
     },
     View {
         id: String,
+    },
+    Update {
+        id: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        version: Option<u64>,
+        #[arg(long)]
+        message: Option<String>,
+        #[arg(long)]
+        draft: bool,
+    },
+    Delete {
+        id: String,
+        #[arg(long)]
+        purge: bool,
+        #[arg(long)]
+        draft: bool,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -442,5 +526,17 @@ pub enum AttachmentAction {
         comment: Option<String>,
         #[arg(long)]
         minor_edit: bool,
+    },
+    Download {
+        attachment_id: String,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    Delete {
+        attachment_id: String,
+        #[arg(long)]
+        purge: bool,
+        #[arg(long)]
+        yes: bool,
     },
 }

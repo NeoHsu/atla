@@ -1,9 +1,9 @@
 use atla_confluence_api::{apis as generated_apis, models as generated_models};
 use atla_confluence_v1_api::{apis as generated_v1_apis, models as generated_v1_models};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use crate::client::{ApiError, AtlassianClient};
+use crate::client::{ApiError, AtlassianClient, read_empty, read_json};
 
 #[derive(Debug, Clone)]
 pub struct ConfluenceClient {
@@ -113,10 +113,18 @@ impl ConfluenceClient {
     }
 
     pub async fn get_page(&self, id: &str) -> Result<ConfluencePage, ApiError> {
+        self.get_page_with_body_format(id, None).await
+    }
+
+    pub async fn get_page_with_body_format(
+        &self,
+        id: &str,
+        body_format: Option<ConfluenceBodyRepresentation>,
+    ) -> Result<ConfluencePage, ApiError> {
         let page = generated_apis::page_api::get_page_by_id(
             &self.generated,
             parse_i64_id(id)?,
-            None,
+            body_format.map(ConfluenceBodyRepresentation::as_primary_body_single),
             None,
             None,
             None,
@@ -291,7 +299,7 @@ impl ConfluenceClient {
         let post = generated_apis::blog_post_api::get_blog_post_by_id(
             &self.generated,
             parse_i64_id(id)?,
-            None,
+            Some(generated_models::PrimaryBodyRepresentationSingle::Storage),
             None,
             None,
             None,
@@ -324,6 +332,125 @@ impl ConfluenceClient {
         .map_err(generated_error)?;
 
         Ok(post.into())
+    }
+
+    pub async fn update_blog_post(
+        &self,
+        post: &ConfluenceBlogPostUpdate,
+    ) -> Result<ConfluenceBlogPost, ApiError> {
+        let post = generated_apis::blog_post_api::update_blog_post(
+            &self.generated,
+            parse_i64_id(&post.id)?,
+            post.to_generated(),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(post.into())
+    }
+
+    pub async fn delete_blog_post(
+        &self,
+        id: &str,
+        purge: bool,
+        draft: bool,
+    ) -> Result<(), ApiError> {
+        generated_apis::blog_post_api::delete_blog_post(
+            &self.generated,
+            parse_i64_id(id)?,
+            Some(purge),
+            Some(draft),
+        )
+        .await
+        .map_err(generated_error)
+    }
+
+    pub async fn list_page_labels(
+        &self,
+        search: &ConfluenceLabelSearch,
+    ) -> Result<ConfluenceLabelPage, ApiError> {
+        let page = generated_apis::label_api::get_page_labels(
+            &self.generated,
+            parse_i64_id(&search.content_id)?,
+            search.prefix.as_deref(),
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
+    }
+
+    pub async fn add_page_labels(
+        &self,
+        content_id: &str,
+        labels: &[String],
+    ) -> Result<ConfluenceLabelPage, ApiError> {
+        let request = labels
+            .iter()
+            .map(|label| serde_json::json!({ "prefix": "global", "name": label }))
+            .collect::<Vec<_>>();
+        let _value: serde_json::Value = read_json(
+            self.raw_client
+                .post(&format!("/wiki/rest/api/content/{content_id}/label"))
+                .json(&request),
+        )
+        .await?;
+
+        Ok(ConfluenceLabelPage {
+            results: labels
+                .iter()
+                .map(|label| ConfluenceLabel {
+                    id: None,
+                    name: Some(label.clone()),
+                    prefix: Some("global".to_owned()),
+                })
+                .collect(),
+        })
+    }
+
+    pub async fn remove_page_label(&self, content_id: &str, label: &str) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .delete(&format!("/wiki/rest/api/content/{content_id}/label"))
+                .query(&[("name", label)]),
+        )
+        .await
+    }
+
+    pub async fn list_page_comments(
+        &self,
+        search: &ConfluenceCommentSearch,
+    ) -> Result<ConfluenceCommentPage, ApiError> {
+        let page = generated_apis::comment_api::get_page_footer_comments(
+            &self.generated,
+            parse_i64_id(&search.page_id)?,
+            Some(generated_models::PrimaryBodyRepresentation::Storage),
+            None,
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
+    }
+
+    pub async fn add_page_comment(
+        &self,
+        comment: &ConfluenceCommentCreate,
+    ) -> Result<ConfluenceComment, ApiError> {
+        let created = generated_apis::comment_api::create_footer_comment(
+            &self.generated,
+            comment.to_generated_page_footer(),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(created.into())
     }
 
     pub async fn search(
@@ -402,6 +529,63 @@ impl ConfluenceClient {
                 .collect(),
         })
     }
+
+    pub async fn get_attachment(&self, id: &str) -> Result<ConfluenceAttachment, ApiError> {
+        generated_apis::attachment_api::get_attachment_by_id(
+            &self.generated,
+            id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+        )
+        .await
+        .map(ConfluenceAttachment::from)
+        .map_err(generated_error)
+    }
+
+    pub async fn delete_attachment(&self, id: &str, purge: bool) -> Result<(), ApiError> {
+        generated_apis::attachment_api::delete_attachment(
+            &self.generated,
+            parse_i64_id(id)?,
+            Some(purge),
+        )
+        .await
+        .map_err(generated_error)
+    }
+
+    pub async fn download_attachment(
+        &self,
+        id: &str,
+        output: Option<&Path>,
+    ) -> Result<ConfluenceAttachmentDownload, ApiError> {
+        let attachment = self.get_attachment(id).await?;
+        let download_link = attachment.download_link.clone().ok_or_else(|| {
+            ApiError::Decode(format!("attachment `{id}` did not include a downloadLink"))
+        })?;
+        let response = self.raw_client.get(&download_link).send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ApiError::Http { status, body });
+        }
+        let bytes = response.bytes().await.map_err(ApiError::Request)?;
+        let filename = output
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from(attachment.title.as_deref().unwrap_or(id)));
+        std::fs::write(&filename, &bytes).map_err(|error| {
+            ApiError::Decode(format!("failed to write {}: {error}", filename.display()))
+        })?;
+
+        Ok(ConfluenceAttachmentDownload {
+            attachment,
+            path: filename,
+            bytes: bytes.len() as u64,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -412,6 +596,17 @@ pub enum ConfluenceBodyRepresentation {
 }
 
 impl ConfluenceBodyRepresentation {
+    fn as_primary_body_single(self) -> generated_models::PrimaryBodyRepresentationSingle {
+        match self {
+            Self::Storage | Self::Wiki => {
+                generated_models::PrimaryBodyRepresentationSingle::Storage
+            }
+            Self::AtlasDocFormat => {
+                generated_models::PrimaryBodyRepresentationSingle::AtlasDocFormat
+            }
+        }
+    }
+
     fn as_page_body_write(self) -> generated_models::page_body_write::Representation {
         match self {
             Self::Storage => generated_models::page_body_write::Representation::Storage,
@@ -428,6 +623,16 @@ impl ConfluenceBodyRepresentation {
             Self::Wiki => generated_models::blog_post_body_write::Representation::Wiki,
             Self::AtlasDocFormat => {
                 generated_models::blog_post_body_write::Representation::AtlasDocFormat
+            }
+        }
+    }
+
+    fn as_comment_body_write(self) -> generated_models::comment_body_write::Representation {
+        match self {
+            Self::Storage => generated_models::comment_body_write::Representation::Storage,
+            Self::Wiki => generated_models::comment_body_write::Representation::Wiki,
+            Self::AtlasDocFormat => {
+                generated_models::comment_body_write::Representation::AtlasDocFormat
             }
         }
     }
@@ -465,6 +670,13 @@ impl ConfluenceContentStatus {
         match self {
             Self::Current => generated_models::create_blog_post_request::Status::Current,
             Self::Draft => generated_models::create_blog_post_request::Status::Draft,
+        }
+    }
+
+    fn into_update_blog_post_status(self) -> generated_models::update_blog_post_request::Status {
+        match self {
+            Self::Current => generated_models::update_blog_post_request::Status::Current,
+            Self::Draft => generated_models::update_blog_post_request::Status::Draft,
         }
     }
 }
@@ -568,6 +780,41 @@ impl ConfluenceBlogPostCreate {
                 )),
             )
         });
+        request
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceBlogPostUpdate {
+    pub id: String,
+    pub status: ConfluenceContentStatus,
+    pub title: String,
+    pub space_id: Option<String>,
+    pub body: String,
+    pub representation: ConfluenceBodyRepresentation,
+    pub version: u64,
+    pub message: Option<String>,
+}
+
+impl ConfluenceBlogPostUpdate {
+    fn to_generated(&self) -> generated_models::UpdateBlogPostRequest {
+        let mut version = generated_models::UpdateBlogPostRequestVersion::new();
+        version.number = Some(self.version as i32);
+        version.message.clone_from(&self.message);
+
+        let mut request = generated_models::UpdateBlogPostRequest::new(
+            self.id.clone(),
+            self.status.into_update_blog_post_status(),
+            self.title.clone(),
+            generated_models::CreateBlogPostRequestBody::BlogPostBodyWrite(Box::new(
+                generated_models::BlogPostBodyWrite {
+                    representation: Some(self.representation.as_blog_post_body_write()),
+                    value: Some(self.body.clone()),
+                },
+            )),
+            version,
+        );
+        request.space_id.clone_from(&self.space_id);
         request
     }
 }
@@ -688,6 +935,7 @@ pub struct ConfluenceBlogPost {
     pub author_id: Option<String>,
     pub created_at: Option<String>,
     pub version: Option<ConfluenceVersion>,
+    pub body: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -739,6 +987,80 @@ pub struct ConfluenceAttachmentUpload {
     pub minor_edit: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceLabelSearch {
+    pub content_id: String,
+    pub prefix: Option<String>,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceLabelPage {
+    #[serde(default)]
+    pub results: Vec<ConfluenceLabel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceLabel {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceCommentSearch {
+    pub page_id: String,
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceCommentCreate {
+    pub page_id: String,
+    pub parent_comment_id: Option<String>,
+    pub body: String,
+    pub representation: ConfluenceBodyRepresentation,
+}
+
+impl ConfluenceCommentCreate {
+    fn to_generated_page_footer(&self) -> generated_models::CreateFooterCommentModel {
+        let mut comment = generated_models::CreateFooterCommentModel::new();
+        comment.page_id = Some(self.page_id.clone());
+        comment
+            .parent_comment_id
+            .clone_from(&self.parent_comment_id);
+        comment.body = Some(Box::new(
+            generated_models::CreateFooterCommentModelBody::CommentBodyWrite(Box::new(
+                generated_models::CommentBodyWrite {
+                    representation: Some(self.representation.as_comment_body_write()),
+                    value: Some(self.body.clone()),
+                },
+            )),
+        ));
+        comment
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceCommentPage {
+    #[serde(default)]
+    pub results: Vec<ConfluenceComment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceComment {
+    pub id: Option<String>,
+    pub status: Option<String>,
+    pub title: Option<String>,
+    pub page_id: Option<String>,
+    pub parent_comment_id: Option<String>,
+    pub body: Option<String>,
+    pub version: Option<ConfluenceVersion>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfluenceAttachmentPage {
@@ -761,6 +1083,14 @@ pub struct ConfluenceAttachment {
     pub webui_link: Option<String>,
     pub download_link: Option<String>,
     pub version: Option<ConfluenceVersion>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceAttachmentDownload {
+    pub attachment: ConfluenceAttachment,
+    pub path: PathBuf,
+    pub bytes: u64,
 }
 
 fn limit_i32(limit: u32) -> i32 {
@@ -837,6 +1167,15 @@ fn body_from_generated(body: Option<Box<generated_models::BodySingle>>) -> Optio
     })
 }
 
+fn body_from_generated_bulk(body: Option<Box<generated_models::BodyBulk>>) -> Option<String> {
+    body.and_then(|body| {
+        let body = *body;
+        body.storage
+            .and_then(|body| body.value)
+            .or_else(|| body.atlas_doc_format.and_then(|body| body.value))
+    })
+}
+
 impl From<generated_models::SpaceBulk> for ConfluenceSpace {
     fn from(space: generated_models::SpaceBulk) -> Self {
         Self {
@@ -895,6 +1234,7 @@ impl From<generated_models::BlogPostBulk> for ConfluenceBlogPost {
             author_id: post.author_id,
             created_at: post.created_at.map(|created_at| created_at.to_rfc3339()),
             version: version_from_generated(post.version),
+            body: None,
         }
     }
 }
@@ -909,6 +1249,71 @@ impl From<generated_models::CreateBlogPost200Response> for ConfluenceBlogPost {
             author_id: post.author_id,
             created_at: post.created_at.map(|created_at| created_at.to_rfc3339()),
             version: version_from_generated(post.version),
+            body: body_from_generated(post.body),
+        }
+    }
+}
+
+impl From<generated_models::MultiEntityResultLabel> for ConfluenceLabelPage {
+    fn from(page: generated_models::MultiEntityResultLabel) -> Self {
+        Self {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceLabel::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<generated_models::Label> for ConfluenceLabel {
+    fn from(label: generated_models::Label) -> Self {
+        Self {
+            id: label.id,
+            name: label.name,
+            prefix: label.prefix,
+        }
+    }
+}
+
+impl From<generated_models::MultiEntityResultPageCommentModel> for ConfluenceCommentPage {
+    fn from(page: generated_models::MultiEntityResultPageCommentModel) -> Self {
+        Self {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceComment::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<generated_models::PageCommentModel> for ConfluenceComment {
+    fn from(comment: generated_models::PageCommentModel) -> Self {
+        Self {
+            id: comment.id,
+            status: comment.status.map(|status| status.to_string()),
+            title: comment.title,
+            page_id: comment.page_id,
+            parent_comment_id: None,
+            body: body_from_generated_bulk(comment.body),
+            version: version_from_generated(comment.version),
+        }
+    }
+}
+
+impl From<generated_models::CreateFooterComment201Response> for ConfluenceComment {
+    fn from(comment: generated_models::CreateFooterComment201Response) -> Self {
+        Self {
+            id: comment.id,
+            status: comment.status.map(|status| status.to_string()),
+            title: comment.title,
+            page_id: comment.page_id,
+            parent_comment_id: comment.parent_comment_id,
+            body: body_from_generated(comment.body),
+            version: version_from_generated(comment.version),
         }
     }
 }
@@ -953,6 +1358,25 @@ impl From<generated_v1_models::Content> for ConfluenceSearchContent {
 
 impl From<generated_models::AttachmentBulk> for ConfluenceAttachment {
     fn from(attachment: generated_models::AttachmentBulk) -> Self {
+        Self {
+            id: attachment.id,
+            status: attachment.status.map(|status| status.to_string()),
+            title: attachment.title,
+            page_id: attachment.page_id,
+            blog_post_id: attachment.blog_post_id,
+            media_type: attachment.media_type,
+            media_type_description: attachment.media_type_description,
+            file_id: attachment.file_id,
+            file_size: attachment.file_size,
+            webui_link: attachment.webui_link,
+            download_link: attachment.download_link,
+            version: version_from_generated(attachment.version),
+        }
+    }
+}
+
+impl From<generated_models::GetAttachmentById200Response> for ConfluenceAttachment {
+    fn from(attachment: generated_models::GetAttachmentById200Response) -> Self {
         Self {
             id: attachment.id,
             status: attachment.status.map(|status| status.to_string()),
@@ -1082,6 +1506,64 @@ mod tests {
             post.version.as_ref().and_then(|version| version.number),
             Some(2)
         );
+    }
+
+    #[test]
+    fn parses_label_page() {
+        let page: ConfluenceLabelPage = serde_json::from_str(
+            r#"{
+                "results": [
+                    { "id": "1", "name": "runbook", "prefix": "global" }
+                ]
+            }"#,
+        )
+        .expect("parse labels");
+
+        assert_eq!(page.results[0].name.as_deref(), Some("runbook"));
+        assert_eq!(page.results[0].prefix.as_deref(), Some("global"));
+    }
+
+    #[test]
+    fn builds_generated_footer_comment_request() {
+        let comment = ConfluenceCommentCreate {
+            page_id: "111".to_owned(),
+            parent_comment_id: Some("222".to_owned()),
+            body: "<p>Looks good</p>".to_owned(),
+            representation: ConfluenceBodyRepresentation::Storage,
+        };
+
+        let generated = comment.to_generated_page_footer();
+
+        assert_eq!(generated.page_id.as_deref(), Some("111"));
+        assert_eq!(generated.parent_comment_id.as_deref(), Some("222"));
+        let Some(body) = generated.body else {
+            panic!("expected body");
+        };
+        let generated_models::CreateFooterCommentModelBody::CommentBodyWrite(body) = *body else {
+            panic!("expected comment body write");
+        };
+        assert_eq!(body.value.as_deref(), Some("<p>Looks good</p>"));
+    }
+
+    #[test]
+    fn builds_generated_blog_post_update_request() {
+        let request = ConfluenceBlogPostUpdate {
+            id: "222".to_owned(),
+            status: ConfluenceContentStatus::Current,
+            title: "Release Notes".to_owned(),
+            space_id: Some("12345".to_owned()),
+            body: "<p>Updated</p>".to_owned(),
+            representation: ConfluenceBodyRepresentation::Storage,
+            version: 3,
+            message: Some("Update".to_owned()),
+        }
+        .to_generated();
+
+        assert_eq!(request.id, "222");
+        assert_eq!(request.title, "Release Notes");
+        assert_eq!(request.space_id.as_deref(), Some("12345"));
+        assert_eq!(request.version.number, Some(3));
+        assert_eq!(request.version.message.as_deref(), Some("Update"));
     }
 
     #[test]

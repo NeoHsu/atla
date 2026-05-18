@@ -68,6 +68,8 @@ Confluence Cloud v1 is generated as a scoped partial client under `crates/atla-c
 - CQL search endpoints used by `atla confluence search`.
 - Create/update attachment endpoint used by `atla confluence attachment upload`.
 
+Confluence page label mutation also uses Confluence v1 raw REST calls because the generated Confluence v2 client exposes label listing but not content label add/remove endpoints.
+
 The v1 partial builder intentionally patches the generated-facing spec without changing the downloaded source spec: it removes a query parameter named `_` that generates invalid Rust, narrows the response models to the fields Atla consumes, and corrects attachment multipart fields so `minorEdit`, `comment`, and `X-Atlassian-Token: nocheck` generate as usable Rust client parameters.
 
 The generated `Cargo.toml` also needs a small post-process fix: generator `7.22.0` emits `default = ["rustls-tls"]`, while the generated feature is named `rustls`. `scripts/generate.sh` applies that fix automatically.
