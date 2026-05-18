@@ -15,9 +15,9 @@ url = "^2.5"
 chrono = { version = "^0.4",  features = ["serde"] }
 tokio = { version = "^1.46.0", features = ["fs"] }
 tokio-util = { version = "^0.7", features = ["codec"] }
-reqwest = { version = "^0.13", default-features = false, features = ["json", "multipart", "stream", "query", "form"] }
+reqwest.workspace = true
 
 [features]
 default = ["rustls"]
 native-tls = ["reqwest/native-tls"]
-rustls = ["reqwest/rustls"]
+rustls = ["reqwest/rustls-tls"]

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap_complete::Shell;
 
 #[derive(Debug, Parser)]
 #[command(name = "atla", version, about = "Unified Atlassian CLI")]
@@ -58,6 +59,10 @@ pub enum Command {
     Config(ConfigCommand),
     Jira(JiraCommand),
     Confluence(ConfluenceCommand),
+    Completion {
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 #[derive(Debug, Args)]

@@ -63,6 +63,8 @@ fix_generated_manifest() {
   # openapi-generator 7.22.0 emits a default feature named rustls-tls while the
   # generated feature is named rustls.
   sed -i 's/default = \["rustls-tls"\]/default = ["rustls"]/g' "${manifest}"
+  sed -i -E 's#reqwest = \{ version = "\^0\.[0-9]+", default-features = false, features = \[[^]]+\] \}#reqwest.workspace = true#g' "${manifest}"
+  sed -i 's/rustls = \["reqwest\/rustls"\]/rustls = ["reqwest\/rustls-tls"]/g' "${manifest}"
 }
 
 fix_generated_lints() {

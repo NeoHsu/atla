@@ -118,7 +118,22 @@ Initial auth:
 atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
 atla auth status
 atla config set default-project PROJ
+atla config set alias.mine "jira search 'assignee = currentUser() order by updated desc'"
 atla config list --output json
+```
+
+Aliases expand before command parsing, so the alias above can be used as:
+
+```bash
+atla mine --limit 25
+```
+
+Shell completions:
+
+```bash
+atla completion bash > ~/.local/share/bash-completion/completions/atla
+atla completion zsh > ~/.zfunc/_atla
+atla completion fish > ~/.config/fish/completions/atla.fish
 ```
 
 ## Usage

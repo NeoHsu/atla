@@ -60,7 +60,16 @@ impl AtlaConfig {
         value: String,
         profile_name: Option<&str>,
     ) -> Result<(), ProfileError> {
-        match normalized_key(key).as_str() {
+        let key = normalized_key(key);
+        if let Some(alias) = key
+            .strip_prefix("alias.")
+            .or_else(|| key.strip_prefix("aliases."))
+        {
+            self.aliases.insert(alias.to_owned(), value);
+            return Ok(());
+        }
+
+        match key.as_str() {
             "default-profile" => self.switch_profile(&value),
             "default-project" => {
                 let profile = self.active_profile_mut(profile_name)?;
@@ -91,7 +100,15 @@ impl AtlaConfig {
         key: &str,
         profile_name: Option<&str>,
     ) -> Result<Option<String>, ProfileError> {
-        let value = match normalized_key(key).as_str() {
+        let key = normalized_key(key);
+        if let Some(alias) = key
+            .strip_prefix("alias.")
+            .or_else(|| key.strip_prefix("aliases."))
+        {
+            return Ok(self.aliases.get(alias).cloned());
+        }
+
+        let value = match key.as_str() {
             "default-profile" => self.default.profile.clone(),
             "default-project" => {
                 let (_, profile) = self
@@ -279,5 +296,26 @@ mod tests {
             config.switch_profile("missing"),
             Err(ProfileError::MissingProfile(name)) if name == "missing"
         ));
+    }
+
+    #[test]
+    fn sets_and_gets_aliases() {
+        let mut config = AtlaConfig::default();
+
+        config
+            .set_value(
+                "alias.mine",
+                "jira search 'assignee = currentUser()'".to_owned(),
+                None,
+            )
+            .expect("set alias");
+
+        assert_eq!(
+            config
+                .get_value("aliases.mine", None)
+                .expect("get alias")
+                .as_deref(),
+            Some("jira search 'assignee = currentUser()'")
+        );
     }
 }

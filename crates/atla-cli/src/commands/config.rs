@@ -63,4 +63,12 @@ fn print_config(config: &atla_core::AtlaConfig) {
             println!("default_space = {default_space}");
         }
     }
+
+    if !config.aliases.is_empty() {
+        println!();
+        println!("[aliases]");
+        for (name, expansion) in &config.aliases {
+            println!("{name} = {expansion}");
+        }
+    }
 }

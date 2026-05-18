@@ -15,9 +15,9 @@ serde_repr = "^0.1"
 url = "^2.5"
 uuid = { version = "^1.8", features = ["serde", "v4"] }
 chrono = { version = "^0.4",  features = ["serde"] }
-reqwest = { version = "^0.13", default-features = false, features = ["json", "multipart", "query", "form"] }
+reqwest.workspace = true
 
 [features]
 default = ["rustls"]
 native-tls = ["reqwest/native-tls"]
-rustls = ["reqwest/rustls"]
+rustls = ["reqwest/rustls-tls"]
