@@ -82,6 +82,16 @@ fix_generated_lints() {
 format_generated_crate() {
   local manifest="$1"
 
+  if [[ -x "${HOME}/.local/bin/mise" ]]; then
+    "${HOME}/.local/bin/mise" exec -- cargo fmt --manifest-path "${manifest}"
+    return
+  fi
+
+  if command -v mise >/dev/null 2>&1; then
+    "$(command -v mise)" exec -- cargo fmt --manifest-path "${manifest}"
+    return
+  fi
+
   cargo fmt --manifest-path "${manifest}"
 }
 
@@ -135,7 +145,7 @@ generate_client() {
 }
 
 if [[ "${product}" == "jira" || "${product}" == "all" ]]; then
-  generate_client "jira" "${repo_root}/specs/jira-v3.json" "atla-jira-api"
+  generate_client "jira" "${repo_root}/specs/jira-v3-partial.json" "atla-jira-api"
 fi
 
 if [[ "${product}" == "confluence" || "${product}" == "all" ]]; then

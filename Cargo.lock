@@ -115,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "atla-confluence-api",
  "atla-confluence-v1-api",
+ "atla-jira-api",
  "directories",
  "keyring",
  "reqwest 0.12.28",
@@ -128,6 +129,13 @@ dependencies = [
 [[package]]
 name = "atla-jira-api"
 version = "0.1.0"
+dependencies = [
+ "reqwest 0.13.3",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "url",
+]
 
 [[package]]
 name = "atomic-waker"

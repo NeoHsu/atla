@@ -1,10 +1,19 @@
 [package]
 name = "atla-jira-api"
 version = "0.1.0"
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
-rust-version.workspace = true
+authors = ["ecosystem@atlassian.com"]
+description = "Jira Cloud platform REST API documentation"
+license = "Apache 2.0"
+edition = "2021"
 
 [dependencies]
+serde = { version = "^1.0", features = ["derive"] }
+serde_json = "^1.0"
+serde_repr = "^0.1"
+url = "^2.5"
+reqwest = { version = "^0.13", default-features = false, features = ["json", "multipart", "query", "form"] }
 
+[features]
+default = ["rustls"]
+native-tls = ["reqwest/native-tls"]
+rustls = ["reqwest/rustls"]

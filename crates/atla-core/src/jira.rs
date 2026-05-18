@@ -1,70 +1,82 @@
+use atla_jira_api::{apis as generated_apis, models as generated_models};
 use serde::{Deserialize, Serialize};
 
-use crate::client::{ApiError, AtlassianClient, read_json};
+use crate::client::{ApiError, AtlassianClient};
 
 #[derive(Debug, Clone)]
 pub struct JiraClient {
-    client: AtlassianClient,
+    raw_client: AtlassianClient,
+    generated: generated_apis::configuration::Configuration,
 }
 
 impl JiraClient {
     pub fn new(client: AtlassianClient) -> Self {
-        Self { client }
+        let generated = generated_apis::configuration::Configuration {
+            base_path: client.instance().base_url.clone(),
+            user_agent: Some("atla".to_owned()),
+            basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
+            ..Default::default()
+        };
+
+        Self {
+            raw_client: client,
+            generated,
+        }
     }
 
     pub fn instance_url(&self) -> &str {
-        &self.client.instance().base_url
+        &self.raw_client.instance().base_url
     }
 
     pub async fn search_projects(
         &self,
         search: &JiraProjectSearch,
     ) -> Result<JiraProjectPage, ApiError> {
-        let mut request = self.client.get("/rest/api/3/project/search").query(&[
-            ("startAt", search.start_at.to_string()),
-            ("maxResults", search.max_results.to_string()),
-        ]);
+        let page = generated_apis::projects_api::search_projects(
+            &self.generated,
+            Some(search.start_at.min(i64::MAX as u64) as i64),
+            Some(limit_i32(search.max_results)),
+            search.query.as_deref(),
+        )
+        .await
+        .map_err(generated_error)?;
 
-        if let Some(query) = &search.query {
-            request = request.query(&[("query", query)]);
-        }
-
-        read_json(request).await
+        Ok(page.into())
     }
 
     pub async fn get_project(&self, project_id_or_key: &str) -> Result<JiraProject, ApiError> {
-        read_json(
-            self.client
-                .get(&format!("/rest/api/3/project/{project_id_or_key}")),
-        )
-        .await
+        generated_apis::projects_api::get_project(&self.generated, project_id_or_key)
+            .await
+            .map(JiraProject::from)
+            .map_err(generated_error)
     }
 
     pub async fn search_issues(
         &self,
         search: &JiraIssueSearch,
     ) -> Result<JiraIssueSearchPage, ApiError> {
-        let query = [
-            ("jql", search.jql.clone()),
-            ("maxResults", search.max_results.to_string()),
-            (
-                "fields",
-                "summary,status,assignee,issuetype,priority".to_owned(),
-            ),
-        ];
-        let request = self.client.get("/rest/api/3/search/jql").query(&query);
+        let page = generated_apis::issue_search_api::search_and_reconsile_issues_using_jql(
+            &self.generated,
+            Some(&search.jql),
+            None,
+            Some(limit_i32(search.max_results)),
+            Some(issue_fields()),
+        )
+        .await
+        .map_err(generated_error)?;
 
-        read_json(request).await
+        Ok(page.into())
     }
 
     pub async fn get_issue(&self, issue_id_or_key: &str) -> Result<JiraIssue, ApiError> {
-        let query = [("fields", "summary,status,assignee,issuetype,priority")];
-        let request = self
-            .client
-            .get(&format!("/rest/api/3/issue/{issue_id_or_key}"))
-            .query(&query);
-
-        read_json(request).await
+        generated_apis::issues_api::get_issue(
+            &self.generated,
+            issue_id_or_key,
+            Some(issue_fields()),
+        )
+        .await
+        .map(JiraIssue::from)
+        .map_err(generated_error)
     }
 }
 
@@ -100,6 +112,21 @@ pub struct JiraIssueSearchPage {
     pub next_page_token: Option<String>,
     #[serde(default)]
     pub issues: Vec<JiraIssue>,
+}
+
+impl From<generated_models::SearchAndReconcileResults> for JiraIssueSearchPage {
+    fn from(page: generated_models::SearchAndReconcileResults) -> Self {
+        Self {
+            is_last: page.is_last,
+            next_page_token: page.next_page_token,
+            issues: page
+                .issues
+                .unwrap_or_default()
+                .into_iter()
+                .map(JiraIssue::from)
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -141,6 +168,20 @@ impl JiraIssue {
     }
 }
 
+impl From<generated_models::IssueBean> for JiraIssue {
+    fn from(issue: generated_models::IssueBean) -> Self {
+        Self {
+            id: issue.id,
+            key: issue.key,
+            fields: issue
+                .fields
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<serde_json::Map<String, serde_json::Value>>(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraProjectPage {
@@ -156,6 +197,23 @@ pub struct JiraProjectPage {
     pub values: Vec<JiraProject>,
 }
 
+impl From<generated_models::PageBeanProject> for JiraProjectPage {
+    fn from(page: generated_models::PageBeanProject) -> Self {
+        Self {
+            start_at: page.start_at.unwrap_or_default().max(0) as u64,
+            max_results: page.max_results.unwrap_or_default().max(0) as u32,
+            total: page.total.map(|total| total.max(0) as u64),
+            is_last: page.is_last,
+            values: page
+                .values
+                .unwrap_or_default()
+                .into_iter()
+                .map(JiraProject::from)
+                .collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraProject {
@@ -166,6 +224,50 @@ pub struct JiraProject {
     pub style: Option<String>,
     pub simplified: Option<bool>,
     pub archived: Option<bool>,
+}
+
+impl From<generated_models::Project> for JiraProject {
+    fn from(project: generated_models::Project) -> Self {
+        Self {
+            id: project.id,
+            key: project.key,
+            name: project.name,
+            project_type_key: project.project_type_key.and_then(serialized_string),
+            style: project.style.and_then(serialized_string),
+            simplified: project.simplified,
+            archived: project.archived,
+        }
+    }
+}
+
+fn issue_fields() -> Vec<String> {
+    ["summary", "status", "assignee", "issuetype", "priority"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+fn limit_i32(limit: u32) -> i32 {
+    limit.min(i32::MAX as u32) as i32
+}
+
+fn serialized_string<T: Serialize>(value: T) -> Option<String> {
+    match serde_json::to_value(value).ok()? {
+        serde_json::Value::String(value) => Some(value),
+        _ => None,
+    }
+}
+
+fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
+    match error {
+        generated_apis::Error::Reqwest(error) => ApiError::Decode(error.to_string()),
+        generated_apis::Error::Serde(error) => ApiError::Decode(error.to_string()),
+        generated_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
+        generated_apis::Error::ResponseError(response) => ApiError::Http {
+            status: response.status,
+            body: response.content,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -220,6 +322,32 @@ mod tests {
     }
 
     #[test]
+    fn converts_generated_project_page() {
+        let page = generated_models::PageBeanProject {
+            start_at: Some(0),
+            max_results: Some(50),
+            total: Some(1),
+            is_last: Some(true),
+            values: Some(vec![generated_models::Project {
+                id: Some("10000".to_owned()),
+                key: Some("PROJ".to_owned()),
+                name: Some("Project".to_owned()),
+                project_type_key: Some(generated_models::project::ProjectTypeKey::Software),
+                style: Some(generated_models::project::Style::Classic),
+                simplified: Some(false),
+                archived: Some(false),
+            }]),
+        };
+
+        let page = JiraProjectPage::from(page);
+
+        assert_eq!(page.total, Some(1));
+        assert_eq!(page.values[0].key.as_deref(), Some("PROJ"));
+        assert_eq!(page.values[0].project_type_key.as_deref(), Some("software"));
+        assert_eq!(page.values[0].style.as_deref(), Some("classic"));
+    }
+
+    #[test]
     fn parses_issue_search_page() {
         let page: JiraIssueSearchPage = serde_json::from_str(
             r#"{
@@ -248,6 +376,38 @@ mod tests {
         assert_eq!(issue.assignee_display_name(), Some("Neo"));
         assert_eq!(issue.issue_type_name(), Some("Bug"));
         assert_eq!(issue.priority_name(), Some("High"));
+    }
+
+    #[test]
+    fn converts_generated_issue_search_page() {
+        let fields = serde_json::json!({
+            "summary": "Fix login",
+            "status": { "name": "In Progress" },
+            "assignee": { "displayName": "Neo" },
+            "issuetype": { "name": "Bug" },
+            "priority": { "name": "High" }
+        })
+        .as_object()
+        .expect("fields object")
+        .clone()
+        .into_iter()
+        .collect();
+        let page = generated_models::SearchAndReconcileResults {
+            is_last: Some(false),
+            next_page_token: Some("next-token".to_owned()),
+            issues: Some(vec![generated_models::IssueBean {
+                id: Some("10002".to_owned()),
+                key: Some("PROJ-1".to_owned()),
+                fields: Some(fields),
+            }]),
+        };
+
+        let page = JiraIssueSearchPage::from(page);
+
+        assert_eq!(page.is_last, Some(false));
+        assert_eq!(page.next_page_token.as_deref(), Some("next-token"));
+        assert_eq!(page.issues[0].summary(), Some("Fix login"));
+        assert_eq!(page.issues[0].status_name(), Some("In Progress"));
     }
 
     #[test]
