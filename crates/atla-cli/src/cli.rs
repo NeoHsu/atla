@@ -507,6 +507,33 @@ pub enum SpaceAction {
     View {
         key: String,
     },
+    Create {
+        name: String,
+        #[arg(long)]
+        key: Option<String>,
+        #[arg(long)]
+        alias: Option<String>,
+        #[arg(long, conflicts_with = "description_file")]
+        description: Option<String>,
+        #[arg(long, conflicts_with = "description")]
+        description_file: Option<PathBuf>,
+        #[arg(long)]
+        private: bool,
+    },
+    Update {
+        key: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, conflicts_with = "description_file")]
+        description: Option<String>,
+        #[arg(long, conflicts_with = "description")]
+        description_file: Option<PathBuf>,
+    },
+    Delete {
+        key: String,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -523,6 +550,9 @@ pub enum AttachmentAction {
         filename: Option<String>,
         #[arg(long, default_value_t = 25)]
         limit: u32,
+    },
+    View {
+        attachment_id: String,
     },
     Upload {
         page_id: String,

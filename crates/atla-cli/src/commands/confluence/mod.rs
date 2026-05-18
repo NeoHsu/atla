@@ -8,7 +8,8 @@ use atla_core::{
     ConfluenceClient, ConfluenceComment, ConfluenceCommentCreate, ConfluenceCommentPage,
     ConfluenceCommentSearch, ConfluenceContentStatus, ConfluenceLabelPage, ConfluenceLabelSearch,
     ConfluencePage, ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate,
-    ConfluenceSearch, ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceSearch, Profile,
+    ConfluenceSearch, ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceCreate,
+    ConfluenceSpaceSearch, ConfluenceSpaceUpdate, Profile,
 };
 use std::fs;
 use std::path::Path;
@@ -103,6 +104,34 @@ async fn run_attachment(command: AttachmentCommand, global: &GlobalArgs) -> anyh
                 })?;
 
             print_attachments(&page.results, global)?;
+        }
+        AttachmentAction::View { attachment_id } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/wiki/api/v2/attachments/{} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    attachment_id
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let attachment = client
+                .get_attachment(&attachment_id)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to load Confluence attachment `{attachment_id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_attachment(&attachment, global)?;
         }
         AttachmentAction::Upload {
             page_id,
@@ -857,6 +886,115 @@ async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> anyhow::Result
 
             print_space(&space, global)?;
         }
+        SpaceAction::Create {
+            name,
+            key,
+            alias,
+            description,
+            description_file,
+            private,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            if key.is_none() && alias.is_none() {
+                anyhow::bail!("provide --key or --alias");
+            }
+            let description = read_body(description, description_file.as_deref())?;
+            let create = ConfluenceSpaceCreate {
+                key,
+                alias,
+                name,
+                description,
+                private,
+            };
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/wiki/api/v2/spaces using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let space = client.create_space(&create).await.with_context(|| {
+                format!(
+                    "failed to create Confluence space in {}",
+                    client.instance_url()
+                )
+            })?;
+
+            print_space(&space, global)?;
+        }
+        SpaceAction::Update {
+            key,
+            name,
+            description,
+            description_file,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let description = read_body(description, description_file.as_deref())?;
+            if name.is_none() && description.is_none() {
+                anyhow::bail!("provide --name, --description, or --description-file");
+            }
+            let update = ConfluenceSpaceUpdate {
+                key,
+                name,
+                description,
+            };
+
+            if global.dry_run {
+                println!(
+                    "Would PUT {}/wiki/rest/api/space/{} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    update.key
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            let space = client.update_space(&update).await.with_context(|| {
+                format!(
+                    "failed to update Confluence space `{}` from {}",
+                    update.key,
+                    client.instance_url()
+                )
+            })?;
+
+            print_space(&space, global)?;
+        }
+        SpaceAction::Delete { key, yes } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                println!(
+                    "Would DELETE {}/wiki/rest/api/space/{} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                return Ok(());
+            }
+            if !yes {
+                anyhow::bail!("refusing to delete space `{key}` without --yes");
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = ConfluenceClient::new(AtlassianClient::from_profile(profile, token));
+            client.delete_space(&key).await.with_context(|| {
+                format!(
+                    "failed to delete Confluence space `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_deleted("space", &key, global)?;
+        }
     }
 
     Ok(())
@@ -1257,6 +1395,90 @@ fn search_title(result: &ConfluenceSearchResult) -> &str {
                 .and_then(|content| content.title.as_deref())
         })
         .unwrap_or("-")
+}
+
+fn print_attachment(attachment: &ConfluenceAttachment, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(attachment),
+        OutputFormat::Keys => {
+            if let Some(id) = &attachment.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!(
+                "id,title,status,page_id,blog_post_id,media_type,media_type_description,file_id,file_size,version,webui_link,download_link"
+            );
+            println!(
+                "{},{},{},{},{},{},{},{},{},{},{},{}",
+                csv_cell(attachment.id.as_deref().unwrap_or_default()),
+                csv_cell(attachment.title.as_deref().unwrap_or_default()),
+                csv_cell(attachment.status.as_deref().unwrap_or_default()),
+                csv_cell(attachment.page_id.as_deref().unwrap_or_default()),
+                csv_cell(attachment.blog_post_id.as_deref().unwrap_or_default()),
+                csv_cell(attachment.media_type.as_deref().unwrap_or_default()),
+                csv_cell(
+                    attachment
+                        .media_type_description
+                        .as_deref()
+                        .unwrap_or_default()
+                ),
+                csv_cell(attachment.file_id.as_deref().unwrap_or_default()),
+                csv_cell(&attachment.file_size.unwrap_or_default().to_string()),
+                csv_cell(&attachment_version(attachment).unwrap_or_default()),
+                csv_cell(attachment.webui_link.as_deref().unwrap_or_default()),
+                csv_cell(attachment.download_link.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("ID: {}", attachment.id.as_deref().unwrap_or("-"));
+            println!("Title: {}", attachment.title.as_deref().unwrap_or("-"));
+            println!("Status: {}", attachment.status.as_deref().unwrap_or("-"));
+            println!("Page ID: {}", attachment.page_id.as_deref().unwrap_or("-"));
+            println!(
+                "Blog Post ID: {}",
+                attachment.blog_post_id.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Media Type: {}",
+                attachment.media_type.as_deref().unwrap_or("-")
+            );
+            println!(
+                "Media Type Description: {}",
+                attachment.media_type_description.as_deref().unwrap_or("-")
+            );
+            println!("File ID: {}", attachment.file_id.as_deref().unwrap_or("-"));
+            println!(
+                "File Size: {}",
+                attachment
+                    .file_size
+                    .map(|size| size.to_string())
+                    .as_deref()
+                    .unwrap_or("-")
+            );
+            println!(
+                "Version: {}",
+                attachment_version(attachment).as_deref().unwrap_or("-")
+            );
+            if let Some(link) = &attachment.webui_link {
+                println!("Web UI: {link}");
+            }
+            if let Some(link) = &attachment.download_link {
+                println!("Download: {link}");
+            }
+            Ok(())
+        }
+    }
+}
+
+fn attachment_version(attachment: &ConfluenceAttachment) -> Option<String> {
+    attachment
+        .version
+        .as_ref()
+        .and_then(|version| version.number)
+        .map(|number| number.to_string())
 }
 
 fn print_attachments(

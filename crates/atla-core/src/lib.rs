@@ -16,7 +16,8 @@ pub use confluence::{
     ConfluenceContentStatus, ConfluenceLabel, ConfluenceLabelPage, ConfluenceLabelSearch,
     ConfluencePage, ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch,
     ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchPage, ConfluenceSearchResult,
-    ConfluenceSpace, ConfluenceSpacePage, ConfluenceSpaceSearch,
+    ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpacePage, ConfluenceSpaceSearch,
+    ConfluenceSpaceUpdate,
 };
 pub use jira::{
     JiraAssigneeTarget, JiraBoard, JiraBoardPage, JiraBoardSearch, JiraClient, JiraComment,

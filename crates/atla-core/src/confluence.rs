@@ -82,6 +82,58 @@ impl ConfluenceClient {
         Ok(page.results.into_iter().next())
     }
 
+    pub async fn create_space(
+        &self,
+        space: &ConfluenceSpaceCreate,
+    ) -> Result<ConfluenceSpace, ApiError> {
+        if space.key.is_none() && space.alias.is_none() {
+            return Err(ApiError::Decode(
+                "Confluence space create requires a key or alias".to_owned(),
+            ));
+        }
+
+        generated_apis::space_api::create_space(&self.generated, space.to_generated())
+            .await
+            .map(ConfluenceSpace::from)
+            .map_err(generated_error)
+    }
+
+    pub async fn update_space(
+        &self,
+        space: &ConfluenceSpaceUpdate,
+    ) -> Result<ConfluenceSpace, ApiError> {
+        if space.name.is_none() && space.description.is_none() {
+            return Err(ApiError::Decode(
+                "Confluence space update requires at least one field".to_owned(),
+            ));
+        }
+
+        read_empty(
+            self.raw_client
+                .put(&format!(
+                    "/wiki/rest/api/space/{}",
+                    generated_v1_apis::urlencode(&space.key)
+                ))
+                .json(&space.to_v1_update_json()),
+        )
+        .await?;
+
+        self.get_space_by_key(&space.key).await?.ok_or_else(|| {
+            ApiError::Decode(format!(
+                "Confluence space `{}` was updated but could not be loaded",
+                space.key
+            ))
+        })
+    }
+
+    pub async fn delete_space(&self, key: &str) -> Result<(), ApiError> {
+        read_empty(self.raw_client.delete(&format!(
+            "/wiki/rest/api/space/{}",
+            generated_v1_apis::urlencode(key)
+        )))
+        .await
+    }
+
     pub async fn list_pages(
         &self,
         search: &ConfluencePageSearch,
@@ -841,6 +893,59 @@ pub struct ConfluenceSpacePage {
     pub results: Vec<ConfluenceSpace>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceSpaceCreate {
+    pub key: Option<String>,
+    pub alias: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
+    pub private: bool,
+}
+
+impl ConfluenceSpaceCreate {
+    fn to_generated(&self) -> generated_models::CreateSpaceRequest {
+        let mut request = generated_models::CreateSpaceRequest::new(self.name.clone());
+        request.key.clone_from(&self.key);
+        request.alias.clone_from(&self.alias);
+        request.create_private_space = self.private.then_some(true);
+        request.description = self.description.as_ref().map(|description| {
+            let mut generated = generated_models::CreateSpaceRequestDescription::new();
+            generated.value = Some(description.clone());
+            generated.representation = Some("plain".to_owned());
+            Box::new(generated)
+        });
+        request
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceSpaceUpdate {
+    pub key: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
+impl ConfluenceSpaceUpdate {
+    fn to_v1_update_json(&self) -> serde_json::Value {
+        let mut payload = serde_json::Map::new();
+        if let Some(name) = &self.name {
+            payload.insert("name".to_owned(), serde_json::Value::String(name.clone()));
+        }
+        if let Some(description) = &self.description {
+            payload.insert(
+                "description".to_owned(),
+                serde_json::json!({
+                    "plain": {
+                        "value": description,
+                        "representation": "plain"
+                    }
+                }),
+            );
+        }
+        serde_json::Value::Object(payload)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfluenceSpace {
@@ -1190,6 +1295,20 @@ impl From<generated_models::SpaceBulk> for ConfluenceSpace {
     }
 }
 
+impl From<generated_models::CreateSpace201Response> for ConfluenceSpace {
+    fn from(space: generated_models::CreateSpace201Response) -> Self {
+        Self {
+            id: space.id,
+            key: space.key,
+            name: space.name,
+            space_type: space.r#type.map(|space_type| space_type.to_string()),
+            status: space.status.map(|status| status.to_string()),
+            homepage_id: space.homepage_id,
+            current_active_alias: space.current_active_alias,
+        }
+    }
+}
+
 impl From<generated_models::PageBulk> for ConfluencePage {
     fn from(page: generated_models::PageBulk) -> Self {
         Self {
@@ -1439,6 +1558,67 @@ mod tests {
         assert_eq!(page.results[0].key.as_deref(), Some("DEV"));
         assert_eq!(page.results[0].space_type.as_deref(), Some("global"));
         assert_eq!(page.results[0].homepage_id.as_deref(), Some("67890"));
+    }
+
+    #[test]
+    fn builds_generated_create_space_request() {
+        let request = ConfluenceSpaceCreate {
+            key: Some("DEV".to_owned()),
+            alias: None,
+            name: "Development".to_owned(),
+            description: Some("Team docs".to_owned()),
+            private: true,
+        }
+        .to_generated();
+
+        assert_eq!(request.name, "Development");
+        assert_eq!(request.key.as_deref(), Some("DEV"));
+        assert_eq!(request.create_private_space, Some(true));
+        let description = request.description.expect("description");
+        assert_eq!(description.value.as_deref(), Some("Team docs"));
+        assert_eq!(description.representation.as_deref(), Some("plain"));
+    }
+
+    #[test]
+    fn builds_v1_update_space_request() {
+        let request = ConfluenceSpaceUpdate {
+            key: "DEV".to_owned(),
+            name: Some("Development".to_owned()),
+            description: Some("Team docs".to_owned()),
+        }
+        .to_v1_update_json();
+
+        assert_eq!(
+            request,
+            serde_json::json!({
+                "name": "Development",
+                "description": {
+                    "plain": {
+                        "value": "Team docs",
+                        "representation": "plain"
+                    }
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn converts_created_space_response() {
+        let space = ConfluenceSpace::from(generated_models::CreateSpace201Response {
+            id: Some("12345".to_owned()),
+            key: Some("DEV".to_owned()),
+            name: Some("Development".to_owned()),
+            r#type: Some(generated_models::SpaceType::Global),
+            status: Some(generated_models::SpaceStatus::Current),
+            homepage_id: Some("67890".to_owned()),
+            current_active_alias: Some("DEV".to_owned()),
+            ..generated_models::CreateSpace201Response::new()
+        });
+
+        assert_eq!(space.key.as_deref(), Some("DEV"));
+        assert_eq!(space.space_type.as_deref(), Some("global"));
+        assert_eq!(space.status.as_deref(), Some("current"));
+        assert_eq!(space.homepage_id.as_deref(), Some("67890"));
     }
 
     #[test]

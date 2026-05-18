@@ -91,6 +91,9 @@ atla confluence space list
 atla confluence space list --key DEV --output json
 atla confluence space view DEV
 atla confluence space view DEV --output json
+atla confluence space create "Development" --key DEV --description "Team docs"
+atla confluence space update DEV --name "Development Docs"
+atla confluence space delete DEV --yes
 atla confluence page list --space DEV
 atla confluence page list --space-id 12345 --title "Meeting Notes"
 atla confluence page view 67890
@@ -114,6 +117,7 @@ atla confluence blog update 24680 --title "Updated Release Notes"
 atla confluence blog delete 24680 --yes
 atla confluence search "type=page AND space=DEV"
 atla confluence attachment list 67890
+atla confluence attachment view 13579
 atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
 atla confluence attachment download 13579 --output ./diagram.png
 atla confluence attachment delete 13579 --yes
