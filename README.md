@@ -59,6 +59,10 @@ atla jira project view PROJ
 atla jira project view PROJ --output json
 atla jira search "project = PROJ order by created desc"
 atla jira search "assignee = currentUser() and status != Done" --limit 25 --output keys
+atla jira issue create --project PROJ --type Task --summary "Fix login"
+atla jira issue create --project PROJ --type Bug --summary "Checkout fails" --description "Steps to reproduce..."
+atla jira issue update PROJ-123 --summary "Updated summary"
+atla jira issue update PROJ-123 --field 'priority={"name":"High"}'
 atla jira issue view PROJ-123
 atla jira issue view PROJ-123 --output json
 ```

@@ -3,8 +3,10 @@
 .travis.yml
 Cargo.toml
 README.md
+docs/CreatedIssue.md
 docs/IssueBean.md
 docs/IssueSearchApi.md
+docs/IssueUpdateDetails.md
 docs/IssuesApi.md
 docs/PageBeanProject.md
 docs/Project.md
@@ -17,7 +19,9 @@ src/apis/issues_api.rs
 src/apis/mod.rs
 src/apis/projects_api.rs
 src/lib.rs
+src/models/created_issue.rs
 src/models/issue_bean.rs
+src/models/issue_update_details.rs
 src/models/mod.rs
 src/models/page_bean_project.rs
 src/models/project.rs

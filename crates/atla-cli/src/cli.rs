@@ -116,7 +116,34 @@ pub struct IssueCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum IssueAction {
-    View { key: String },
+    Create {
+        #[arg(long)]
+        project: String,
+        #[arg(long = "type")]
+        issue_type: String,
+        #[arg(long)]
+        summary: String,
+        #[arg(long, conflicts_with = "description_file")]
+        description: Option<String>,
+        #[arg(long)]
+        description_file: Option<PathBuf>,
+        #[arg(long = "field")]
+        fields: Vec<String>,
+    },
+    Update {
+        key: String,
+        #[arg(long)]
+        summary: Option<String>,
+        #[arg(long, conflicts_with = "description_file")]
+        description: Option<String>,
+        #[arg(long)]
+        description_file: Option<PathBuf>,
+        #[arg(long = "field")]
+        fields: Vec<String>,
+    },
+    View {
+        key: String,
+    },
 }
 
 #[derive(Debug, Args)]

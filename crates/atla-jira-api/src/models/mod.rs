@@ -1,5 +1,9 @@
+pub mod created_issue;
+pub use self::created_issue::CreatedIssue;
 pub mod issue_bean;
 pub use self::issue_bean::IssueBean;
+pub mod issue_update_details;
+pub use self::issue_update_details::IssueUpdateDetails;
 pub mod page_bean_project;
 pub use self::page_bean_project::PageBeanProject;
 pub mod project;

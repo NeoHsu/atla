@@ -12,6 +12,14 @@ if (!inputPath || !outputPath) {
 const spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
 
 const selectedOperations = {
+  "/rest/api/3/issue": {
+    post: {
+      request: "IssueUpdateDetails",
+      responses: {
+        201: jsonResponse("CreatedIssue"),
+      },
+    },
+  },
   "/rest/api/3/project/search": {
     get: {
       parameters: [
@@ -48,6 +56,17 @@ const selectedOperations = {
         arrayQueryParameter("fields", { type: "string" }),
       ],
       response: "IssueBean",
+    },
+    put: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+      ],
+      request: "IssueUpdateDetails",
+      responses: {
+        204: {
+          description: "Returned if the request is successful.",
+        },
+      },
     },
   },
 };
@@ -88,8 +107,8 @@ for (const [path, methods] of Object.entries(selectedOperations)) {
     partial.paths[path][method] = {
       ...source,
       parameters: config.parameters,
-      requestBody: undefined,
-      responses: {
+      requestBody: config.request ? jsonRequest(config.request) : undefined,
+      responses: config.responses || {
         200: jsonResponse(config.response),
       },
     };
@@ -143,8 +162,38 @@ function jsonResponse(schemaName) {
   };
 }
 
+function jsonRequest(schemaName) {
+  return {
+    required: true,
+    content: {
+      "application/json": {
+        schema: {
+          $ref: `#/components/schemas/${schemaName}`,
+        },
+      },
+    },
+  };
+}
+
 function simplifiedSchemas() {
   return {
+    CreatedIssue: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        key: { type: "string" },
+        self: { type: "string" },
+      },
+    },
+    IssueUpdateDetails: {
+      type: "object",
+      properties: {
+        fields: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
     PageBeanProject: {
       type: "object",
       properties: {

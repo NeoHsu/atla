@@ -27,6 +27,8 @@ All URIs are relative to *https://your-domain.atlassian.net*
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
 *IssueSearchApi* | [**search_and_reconsile_issues_using_jql**](docs/IssueSearchApi.md#search_and_reconsile_issues_using_jql) | **GET** /rest/api/3/search/jql | Search for issues using JQL enhanced search (GET)
+*IssuesApi* | [**create_issue**](docs/IssuesApi.md#create_issue) | **POST** /rest/api/3/issue | Create issue
+*IssuesApi* | [**edit_issue**](docs/IssuesApi.md#edit_issue) | **PUT** /rest/api/3/issue/{issueIdOrKey} | Edit issue
 *IssuesApi* | [**get_issue**](docs/IssuesApi.md#get_issue) | **GET** /rest/api/3/issue/{issueIdOrKey} | Get issue
 *ProjectsApi* | [**get_project**](docs/ProjectsApi.md#get_project) | **GET** /rest/api/3/project/{projectIdOrKey} | Get project
 *ProjectsApi* | [**search_projects**](docs/ProjectsApi.md#search_projects) | **GET** /rest/api/3/project/search | Get projects paginated
@@ -34,7 +36,9 @@ Class | Method | HTTP request | Description
 
 ## Documentation For Models
 
+ - [CreatedIssue](docs/CreatedIssue.md)
  - [IssueBean](docs/IssueBean.md)
+ - [IssueUpdateDetails](docs/IssueUpdateDetails.md)
  - [PageBeanProject](docs/PageBeanProject.md)
  - [Project](docs/Project.md)
  - [SearchAndReconcileResults](docs/SearchAndReconcileResults.md)

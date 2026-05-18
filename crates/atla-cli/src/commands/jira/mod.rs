@@ -1,9 +1,10 @@
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
-    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraIssue, JiraIssueSearch, JiraProject,
-    JiraProjectSearch, Profile,
+    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraCreatedIssue, JiraIssue,
+    JiraIssueCreate, JiraIssueSearch, JiraIssueUpdate, JiraProject, JiraProjectSearch, Profile,
 };
+use std::path::Path;
 
 use crate::cli::{
     GlobalArgs, IssueAction, IssueCommand, JiraCommand, JiraResource, OutputFormat, ProjectAction,
@@ -26,6 +27,86 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
 
 async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     match command.action {
+        IssueAction::Create {
+            project,
+            issue_type,
+            summary,
+            description,
+            description_file,
+            fields,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let issue = JiraIssueCreate {
+                project_key: project,
+                issue_type,
+                summary,
+                description: read_optional_text(description, description_file.as_deref())?,
+                fields: parse_fields(&fields)?,
+            };
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would POST {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let created = client.create_issue(&issue).await.with_context(|| {
+                format!("failed to create Jira issue at {}", client.instance_url())
+            })?;
+
+            print_created_issue(&created, global)?;
+        }
+        IssueAction::Update {
+            key,
+            summary,
+            description,
+            description_file,
+            fields,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let issue = JiraIssueUpdate {
+                issue_id_or_key: key,
+                summary,
+                description: read_optional_text(description, description_file.as_deref())?,
+                fields: parse_fields(&fields)?,
+            };
+            if issue.is_empty() {
+                anyhow::bail!(
+                    "nothing to update; provide --summary, --description, --description-file, or --field"
+                );
+            }
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{}",
+                    profile.instance.trim_end_matches('/'),
+                    issue.issue_id_or_key
+                );
+                println!("Would PUT {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            client.update_issue(&issue).await.with_context(|| {
+                format!(
+                    "failed to update Jira issue `{}` from {}",
+                    issue.issue_id_or_key,
+                    client.instance_url()
+                )
+            })?;
+
+            print_issue_update(&issue.issue_id_or_key, global)?;
+        }
         IssueAction::View { key } => {
             let store = ConfigStore::default_store().context("failed to find config location")?;
             let atla_config = store.load().context("failed to load config")?;
@@ -312,6 +393,57 @@ fn print_issue(issue: &JiraIssue, global: &GlobalArgs) -> anyhow::Result<()> {
     }
 }
 
+fn print_created_issue(issue: &JiraCreatedIssue, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(issue),
+        OutputFormat::Keys => {
+            if let Some(key) = &issue.key {
+                println!("{key}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,id,self");
+            println!(
+                "{},{},{}",
+                csv_cell(issue.key.as_deref().unwrap_or_default()),
+                csv_cell(issue.id.as_deref().unwrap_or_default()),
+                csv_cell(issue.self_url.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Created: {}", issue.key.as_deref().unwrap_or("-"));
+            if let Some(id) = &issue.id {
+                println!("ID: {id}");
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_issue_update(key: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "key": key,
+            "updated": true
+        })),
+        OutputFormat::Keys => {
+            println!("{key}");
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,updated");
+            println!("{},true", csv_cell(key));
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Updated: {key}");
+            Ok(())
+        }
+    }
+}
+
 fn print_project(project: &JiraProject, global: &GlobalArgs) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => output::print_json(project),
@@ -357,4 +489,34 @@ fn csv_cell(value: &str) -> String {
     } else {
         value.to_owned()
     }
+}
+
+fn read_optional_text(
+    value: Option<String>,
+    file: Option<&Path>,
+) -> anyhow::Result<Option<String>> {
+    if let Some(file) = file {
+        return std::fs::read_to_string(file)
+            .with_context(|| format!("failed to read {}", file.display()))
+            .map(Some);
+    }
+
+    Ok(value)
+}
+
+fn parse_fields(fields: &[String]) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
+    let mut parsed = serde_json::Map::new();
+    for field in fields {
+        let (name, value) = field
+            .split_once('=')
+            .ok_or_else(|| anyhow::anyhow!("expected --field name=json, got `{field}`"))?;
+        if name.is_empty() {
+            anyhow::bail!("field name cannot be empty in `{field}`");
+        }
+        let value = serde_json::from_str(value)
+            .with_context(|| format!("failed to parse JSON value for field `{name}`"))?;
+        parsed.insert(name.to_owned(), value);
+    }
+
+    Ok(parsed)
 }

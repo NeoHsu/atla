@@ -51,6 +51,26 @@ impl JiraClient {
             .map_err(generated_error)
     }
 
+    pub async fn create_issue(
+        &self,
+        issue: &JiraIssueCreate,
+    ) -> Result<JiraCreatedIssue, ApiError> {
+        generated_apis::issues_api::create_issue(&self.generated, issue.to_generated())
+            .await
+            .map(JiraCreatedIssue::from)
+            .map_err(generated_error)
+    }
+
+    pub async fn update_issue(&self, issue: &JiraIssueUpdate) -> Result<(), ApiError> {
+        generated_apis::issues_api::edit_issue(
+            &self.generated,
+            &issue.issue_id_or_key,
+            issue.to_generated(),
+        )
+        .await
+        .map_err(generated_error)
+    }
+
     pub async fn search_issues(
         &self,
         search: &JiraIssueSearch,
@@ -101,6 +121,83 @@ impl Default for JiraProjectSearch {
 pub struct JiraIssueSearch {
     pub jql: String,
     pub max_results: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraCreatedIssue {
+    pub id: Option<String>,
+    pub key: Option<String>,
+    pub self_url: Option<String>,
+}
+
+impl From<generated_models::CreatedIssue> for JiraCreatedIssue {
+    fn from(issue: generated_models::CreatedIssue) -> Self {
+        Self {
+            id: issue.id,
+            key: issue.key,
+            self_url: issue.param_self,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JiraIssueCreate {
+    pub project_key: String,
+    pub issue_type: String,
+    pub summary: String,
+    pub description: Option<String>,
+    pub fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl JiraIssueCreate {
+    fn to_generated(&self) -> generated_models::IssueUpdateDetails {
+        let mut fields = self.fields.clone();
+        fields.insert(
+            "project".to_owned(),
+            serde_json::json!({ "key": self.project_key }),
+        );
+        fields.insert(
+            "issuetype".to_owned(),
+            serde_json::json!({ "name": self.issue_type }),
+        );
+        fields.insert("summary".to_owned(), self.summary.clone().into());
+        if let Some(description) = &self.description {
+            fields.insert("description".to_owned(), text_adf(description));
+        }
+
+        generated_models::IssueUpdateDetails {
+            fields: Some(fields.into_iter().collect()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JiraIssueUpdate {
+    pub issue_id_or_key: String,
+    pub summary: Option<String>,
+    pub description: Option<String>,
+    pub fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl JiraIssueUpdate {
+    pub fn is_empty(&self) -> bool {
+        self.summary.is_none() && self.description.is_none() && self.fields.is_empty()
+    }
+
+    fn to_generated(&self) -> generated_models::IssueUpdateDetails {
+        let mut fields = self.fields.clone();
+        if let Some(summary) = &self.summary {
+            fields.insert("summary".to_owned(), summary.clone().into());
+        }
+        if let Some(description) = &self.description {
+            fields.insert("description".to_owned(), text_adf(description));
+        }
+
+        generated_models::IssueUpdateDetails {
+            fields: Some(fields.into_iter().collect()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -258,6 +355,35 @@ fn serialized_string<T: Serialize>(value: T) -> Option<String> {
     }
 }
 
+fn text_adf(text: &str) -> serde_json::Value {
+    let content = text
+        .lines()
+        .map(|line| {
+            if line.is_empty() {
+                serde_json::json!({
+                    "type": "paragraph"
+                })
+            } else {
+                serde_json::json!({
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": line
+                        }
+                    ]
+                })
+            }
+        })
+        .collect::<Vec<_>>();
+
+    serde_json::json!({
+        "type": "doc",
+        "version": 1,
+        "content": content,
+    })
+}
+
 fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
     match error {
         generated_apis::Error::Reqwest(error) => ApiError::Decode(error.to_string()),
@@ -345,6 +471,50 @@ mod tests {
         assert_eq!(page.values[0].key.as_deref(), Some("PROJ"));
         assert_eq!(page.values[0].project_type_key.as_deref(), Some("software"));
         assert_eq!(page.values[0].style.as_deref(), Some("classic"));
+    }
+
+    #[test]
+    fn builds_generated_issue_create_request() {
+        let issue = JiraIssueCreate {
+            project_key: "PROJ".to_owned(),
+            issue_type: "Task".to_owned(),
+            summary: "Fix login".to_owned(),
+            description: Some("Line one\nLine two".to_owned()),
+            fields: serde_json::Map::from_iter([(
+                "priority".to_owned(),
+                serde_json::json!({ "name": "High" }),
+            )]),
+        };
+
+        let generated = issue.to_generated();
+        let fields = generated.fields.expect("fields");
+
+        assert_eq!(fields["project"], serde_json::json!({ "key": "PROJ" }));
+        assert_eq!(fields["issuetype"], serde_json::json!({ "name": "Task" }));
+        assert_eq!(fields["summary"], serde_json::json!("Fix login"));
+        assert_eq!(fields["priority"], serde_json::json!({ "name": "High" }));
+        assert_eq!(fields["description"]["type"], serde_json::json!("doc"));
+        assert_eq!(
+            fields["description"]["content"].as_array().unwrap().len(),
+            2
+        );
+    }
+
+    #[test]
+    fn builds_generated_issue_update_request() {
+        let issue = JiraIssueUpdate {
+            issue_id_or_key: "PROJ-1".to_owned(),
+            summary: Some("Updated summary".to_owned()),
+            description: None,
+            fields: serde_json::Map::from_iter([("labels".to_owned(), serde_json::json!(["cli"]))]),
+        };
+
+        let generated = issue.to_generated();
+        let fields = generated.fields.expect("fields");
+
+        assert_eq!(fields["summary"], serde_json::json!("Updated summary"));
+        assert_eq!(fields["labels"], serde_json::json!(["cli"]));
+        assert_eq!(fields.get("description"), None);
     }
 
     #[test]

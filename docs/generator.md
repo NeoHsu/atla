@@ -42,6 +42,12 @@ Full Jira Cloud v3 generation succeeds with openapi-generator `7.22.0`, but the 
 - Around 12 MB for Jira alone.
 - A temporary `cargo check` of the full Jira generated crate exceeded 8 minutes on the current ARM container and one `rustc` process used around 1.8 GB RSS before the check was stopped.
 
+Jira is currently generated as a scoped partial client under `crates/atla-jira-api` from `specs/jira-v3-partial.json`. The partial spec is built by `scripts/jira-v3-partial-spec.js` from Atlassian's v3 spec and currently includes:
+
+- Project search and project view.
+- JQL issue search and issue view.
+- Issue create and issue update.
+
 Confluence Cloud v2 generation is smaller and is now generated in-place under `crates/atla-confluence-api`:
 
 - 31 generated API modules.
