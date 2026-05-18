@@ -19,86 +19,376 @@ pub fn markdown_to_adf(markdown: &str) -> Value {
 }
 
 pub fn adf_to_markdown(adf: &Value) -> String {
-    let mut out = String::new();
-    render_node(adf, &mut out);
-    out.trim().to_owned()
+    trim_blank_lines(&render_block(adf, 0))
 }
 
-fn render_node(value: &Value, out: &mut String) {
+fn render_block(value: &Value, depth: usize) -> String {
     match value {
-        Value::Array(items) => {
-            for item in items {
-                render_node(item, out);
+        Value::Array(items) => render_blocks(items, depth),
+        Value::Object(object) => match node_type(object) {
+            "doc" => render_blocks(content_items(object), depth),
+            "paragraph" => format!("{}\n\n", render_inlines(content_items(object))),
+            "heading" => {
+                let level = attrs_u64(object, "level").unwrap_or(1).clamp(1, 6);
+                format!(
+                    "{} {}\n\n",
+                    "#".repeat(level as usize),
+                    render_inlines(content_items(object))
+                )
             }
-        }
-        Value::Object(object) => {
-            let node_type = object
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            match node_type {
-                "paragraph" => {
-                    render_node_value(object.get("content"), out);
-                    out.push_str("\n\n");
+            "bulletList" => render_list(content_items(object), depth, false, 1),
+            "orderedList" => render_list(
+                content_items(object),
+                depth,
+                true,
+                attrs_u64(object, "order").unwrap_or(1),
+            ),
+            "blockquote" => render_blockquote(content_items(object), depth),
+            "rule" => "---\n\n".to_owned(),
+            "codeBlock" => render_code_block(object),
+            "panel" => render_panel(object, depth),
+            "table" => render_table(content_items(object)),
+            "mediaSingle" | "mediaGroup" => render_blocks(content_items(object), depth),
+            "blockCard" | "embedCard" => render_card(object),
+            "taskList" | "decisionList" => render_blocks(content_items(object), depth),
+            "taskItem" => render_task_item(object, depth),
+            "decisionItem" => format!("- {}\n", render_inlines(content_items(object))),
+            "expand" | "nestedExpand" => render_expand(object, depth),
+            _ => {
+                if let Some(content) = object.get("content").and_then(Value::as_array) {
+                    render_blocks(content, depth)
+                } else {
+                    render_inline(value)
                 }
-                "heading" => {
-                    let level = object
-                        .get("attrs")
-                        .and_then(|attrs| attrs.get("level"))
-                        .and_then(Value::as_u64)
-                        .unwrap_or(1)
-                        .clamp(1, 6);
-                    out.push_str(&"#".repeat(level as usize));
-                    out.push(' ');
-                    render_node_value(object.get("content"), out);
-                    out.push_str("\n\n");
-                }
-                "bulletList" => render_list(object.get("content"), out, "- "),
-                "orderedList" => render_list(object.get("content"), out, "1. "),
-                "listItem" => {
-                    render_node_value(object.get("content"), out);
-                    if !out.ends_with('\n') {
-                        out.push('\n');
-                    }
-                }
-                "text" => {
-                    if let Some(text) = object.get("text").and_then(Value::as_str) {
-                        out.push_str(text);
-                    }
-                }
-                "hardBreak" => out.push('\n'),
-                "codeBlock" => {
-                    out.push_str("```\n");
-                    render_node_value(object.get("content"), out);
-                    out.push_str("\n```\n\n");
-                }
-                _ => render_node_value(object.get("content"), out),
             }
-        }
-        _ => {}
+        },
+        _ => String::new(),
     }
 }
 
-fn render_node_value(value: Option<&Value>, out: &mut String) {
-    if let Some(value) = value {
-        render_node(value, out);
-    }
+fn render_blocks(items: &[Value], depth: usize) -> String {
+    items
+        .iter()
+        .map(|item| render_block(item, depth))
+        .collect::<String>()
 }
 
-fn render_list(value: Option<&Value>, out: &mut String, marker: &str) {
-    let Some(Value::Array(items)) = value else {
-        return;
+fn render_inline(value: &Value) -> String {
+    let Value::Object(object) = value else {
+        return String::new();
     };
-    for item in items {
-        out.push_str(marker);
-        let before = out.len();
-        render_node(item, out);
-        let item_text = out[before..].trim().to_owned();
-        out.truncate(before);
-        out.push_str(&item_text);
-        out.push('\n');
+
+    let rendered = match node_type(object) {
+        "text" => object
+            .get("text")
+            .and_then(Value::as_str)
+            .map(escape_text)
+            .unwrap_or_default(),
+        "hardBreak" => "  \n".to_owned(),
+        "mention" => attrs_str(object, "text")
+            .or_else(|| attrs_str(object, "displayName"))
+            .or_else(|| attrs_str(object, "id"))
+            .map(|text| format!("@{text}"))
+            .unwrap_or_else(|| "@mention".to_owned()),
+        "emoji" => attrs_str(object, "shortName")
+            .or_else(|| attrs_str(object, "text"))
+            .unwrap_or(":emoji:")
+            .to_owned(),
+        "inlineCard" => attrs_str(object, "url")
+            .unwrap_or("[inline card]")
+            .to_owned(),
+        "date" => attrs_str(object, "timestamp")
+            .unwrap_or("[date]")
+            .to_owned(),
+        "status" => attrs_str(object, "text")
+            .map(|text| format!("`{text}`"))
+            .unwrap_or_else(|| "`status`".to_owned()),
+        "media" => render_media(object),
+        _ => render_inlines(content_items(object)),
+    };
+
+    apply_marks(&rendered, object.get("marks").and_then(Value::as_array))
+}
+
+fn render_inlines(items: &[Value]) -> String {
+    items.iter().map(render_inline).collect::<String>()
+}
+
+fn render_list(items: &[Value], depth: usize, ordered: bool, start: u64) -> String {
+    let mut out = String::new();
+    for (index, item) in items.iter().enumerate() {
+        let Value::Object(object) = item else {
+            continue;
+        };
+        let marker = if ordered {
+            format!("{}.", start + index as u64)
+        } else {
+            "-".to_owned()
+        };
+        out.push_str(&render_list_item(object, depth, &marker));
     }
     out.push('\n');
+    out
+}
+
+fn render_list_item(object: &serde_json::Map<String, Value>, depth: usize, marker: &str) -> String {
+    let mut text_parts = Vec::new();
+    let mut nested_blocks = Vec::new();
+
+    for child in content_items(object) {
+        if let Value::Object(child_object) = child {
+            match node_type(child_object) {
+                "bulletList" => nested_blocks.push(render_list(
+                    content_items(child_object),
+                    depth + 1,
+                    false,
+                    1,
+                )),
+                "orderedList" => nested_blocks.push(render_list(
+                    content_items(child_object),
+                    depth + 1,
+                    true,
+                    attrs_u64(child_object, "order").unwrap_or(1),
+                )),
+                _ => {
+                    let rendered = trim_blank_lines(&render_block(child, depth));
+                    if !rendered.is_empty() {
+                        text_parts.push(rendered);
+                    }
+                }
+            }
+        }
+    }
+
+    let indent = "  ".repeat(depth);
+    let continuation_indent = " ".repeat(marker.len() + 1);
+    let text = text_parts.join("\n");
+    let mut lines = text.lines();
+    let first = lines.next().unwrap_or_default();
+    let mut out = format!("{indent}{marker} {first}\n");
+    for line in lines {
+        out.push_str(&indent);
+        out.push_str(&continuation_indent);
+        out.push_str(line);
+        out.push('\n');
+    }
+    for nested in nested_blocks {
+        out.push_str(nested.trim_end_matches('\n'));
+        out.push('\n');
+    }
+    out
+}
+
+fn render_blockquote(items: &[Value], depth: usize) -> String {
+    let body = trim_blank_lines(&render_blocks(items, depth));
+    let quoted = body
+        .lines()
+        .map(|line| {
+            if line.is_empty() {
+                ">".to_owned()
+            } else {
+                format!("> {line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("{quoted}\n\n")
+}
+
+fn render_code_block(object: &serde_json::Map<String, Value>) -> String {
+    let language = attrs_str(object, "language").unwrap_or_default();
+    let code = collect_plain_text(content_items(object));
+    format!("```{language}\n{}\n```\n\n", code.trim_end())
+}
+
+fn render_panel(object: &serde_json::Map<String, Value>, depth: usize) -> String {
+    let panel_type = attrs_str(object, "panelType").unwrap_or("panel");
+    let body = trim_blank_lines(&render_blocks(content_items(object), depth));
+    format!("> **{panel_type}:**\n>\n{}\n\n", prefix_lines(&body, "> "))
+}
+
+fn render_expand(object: &serde_json::Map<String, Value>, depth: usize) -> String {
+    let title = attrs_str(object, "title").unwrap_or("Details");
+    let body = trim_blank_lines(&render_blocks(content_items(object), depth));
+    format!("<details>\n<summary>{title}</summary>\n\n{body}\n\n</details>\n\n")
+}
+
+fn render_task_item(object: &serde_json::Map<String, Value>, _depth: usize) -> String {
+    let checked = match attrs_str(object, "state") {
+        Some("DONE") | Some("done") | Some("checked") => "x",
+        _ => " ",
+    };
+    format!("- [{checked}] {}\n", render_inlines(content_items(object)))
+}
+
+fn render_card(object: &serde_json::Map<String, Value>) -> String {
+    attrs_str(object, "url")
+        .map(|url| format!("{url}\n\n"))
+        .unwrap_or_default()
+}
+
+fn render_media(object: &serde_json::Map<String, Value>) -> String {
+    let alt = attrs_str(object, "alt")
+        .or_else(|| attrs_str(object, "id"))
+        .unwrap_or("media");
+    attrs_str(object, "url")
+        .map(|url| format!("![{alt}]({url})"))
+        .unwrap_or_else(|| format!("[media: {alt}]"))
+}
+
+fn render_table(rows: &[Value]) -> String {
+    let rows = rows
+        .iter()
+        .filter_map(|row| match row {
+            Value::Object(object) if node_type(object) == "tableRow" => Some(
+                content_items(object)
+                    .iter()
+                    .filter_map(|cell| match cell {
+                        Value::Object(cell_object)
+                            if matches!(node_type(cell_object), "tableHeader" | "tableCell") =>
+                        {
+                            Some(table_cell_text(content_items(cell_object)))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        })
+        .filter(|row| !row.is_empty())
+        .collect::<Vec<_>>();
+
+    let Some(first_row) = rows.first() else {
+        return String::new();
+    };
+    let width = rows.iter().map(Vec::len).max().unwrap_or(0);
+    let mut out = String::new();
+    out.push_str(&format_table_row(first_row, width));
+    out.push_str(&format_table_separator(width));
+    for row in rows.iter().skip(1) {
+        out.push_str(&format_table_row(row, width));
+    }
+    out.push('\n');
+    out
+}
+
+fn table_cell_text(items: &[Value]) -> String {
+    trim_blank_lines(&render_blocks(items, 0))
+        .replace('\n', "<br>")
+        .replace('|', "\\|")
+}
+
+fn format_table_row(row: &[String], width: usize) -> String {
+    let mut cells = row.to_vec();
+    cells.resize(width, String::new());
+    format!("| {} |\n", cells.join(" | "))
+}
+
+fn format_table_separator(width: usize) -> String {
+    format!(
+        "|{}|\n",
+        (0..width).map(|_| " --- ").collect::<Vec<_>>().join("|")
+    )
+}
+
+fn apply_marks(text: &str, marks: Option<&Vec<Value>>) -> String {
+    let Some(marks) = marks else {
+        return text.to_owned();
+    };
+    marks.iter().fold(text.to_owned(), |current, mark| {
+        let Value::Object(mark) = mark else {
+            return current;
+        };
+        match mark.get("type").and_then(Value::as_str).unwrap_or_default() {
+            "strong" => format!("**{current}**"),
+            "em" => format!("_{current}_"),
+            "strike" => format!("~~{current}~~"),
+            "code" => format!("`{}`", current.replace('`', "\\`")),
+            "underline" => format!("<u>{current}</u>"),
+            "link" => mark
+                .get("attrs")
+                .and_then(|attrs| attrs.get("href"))
+                .and_then(Value::as_str)
+                .map(|href| format!("[{current}]({href})"))
+                .unwrap_or(current),
+            "subsup" => match mark
+                .get("attrs")
+                .and_then(|attrs| attrs.get("type"))
+                .and_then(Value::as_str)
+            {
+                Some("sub") => format!("<sub>{current}</sub>"),
+                Some("sup") => format!("<sup>{current}</sup>"),
+                _ => current,
+            },
+            _ => current,
+        }
+    })
+}
+
+fn collect_plain_text(items: &[Value]) -> String {
+    items
+        .iter()
+        .map(|item| match item {
+            Value::Object(object) if node_type(object) == "text" => object
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            Value::Object(object) => collect_plain_text(content_items(object)),
+            Value::Array(items) => collect_plain_text(items),
+            _ => String::new(),
+        })
+        .collect::<String>()
+}
+
+fn content_items(object: &serde_json::Map<String, Value>) -> &[Value] {
+    object
+        .get("content")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+}
+
+fn node_type(object: &serde_json::Map<String, Value>) -> &str {
+    object
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+}
+
+fn attrs_str<'a>(object: &'a serde_json::Map<String, Value>, name: &str) -> Option<&'a str> {
+    object
+        .get("attrs")
+        .and_then(|attrs| attrs.get(name))
+        .and_then(Value::as_str)
+}
+
+fn attrs_u64(object: &serde_json::Map<String, Value>, name: &str) -> Option<u64> {
+    object
+        .get("attrs")
+        .and_then(|attrs| attrs.get(name))
+        .and_then(Value::as_u64)
+}
+
+fn escape_text(text: &str) -> String {
+    text.replace('\\', "\\\\")
+}
+
+fn trim_blank_lines(text: &str) -> String {
+    text.trim_matches(|c| c == '\n' || c == ' ').to_owned()
+}
+
+fn prefix_lines(text: &str, prefix: &str) -> String {
+    text.lines()
+        .map(|line| {
+            if line.is_empty() {
+                prefix.trim_end().to_owned()
+            } else {
+                format!("{prefix}{line}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -124,5 +414,183 @@ mod tests {
         });
 
         assert_eq!(adf_to_markdown(&adf), "## Runbook\n\nDeploy steps");
+    }
+
+    #[test]
+    fn converts_marks_links_and_mentions() {
+        let adf = json!({
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "important",
+                            "marks": [{ "type": "strong" }, { "type": "em" }]
+                        },
+                        { "type": "text", "text": " " },
+                        {
+                            "type": "text",
+                            "text": "docs",
+                            "marks": [
+                                {
+                                    "type": "link",
+                                    "attrs": { "href": "https://example.com/docs" }
+                                }
+                            ]
+                        },
+                        { "type": "text", "text": " " },
+                        {
+                            "type": "mention",
+                            "attrs": { "text": "Neo" }
+                        }
+                    ]
+                }
+            ]
+        });
+
+        assert_eq!(
+            adf_to_markdown(&adf),
+            "_**important**_ [docs](https://example.com/docs) @Neo"
+        );
+    }
+
+    #[test]
+    fn converts_nested_lists_tasks_and_code_blocks() {
+        let adf = json!({
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "bulletList",
+                    "content": [
+                        {
+                            "type": "listItem",
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [{ "type": "text", "text": "Deploy" }]
+                                },
+                                {
+                                    "type": "orderedList",
+                                    "content": [
+                                        {
+                                            "type": "listItem",
+                                            "content": [
+                                                {
+                                                    "type": "paragraph",
+                                                    "content": [{ "type": "text", "text": "Build" }]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "taskList",
+                    "content": [
+                        {
+                            "type": "taskItem",
+                            "attrs": { "state": "DONE" },
+                            "content": [{ "type": "text", "text": "Verify" }]
+                        }
+                    ]
+                },
+                {
+                    "type": "codeBlock",
+                    "attrs": { "language": "bash" },
+                    "content": [{ "type": "text", "text": "cargo test" }]
+                }
+            ]
+        });
+
+        assert_eq!(
+            adf_to_markdown(&adf),
+            "- Deploy\n  1. Build\n\n- [x] Verify\n```bash\ncargo test\n```"
+        );
+    }
+
+    #[test]
+    fn converts_tables_blockquotes_and_cards() {
+        let adf = json!({
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "blockquote",
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{ "type": "text", "text": "Heads up" }]
+                        }
+                    ]
+                },
+                {
+                    "type": "table",
+                    "content": [
+                        {
+                            "type": "tableRow",
+                            "content": [
+                                {
+                                    "type": "tableHeader",
+                                    "content": [
+                                        {
+                                            "type": "paragraph",
+                                            "content": [{ "type": "text", "text": "Key" }]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "tableHeader",
+                                    "content": [
+                                        {
+                                            "type": "paragraph",
+                                            "content": [{ "type": "text", "text": "Value" }]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "tableRow",
+                            "content": [
+                                {
+                                    "type": "tableCell",
+                                    "content": [
+                                        {
+                                            "type": "paragraph",
+                                            "content": [{ "type": "text", "text": "Status" }]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "type": "tableCell",
+                                    "content": [
+                                        {
+                                            "type": "paragraph",
+                                            "content": [{ "type": "text", "text": "Done" }]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "type": "inlineCard",
+                    "attrs": { "url": "https://example.com/card" }
+                }
+            ]
+        });
+
+        assert_eq!(
+            adf_to_markdown(&adf),
+            "> Heads up\n\n| Key | Value |\n| --- | --- |\n| Status | Done |\n\nhttps://example.com/card"
+        );
     }
 }
