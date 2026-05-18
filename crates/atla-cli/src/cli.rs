@@ -116,6 +116,18 @@ pub struct IssueCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum IssueAction {
+    List {
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        assignee: Option<String>,
+        #[arg(long)]
+        jql: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
     Create {
         #[arg(long)]
         project: String,
@@ -143,6 +155,31 @@ pub enum IssueAction {
     },
     View {
         key: String,
+    },
+    Transition {
+        key: String,
+        #[arg(long)]
+        to: Option<String>,
+    },
+    Comment {
+        #[command(subcommand)]
+        action: IssueCommentAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IssueCommentAction {
+    Add {
+        key: String,
+        #[arg(conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+    },
+    List {
+        key: String,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
     },
 }
 

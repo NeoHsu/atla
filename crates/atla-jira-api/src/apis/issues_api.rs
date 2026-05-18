@@ -20,6 +20,13 @@ pub enum CreateIssueError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`do_transition`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DoTransitionError {
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`edit_issue`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -31,6 +38,13 @@ pub enum EditIssueError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetIssueError {
+    UnknownValue(serde_json::Value),
+}
+
+/// struct for typed errors of method [`get_transitions`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum GetTransitionsError {
     UnknownValue(serde_json::Value),
 }
 
@@ -79,6 +93,54 @@ pub async fn create_issue(
     } else {
         let content = resp.text().await?;
         let entity: Option<CreateIssueError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Performs an issue transition and, if the transition has a screen, updates the fields from the transition screen.  sortByCategory To update the fields on the transition screen, specify the fields in the `fields` or `update` parameters in the request body. Get details about the fields using [ Get transitions](#api-rest-api-3-issue-issueIdOrKey-transitions-get) with the `transitions.fields` expand.  This operation can be accessed anonymously.  **[Permissions](#permissions) required:**   *  *Browse projects* and *Transition issues* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.  *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.
+pub async fn do_transition(
+    configuration: &configuration::Configuration,
+    issue_id_or_key: &str,
+    issue_transition_request: models::IssueTransitionRequest,
+) -> Result<(), Error<DoTransitionError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_issue_id_or_key = issue_id_or_key;
+    let p_body_issue_transition_request = issue_transition_request;
+
+    let uri_str = format!(
+        "{}/rest/api/3/issue/{issueIdOrKey}/transitions",
+        configuration.base_path,
+        issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.oauth_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+    if let Some(ref auth_conf) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(auth_conf.0.to_owned(), auth_conf.1.to_owned());
+    };
+    req_builder = req_builder.json(&p_body_issue_transition_request);
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<DoTransitionError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,
@@ -200,6 +262,60 @@ pub async fn get_issue(
     } else {
         let content = resp.text().await?;
         let entity: Option<GetIssueError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Returns either all transitions or a transition that can be performed by the user on an issue, based on the issue's status.  Note, if a request is made for a transition that does not exist or cannot be performed on the issue, given its status, the response will return any empty transitions list.  This operation can be accessed anonymously.  **[Permissions](#permissions) required: A list or transition is returned only when the user has:**   *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.  *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.  However, if the user does not have the *Transition issues* [ project permission](https://confluence.atlassian.com/x/yodKLg) the response will not list any transitions.
+pub async fn get_transitions(
+    configuration: &configuration::Configuration,
+    issue_id_or_key: &str,
+) -> Result<models::Transitions, Error<GetTransitionsError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_issue_id_or_key = issue_id_or_key;
+
+    let uri_str = format!(
+        "{}/rest/api/3/issue/{issueIdOrKey}/transitions",
+        configuration.base_path,
+        issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.oauth_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+    if let Some(ref auth_conf) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(auth_conf.0.to_owned(), auth_conf.1.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
+
+    if !status.is_client_error() && !status.is_server_error() {
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::Transitions`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::Transitions`")))),
+        }
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<GetTransitionsError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

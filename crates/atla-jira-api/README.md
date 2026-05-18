@@ -26,22 +26,35 @@ All URIs are relative to *https://your-domain.atlassian.net*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*IssueCommentsApi* | [**add_comment**](docs/IssueCommentsApi.md#add_comment) | **POST** /rest/api/3/issue/{issueIdOrKey}/comment | Add comment
+*IssueCommentsApi* | [**get_comments**](docs/IssueCommentsApi.md#get_comments) | **GET** /rest/api/3/issue/{issueIdOrKey}/comment | Get comments
 *IssueSearchApi* | [**search_and_reconsile_issues_using_jql**](docs/IssueSearchApi.md#search_and_reconsile_issues_using_jql) | **GET** /rest/api/3/search/jql | Search for issues using JQL enhanced search (GET)
 *IssuesApi* | [**create_issue**](docs/IssuesApi.md#create_issue) | **POST** /rest/api/3/issue | Create issue
+*IssuesApi* | [**do_transition**](docs/IssuesApi.md#do_transition) | **POST** /rest/api/3/issue/{issueIdOrKey}/transitions | Transition issue
 *IssuesApi* | [**edit_issue**](docs/IssuesApi.md#edit_issue) | **PUT** /rest/api/3/issue/{issueIdOrKey} | Edit issue
 *IssuesApi* | [**get_issue**](docs/IssuesApi.md#get_issue) | **GET** /rest/api/3/issue/{issueIdOrKey} | Get issue
+*IssuesApi* | [**get_transitions**](docs/IssuesApi.md#get_transitions) | **GET** /rest/api/3/issue/{issueIdOrKey}/transitions | Get transitions
 *ProjectsApi* | [**get_project**](docs/ProjectsApi.md#get_project) | **GET** /rest/api/3/project/{projectIdOrKey} | Get project
 *ProjectsApi* | [**search_projects**](docs/ProjectsApi.md#search_projects) | **GET** /rest/api/3/project/search | Get projects paginated
 
 
 ## Documentation For Models
 
+ - [Comment](docs/Comment.md)
+ - [CommentCreateRequest](docs/CommentCreateRequest.md)
  - [CreatedIssue](docs/CreatedIssue.md)
  - [IssueBean](docs/IssueBean.md)
+ - [IssueTransitionRequest](docs/IssueTransitionRequest.md)
+ - [IssueTransitionRequestTransition](docs/IssueTransitionRequestTransition.md)
  - [IssueUpdateDetails](docs/IssueUpdateDetails.md)
  - [PageBeanProject](docs/PageBeanProject.md)
+ - [PageOfComments](docs/PageOfComments.md)
  - [Project](docs/Project.md)
  - [SearchAndReconcileResults](docs/SearchAndReconcileResults.md)
+ - [Status](docs/Status.md)
+ - [Transition](docs/Transition.md)
+ - [Transitions](docs/Transitions.md)
+ - [User](docs/User.md)
 
 
 To get access to the crate's generated documentation, use:

@@ -526,6 +526,313 @@
         ],
         "x-atlassian-connect-scope": "WRITE"
       }
+    },
+    "/rest/api/3/issue/{issueIdOrKey}/comment": {
+      "get": {
+        "deprecated": false,
+        "description": "Returns all comments for an issue.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:** Comments are included in the response where the user has:\n\n *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project containing the comment.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n *  If the comment has visibility restrictions, belongs to the group or has the role visibility is role visibility is restricted to.",
+        "operationId": "getComments",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startAt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "maxResults",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageOfComments"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "read:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Get comments",
+        "tags": [
+          "Issue comments"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:comment:jira",
+              "read:comment.property:jira",
+              "read:group:jira",
+              "read:project:jira",
+              "read:project-role:jira",
+              "read:user:jira",
+              "read:avatar:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      },
+      "post": {
+        "deprecated": false,
+        "description": "Adds a comment to an issue.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* and *Add comments* [ project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue containing the comment is in.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.",
+        "operationId": "addComment",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Add comment",
+        "tags": [
+          "Issue comments"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:comment:jira",
+              "read:comment.property:jira",
+              "read:group:jira",
+              "read:project:jira",
+              "read:project-role:jira",
+              "read:user:jira",
+              "write:comment:jira",
+              "read:avatar:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      }
+    },
+    "/rest/api/3/issue/{issueIdOrKey}/transitions": {
+      "get": {
+        "deprecated": false,
+        "description": "Returns either all transitions or a transition that can be performed by the user on an issue, based on the issue's status.\n\nNote, if a request is made for a transition that does not exist or cannot be performed on the issue, given its status, the response will return any empty transitions list.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required: A list or transition is returned only when the user has:**\n\n *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n\nHowever, if the user does not have the *Transition issues* [ project permission](https://confluence.atlassian.com/x/yodKLg) the response will not list any transitions.",
+        "operationId": "getTransitions",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Transitions"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "read:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Get transitions",
+        "tags": [
+          "Issues"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:issue.transition:jira",
+              "read:status:jira",
+              "read:field-configuration:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      },
+      "post": {
+        "deprecated": false,
+        "description": "Performs an issue transition and, if the transition has a screen, updates the fields from the transition screen.\n\nsortByCategory To update the fields on the transition screen, specify the fields in the `fields` or `update` parameters in the request body. Get details about the fields using [ Get transitions](#api-rest-api-3-issue-issueIdOrKey-transitions-get) with the `transitions.fields` expand.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* and *Transition issues* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.",
+        "operationId": "doTransition",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueTransitionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Returned if the request is successful."
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Transition issue",
+        "tags": [
+          "Issues"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:issue:jira",
+              "write:issue.property:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      }
     }
   },
   "components": {
@@ -550,6 +857,134 @@
           "fields": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "IssueTransitionRequest": {
+        "type": "object",
+        "required": [
+          "transition"
+        ],
+        "properties": {
+          "transition": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Transitions": {
+        "type": "object",
+        "properties": {
+          "transitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Transition"
+            }
+          }
+        }
+      },
+      "Transition": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "to": {
+            "$ref": "#/components/schemas/Status"
+          }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CommentCreateRequest": {
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "PageOfComments": {
+        "type": "object",
+        "properties": {
+          "startAt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxResults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Comment"
+            }
+          }
+        }
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "self": {
+            "type": "string"
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "author": {
+            "$ref": "#/components/schemas/User"
+          },
+          "created": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
           }
         }
       },

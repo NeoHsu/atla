@@ -98,6 +98,102 @@ impl JiraClient {
         .map(JiraIssue::from)
         .map_err(generated_error)
     }
+
+    pub async fn list_transitions(
+        &self,
+        issue_id_or_key: &str,
+    ) -> Result<Vec<JiraTransition>, ApiError> {
+        let transitions =
+            generated_apis::issues_api::get_transitions(&self.generated, issue_id_or_key)
+                .await
+                .map_err(generated_error)?;
+
+        Ok(transitions
+            .transitions
+            .unwrap_or_default()
+            .into_iter()
+            .map(JiraTransition::from)
+            .collect())
+    }
+
+    pub async fn transition_issue(
+        &self,
+        issue_id_or_key: &str,
+        transition_id_or_name: &str,
+    ) -> Result<JiraTransition, ApiError> {
+        let transitions = self.list_transitions(issue_id_or_key).await?;
+        let transition = transitions
+            .iter()
+            .find(|transition| {
+                transition.id.as_deref() == Some(transition_id_or_name)
+                    || transition
+                        .name
+                        .as_deref()
+                        .is_some_and(|name| name.eq_ignore_ascii_case(transition_id_or_name))
+            })
+            .cloned()
+            .ok_or_else(|| {
+                let available = transitions
+                    .iter()
+                    .filter_map(|transition| transition.name.as_deref())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if available.is_empty() {
+                    ApiError::Decode(format!(
+                        "transition `{transition_id_or_name}` not available for issue `{issue_id_or_key}`"
+                    ))
+                } else {
+                    ApiError::Decode(format!(
+                        "transition `{transition_id_or_name}` not available for issue `{issue_id_or_key}`; available: {available}"
+                    ))
+                }
+            })?;
+        let transition_id = transition.id.clone().ok_or_else(|| {
+            ApiError::Decode("selected transition did not include an id".to_owned())
+        })?;
+
+        let request = generated_models::IssueTransitionRequest::new(
+            generated_models::IssueTransitionRequestTransition::new(transition_id),
+        );
+        generated_apis::issues_api::do_transition(&self.generated, issue_id_or_key, request)
+            .await
+            .map_err(generated_error)?;
+
+        Ok(transition)
+    }
+
+    pub async fn add_comment(
+        &self,
+        issue_id_or_key: &str,
+        body: &str,
+    ) -> Result<JiraComment, ApiError> {
+        let comment = generated_apis::issue_comments_api::add_comment(
+            &self.generated,
+            issue_id_or_key,
+            generated_models::CommentCreateRequest::new(adf_body(body)),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(comment.into())
+    }
+
+    pub async fn list_comments(
+        &self,
+        issue_id_or_key: &str,
+        max_results: u32,
+    ) -> Result<JiraCommentPage, ApiError> {
+        let page = generated_apis::issue_comments_api::get_comments(
+            &self.generated,
+            issue_id_or_key,
+            Some(0),
+            Some(limit_i32(max_results)),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -121,6 +217,53 @@ impl Default for JiraProjectSearch {
 pub struct JiraIssueSearch {
     pub jql: String,
     pub max_results: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraIssueList {
+    pub project_key: Option<String>,
+    pub status: Option<String>,
+    pub assignee: Option<String>,
+    pub jql: Option<String>,
+    pub max_results: u32,
+}
+
+impl JiraIssueList {
+    pub fn to_search(&self, default_project: Option<&str>) -> Result<JiraIssueSearch, ApiError> {
+        if let Some(jql) = &self.jql {
+            return Ok(JiraIssueSearch {
+                jql: jql.clone(),
+                max_results: self.max_results,
+            });
+        }
+
+        let project_key = self
+            .project_key
+            .as_deref()
+            .or(default_project)
+            .ok_or_else(|| {
+                ApiError::Decode(
+                    "provide --project or --jql, or set config default-project".to_owned(),
+                )
+            })?;
+        let mut clauses = vec![format!("project = {}", quote_jql_value(project_key))];
+
+        if let Some(status) = &self.status {
+            clauses.push(format!("status = {}", quote_jql_value(status)));
+        }
+        if let Some(assignee) = &self.assignee {
+            if assignee.eq_ignore_ascii_case("me") {
+                clauses.push("assignee = currentUser()".to_owned());
+            } else {
+                clauses.push(format!("assignee = {}", quote_jql_value(assignee)));
+            }
+        }
+
+        Ok(JiraIssueSearch {
+            jql: format!("{} ORDER BY updated DESC", clauses.join(" AND ")),
+            max_results: self.max_results,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -281,6 +424,95 @@ impl From<generated_models::IssueBean> for JiraIssue {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JiraTransition {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub to_status: Option<JiraStatus>,
+}
+
+impl From<generated_models::Transition> for JiraTransition {
+    fn from(transition: generated_models::Transition) -> Self {
+        Self {
+            id: transition.id,
+            name: transition.name,
+            to_status: transition.to.map(|status| JiraStatus::from(*status)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraStatus {
+    pub id: Option<String>,
+    pub name: Option<String>,
+}
+
+impl From<generated_models::Status> for JiraStatus {
+    fn from(status: generated_models::Status) -> Self {
+        Self {
+            id: status.id,
+            name: status.name,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraCommentPage {
+    #[serde(default)]
+    pub start_at: u32,
+    #[serde(default)]
+    pub max_results: u32,
+    #[serde(default)]
+    pub total: Option<u32>,
+    #[serde(default)]
+    pub comments: Vec<JiraComment>,
+}
+
+impl From<generated_models::PageOfComments> for JiraCommentPage {
+    fn from(page: generated_models::PageOfComments) -> Self {
+        Self {
+            start_at: page.start_at.unwrap_or_default().max(0) as u32,
+            max_results: page.max_results.unwrap_or_default().max(0) as u32,
+            total: page.total.map(|total| total.max(0) as u32),
+            comments: page
+                .comments
+                .unwrap_or_default()
+                .into_iter()
+                .map(JiraComment::from)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraComment {
+    pub id: Option<String>,
+    pub body_text: Option<String>,
+    pub author_display_name: Option<String>,
+    pub created: Option<String>,
+    pub updated: Option<String>,
+}
+
+impl From<generated_models::Comment> for JiraComment {
+    fn from(comment: generated_models::Comment) -> Self {
+        Self {
+            id: comment.id,
+            body_text: comment
+                .body
+                .as_ref()
+                .map(adf_plain_text)
+                .filter(|text| !text.is_empty()),
+            author_display_name: comment.author.and_then(|author| author.display_name),
+            created: comment.created,
+            updated: comment.updated,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JiraProjectPage {
     #[serde(default)]
     pub start_at: u64,
@@ -382,6 +614,45 @@ fn text_adf(text: &str) -> serde_json::Value {
         "version": 1,
         "content": content,
     })
+}
+
+fn adf_body(text: &str) -> std::collections::HashMap<String, serde_json::Value> {
+    text_adf(text)
+        .as_object()
+        .expect("ADF root is an object")
+        .clone()
+        .into_iter()
+        .collect()
+}
+
+fn adf_plain_text(body: &std::collections::HashMap<String, serde_json::Value>) -> String {
+    let value = serde_json::Value::Object(body.clone().into_iter().collect());
+    let mut parts = Vec::new();
+    collect_adf_text(&value, &mut parts);
+    parts.join("\n")
+}
+
+fn collect_adf_text(value: &serde_json::Value, parts: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(object) => {
+            if let Some(text) = object.get("text").and_then(serde_json::Value::as_str) {
+                parts.push(text.to_owned());
+            }
+            if let Some(content) = object.get("content") {
+                collect_adf_text(content, parts);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_adf_text(item, parts);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn quote_jql_value(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
@@ -515,6 +786,83 @@ mod tests {
         assert_eq!(fields["summary"], serde_json::json!("Updated summary"));
         assert_eq!(fields["labels"], serde_json::json!(["cli"]));
         assert_eq!(fields.get("description"), None);
+    }
+
+    #[test]
+    fn builds_issue_list_jql_from_filters() {
+        let list = JiraIssueList {
+            project_key: None,
+            status: Some("In Progress".to_owned()),
+            assignee: Some("me".to_owned()),
+            jql: None,
+            max_results: 25,
+        };
+
+        let search = list.to_search(Some("PROJ")).expect("search");
+
+        assert_eq!(
+            search.jql,
+            "project = \"PROJ\" AND status = \"In Progress\" AND assignee = currentUser() ORDER BY updated DESC"
+        );
+        assert_eq!(search.max_results, 25);
+    }
+
+    #[test]
+    fn explicit_jql_overrides_issue_list_filters() {
+        let list = JiraIssueList {
+            project_key: Some("PROJ".to_owned()),
+            status: Some("Done".to_owned()),
+            assignee: None,
+            jql: Some("status = Open".to_owned()),
+            max_results: 10,
+        };
+
+        let search = list.to_search(None).expect("search");
+
+        assert_eq!(search.jql, "status = Open");
+        assert_eq!(search.max_results, 10);
+    }
+
+    #[test]
+    fn converts_transition() {
+        let transition = JiraTransition::from(generated_models::Transition {
+            id: Some("31".to_owned()),
+            name: Some("Done".to_owned()),
+            to: Some(Box::new(generated_models::Status {
+                id: Some("10001".to_owned()),
+                name: Some("Done".to_owned()),
+            })),
+        });
+
+        assert_eq!(transition.id.as_deref(), Some("31"));
+        assert_eq!(transition.name.as_deref(), Some("Done"));
+        assert_eq!(
+            transition
+                .to_status
+                .as_ref()
+                .and_then(|status| status.name.as_deref()),
+            Some("Done")
+        );
+    }
+
+    #[test]
+    fn converts_comment_body_to_plain_text() {
+        let comment = JiraComment::from(generated_models::Comment {
+            id: Some("10010".to_owned()),
+            param_self: None,
+            body: Some(adf_body("Line one\nLine two")),
+            author: Some(Box::new(generated_models::User {
+                account_id: Some("account-id".to_owned()),
+                display_name: Some("Neo".to_owned()),
+                active: Some(true),
+            })),
+            created: Some("2026-05-18T00:00:00.000+0000".to_owned()),
+            updated: None,
+        });
+
+        assert_eq!(comment.id.as_deref(), Some("10010"));
+        assert_eq!(comment.body_text.as_deref(), Some("Line one\nLine two"));
+        assert_eq!(comment.author_display_name.as_deref(), Some("Neo"));
     }
 
     #[test]

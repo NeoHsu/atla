@@ -69,6 +69,44 @@ const selectedOperations = {
       },
     },
   },
+  "/rest/api/3/issue/{issueIdOrKey}/comment": {
+    get: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+        queryParameter("startAt", { type: "integer", format: "int32" }),
+        queryParameter("maxResults", { type: "integer", format: "int32" }),
+      ],
+      response: "PageOfComments",
+    },
+    post: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+      ],
+      request: "CommentCreateRequest",
+      responses: {
+        201: jsonResponse("Comment"),
+      },
+    },
+  },
+  "/rest/api/3/issue/{issueIdOrKey}/transitions": {
+    get: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+      ],
+      response: "Transitions",
+    },
+    post: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+      ],
+      request: "IssueTransitionRequest",
+      responses: {
+        204: {
+          description: "Returned if the request is successful.",
+        },
+      },
+    },
+  },
 };
 
 const partial = {
@@ -192,6 +230,87 @@ function simplifiedSchemas() {
           type: "object",
           additionalProperties: true,
         },
+      },
+    },
+    IssueTransitionRequest: {
+      type: "object",
+      required: ["transition"],
+      properties: {
+        transition: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: { type: "string" },
+          },
+        },
+      },
+    },
+    Transitions: {
+      type: "object",
+      properties: {
+        transitions: {
+          type: "array",
+          items: { $ref: "#/components/schemas/Transition" },
+        },
+      },
+    },
+    Transition: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        name: { type: "string" },
+        to: { $ref: "#/components/schemas/Status" },
+      },
+    },
+    Status: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        name: { type: "string" },
+      },
+    },
+    CommentCreateRequest: {
+      type: "object",
+      required: ["body"],
+      properties: {
+        body: {
+          type: "object",
+          additionalProperties: true,
+        },
+      },
+    },
+    PageOfComments: {
+      type: "object",
+      properties: {
+        startAt: { type: "integer", format: "int32" },
+        maxResults: { type: "integer", format: "int32" },
+        total: { type: "integer", format: "int32" },
+        comments: {
+          type: "array",
+          items: { $ref: "#/components/schemas/Comment" },
+        },
+      },
+    },
+    Comment: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        self: { type: "string" },
+        body: {
+          type: "object",
+          additionalProperties: true,
+        },
+        author: { $ref: "#/components/schemas/User" },
+        created: { type: "string" },
+        updated: { type: "string" },
+      },
+    },
+    User: {
+      type: "object",
+      properties: {
+        accountId: { type: "string" },
+        displayName: { type: "string" },
+        active: { type: "boolean" },
       },
     },
     PageBeanProject: {

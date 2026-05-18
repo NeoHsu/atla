@@ -59,12 +59,18 @@ atla jira project view PROJ
 atla jira project view PROJ --output json
 atla jira search "project = PROJ order by created desc"
 atla jira search "assignee = currentUser() and status != Done" --limit 25 --output keys
+atla jira issue list --project PROJ --status "In Progress"
+atla jira issue list --jql "project = PROJ and assignee = currentUser()" --limit 25
 atla jira issue create --project PROJ --type Task --summary "Fix login"
 atla jira issue create --project PROJ --type Bug --summary "Checkout fails" --description "Steps to reproduce..."
 atla jira issue update PROJ-123 --summary "Updated summary"
 atla jira issue update PROJ-123 --field 'priority={"name":"High"}'
 atla jira issue view PROJ-123
 atla jira issue view PROJ-123 --output json
+atla jira issue transition PROJ-123
+atla jira issue transition PROJ-123 --to Done
+atla jira issue comment add PROJ-123 "Ready for review"
+atla jira issue comment list PROJ-123
 ```
 
 First Confluence commands:

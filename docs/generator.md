@@ -47,6 +47,7 @@ Jira is currently generated as a scoped partial client under `crates/atla-jira-a
 - Project search and project view.
 - JQL issue search and issue view.
 - Issue create and issue update.
+- Issue transitions and issue comments.
 
 Confluence Cloud v2 generation is smaller and is now generated in-place under `crates/atla-confluence-api`:
 

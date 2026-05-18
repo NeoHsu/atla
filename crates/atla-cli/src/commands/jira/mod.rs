@@ -1,14 +1,15 @@
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
-    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraCreatedIssue, JiraIssue,
-    JiraIssueCreate, JiraIssueSearch, JiraIssueUpdate, JiraProject, JiraProjectSearch, Profile,
+    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraComment, JiraCommentPage,
+    JiraCreatedIssue, JiraIssue, JiraIssueCreate, JiraIssueList, JiraIssueSearch, JiraIssueUpdate,
+    JiraProject, JiraProjectSearch, JiraTransition, Profile,
 };
 use std::path::Path;
 
 use crate::cli::{
-    GlobalArgs, IssueAction, IssueCommand, JiraCommand, JiraResource, OutputFormat, ProjectAction,
-    ProjectCommand,
+    GlobalArgs, IssueAction, IssueCommand, IssueCommentAction, JiraCommand, JiraResource,
+    OutputFormat, ProjectAction, ProjectCommand,
 };
 use crate::config;
 use crate::output;
@@ -27,6 +28,48 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
 
 async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     match command.action {
+        IssueAction::List {
+            project,
+            status,
+            assignee,
+            jql,
+            limit,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let list = JiraIssueList {
+                project_key: project,
+                status,
+                assignee,
+                jql,
+                max_results: limit.clamp(1, 5000),
+            };
+            let search = list
+                .to_search(profile.default_project.as_deref())
+                .context("failed to build Jira issue list query")?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/search/jql?maxResults={}&fields=summary,status,assignee,issuetype,priority",
+                    profile.instance.trim_end_matches('/'),
+                    search.max_results
+                );
+                println!(
+                    "Would GET {url} with JQL `{}` using profile `{profile_name}`",
+                    search.jql
+                );
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let page = client.search_issues(&search).await.with_context(|| {
+                format!("failed to list Jira issues from {}", client.instance_url())
+            })?;
+
+            print_issues(&page.issues, global)?;
+        }
         IssueAction::Create {
             project,
             issue_type,
@@ -133,6 +176,109 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
             print_issue(&issue, global)?;
         }
+        IssueAction::Transition { key, to } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{}/transitions",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                if let Some(to) = &to {
+                    println!(
+                        "Would GET {url}, then POST transition `{to}` using profile `{profile_name}`"
+                    );
+                } else {
+                    println!("Would GET {url} using profile `{profile_name}`");
+                }
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            if let Some(to) = to {
+                let transition = client.transition_issue(&key, &to).await.with_context(|| {
+                    format!(
+                        "failed to transition Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+                print_transition_update(&key, &transition, global)?;
+            } else {
+                let transitions = client.list_transitions(&key).await.with_context(|| {
+                    format!(
+                        "failed to list transitions for Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+                print_transitions(&transitions, global)?;
+            }
+        }
+        IssueAction::Comment { action } => match action {
+            IssueCommentAction::Add {
+                key,
+                body,
+                body_file,
+            } => {
+                let store =
+                    ConfigStore::default_store().context("failed to find config location")?;
+                let atla_config = store.load().context("failed to load config")?;
+                let (profile_name, profile) = active_profile(&atla_config, global)?;
+                let body = read_required_text(body, body_file.as_deref(), "comment body")?;
+
+                if global.dry_run {
+                    let url = format!(
+                        "{}/rest/api/3/issue/{}/comment",
+                        profile.instance.trim_end_matches('/'),
+                        key
+                    );
+                    println!("Would POST {url} using profile `{profile_name}`");
+                    return Ok(());
+                }
+
+                let token = token_for_profile(profile_name, profile)?;
+                let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+                let comment = client.add_comment(&key, &body).await.with_context(|| {
+                    format!(
+                        "failed to add comment to Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+                print_comment(&comment, global)?;
+            }
+            IssueCommentAction::List { key, limit } => {
+                let store =
+                    ConfigStore::default_store().context("failed to find config location")?;
+                let atla_config = store.load().context("failed to load config")?;
+                let (profile_name, profile) = active_profile(&atla_config, global)?;
+                let limit = limit.clamp(1, 1000);
+
+                if global.dry_run {
+                    let url = format!(
+                        "{}/rest/api/3/issue/{}/comment?startAt=0&maxResults={limit}",
+                        profile.instance.trim_end_matches('/'),
+                        key
+                    );
+                    println!("Would GET {url} using profile `{profile_name}`");
+                    return Ok(());
+                }
+
+                let token = token_for_profile(profile_name, profile)?;
+                let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+                let page = client.list_comments(&key, limit).await.with_context(|| {
+                    format!(
+                        "failed to list comments for Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+                print_comments(&page, global)?;
+            }
+        },
     }
 
     Ok(())
@@ -444,6 +590,187 @@ fn print_issue_update(key: &str, global: &GlobalArgs) -> anyhow::Result<()> {
     }
 }
 
+fn print_transitions(transitions: &[JiraTransition], global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(transitions),
+        OutputFormat::Keys => {
+            for transition in transitions {
+                if let Some(id) = &transition.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,name,toStatus");
+            for transition in transitions {
+                println!(
+                    "{},{},{}",
+                    csv_cell(transition.id.as_deref().unwrap_or_default()),
+                    csv_cell(transition.name.as_deref().unwrap_or_default()),
+                    csv_cell(
+                        transition
+                            .to_status
+                            .as_ref()
+                            .and_then(|status| status.name.as_deref())
+                            .unwrap_or_default()
+                    )
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<8} {:<24} TO STATUS", "ID", "NAME");
+            for transition in transitions {
+                println!(
+                    "{:<8} {:<24} {}",
+                    transition.id.as_deref().unwrap_or("-"),
+                    transition.name.as_deref().unwrap_or("-"),
+                    transition
+                        .to_status
+                        .as_ref()
+                        .and_then(|status| status.name.as_deref())
+                        .unwrap_or("-")
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_transition_update(
+    key: &str,
+    transition: &JiraTransition,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "key": key,
+            "transitioned": true,
+            "transition": transition,
+        })),
+        OutputFormat::Keys => {
+            println!("{key}");
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,transitioned,transitionId,transitionName,toStatus");
+            println!(
+                "{},true,{},{},{}",
+                csv_cell(key),
+                csv_cell(transition.id.as_deref().unwrap_or_default()),
+                csv_cell(transition.name.as_deref().unwrap_or_default()),
+                csv_cell(
+                    transition
+                        .to_status
+                        .as_ref()
+                        .and_then(|status| status.name.as_deref())
+                        .unwrap_or_default()
+                )
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Transitioned: {key}");
+            println!("Transition: {}", transition.name.as_deref().unwrap_or("-"));
+            if let Some(to_status) = transition
+                .to_status
+                .as_ref()
+                .and_then(|status| status.name.as_deref())
+            {
+                println!("To status: {to_status}");
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_comments(page: &JiraCommentPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(page),
+        OutputFormat::Keys => {
+            for comment in &page.comments {
+                if let Some(id) = &comment.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,author,created,updated,body");
+            for comment in &page.comments {
+                println!(
+                    "{},{},{},{},{}",
+                    csv_cell(comment.id.as_deref().unwrap_or_default()),
+                    csv_cell(comment.author_display_name.as_deref().unwrap_or_default()),
+                    csv_cell(comment.created.as_deref().unwrap_or_default()),
+                    csv_cell(comment.updated.as_deref().unwrap_or_default()),
+                    csv_cell(comment.body_text.as_deref().unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<12} {:<20} {:<22} BODY", "ID", "AUTHOR", "CREATED");
+            for comment in &page.comments {
+                println!(
+                    "{:<12} {:<20} {:<22} {}",
+                    comment.id.as_deref().unwrap_or("-"),
+                    comment.author_display_name.as_deref().unwrap_or("-"),
+                    comment.created.as_deref().unwrap_or("-"),
+                    comment
+                        .body_text
+                        .as_deref()
+                        .unwrap_or("-")
+                        .replace('\n', " ")
+                );
+            }
+            if let Some(total) = page.total {
+                println!();
+                println!("Showing {} of {total} comments.", page.comments.len());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_comment(comment: &JiraComment, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(comment),
+        OutputFormat::Keys => {
+            if let Some(id) = &comment.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,author,created,updated,body");
+            println!(
+                "{},{},{},{},{}",
+                csv_cell(comment.id.as_deref().unwrap_or_default()),
+                csv_cell(comment.author_display_name.as_deref().unwrap_or_default()),
+                csv_cell(comment.created.as_deref().unwrap_or_default()),
+                csv_cell(comment.updated.as_deref().unwrap_or_default()),
+                csv_cell(comment.body_text.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Comment: {}", comment.id.as_deref().unwrap_or("-"));
+            if let Some(author) = &comment.author_display_name {
+                println!("Author: {author}");
+            }
+            if let Some(created) = &comment.created {
+                println!("Created: {created}");
+            }
+            if let Some(body) = &comment.body_text {
+                println!("Body: {body}");
+            }
+            Ok(())
+        }
+    }
+}
+
 fn print_project(project: &JiraProject, global: &GlobalArgs) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => output::print_json(project),
@@ -502,6 +829,14 @@ fn read_optional_text(
     }
 
     Ok(value)
+}
+
+fn read_required_text(
+    value: Option<String>,
+    file: Option<&Path>,
+    name: &str,
+) -> anyhow::Result<String> {
+    read_optional_text(value, file)?.ok_or_else(|| anyhow::anyhow!("missing {name}"))
 }
 
 fn parse_fields(fields: &[String]) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
