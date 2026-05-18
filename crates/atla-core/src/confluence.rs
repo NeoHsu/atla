@@ -164,6 +164,52 @@ impl ConfluenceClient {
         })
     }
 
+    pub async fn list_page_children(
+        &self,
+        search: &ConfluenceContentTreeSearch,
+    ) -> Result<ConfluenceContentTreePage, ApiError> {
+        let id = parse_i64_id(&search.page_id)?;
+        if let Some(depth) = search.depth {
+            let page = generated_apis::descendants_api::get_page_descendants(
+                &self.generated,
+                id,
+                Some(limit_i32(search.limit)),
+                Some(limit_i32(depth)),
+                None,
+            )
+            .await
+            .map_err(generated_error)?;
+
+            return Ok(ConfluenceContentTreePage {
+                results: page
+                    .results
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(ConfluenceContentNode::from)
+                    .collect(),
+            });
+        }
+
+        let page = generated_apis::children_api::get_page_direct_children(
+            &self.generated,
+            id,
+            None,
+            Some(limit_i32(search.limit)),
+            None,
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(ConfluenceContentTreePage {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceContentNode::from)
+                .collect(),
+        })
+    }
+
     pub async fn get_page(&self, id: &str) -> Result<ConfluencePage, ApiError> {
         self.get_page_with_body_format(id, None).await
     }
@@ -212,6 +258,36 @@ impl ConfluenceClient {
         .map_err(generated_error)?;
 
         Ok(page.into())
+    }
+
+    pub async fn copy_page(&self, copy: &ConfluencePageCopy) -> Result<ConfluencePage, ApiError> {
+        let source = self
+            .get_page_with_body_format(&copy.source_id, Some(ConfluenceBodyRepresentation::Storage))
+            .await?;
+        let body = source.body.ok_or_else(|| {
+            ApiError::Decode(format!(
+                "Confluence page `{}` did not include storage body",
+                copy.source_id
+            ))
+        })?;
+        let space_id = copy.space_id.clone().or(source.space_id).ok_or_else(|| {
+            ApiError::Decode(format!(
+                "Confluence page `{}` did not include a space id; pass --space-id",
+                copy.source_id
+            ))
+        })?;
+
+        self.create_page(&ConfluencePageCreate {
+            space_id,
+            title: copy.title.clone(),
+            parent_id: copy.parent_id.clone(),
+            body: Some(body),
+            representation: ConfluenceBodyRepresentation::Storage,
+            status: ConfluenceContentStatus::Current,
+            private: None,
+            root_level: copy.root_level.then_some(true),
+        })
+        .await
     }
 
     pub async fn update_page_title(
@@ -435,6 +511,24 @@ impl ConfluenceClient {
         Ok(page.into())
     }
 
+    pub async fn list_blog_labels(
+        &self,
+        search: &ConfluenceLabelSearch,
+    ) -> Result<ConfluenceLabelPage, ApiError> {
+        let page = generated_apis::label_api::get_blog_post_labels(
+            &self.generated,
+            parse_i64_id(&search.content_id)?,
+            search.prefix.as_deref(),
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
+    }
+
     pub async fn add_page_labels(
         &self,
         content_id: &str,
@@ -472,13 +566,25 @@ impl ConfluenceClient {
         .await
     }
 
+    pub async fn add_blog_labels(
+        &self,
+        content_id: &str,
+        labels: &[String],
+    ) -> Result<ConfluenceLabelPage, ApiError> {
+        self.add_page_labels(content_id, labels).await
+    }
+
+    pub async fn remove_blog_label(&self, content_id: &str, label: &str) -> Result<(), ApiError> {
+        self.remove_page_label(content_id, label).await
+    }
+
     pub async fn list_page_comments(
         &self,
         search: &ConfluenceCommentSearch,
     ) -> Result<ConfluenceCommentPage, ApiError> {
         let page = generated_apis::comment_api::get_page_footer_comments(
             &self.generated,
-            parse_i64_id(&search.page_id)?,
+            parse_i64_id(&search.content_id)?,
             Some(generated_models::PrimaryBodyRepresentation::Storage),
             None,
             None,
@@ -498,6 +604,48 @@ impl ConfluenceClient {
         let created = generated_apis::comment_api::create_footer_comment(
             &self.generated,
             comment.to_generated_page_footer(),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(created.into())
+    }
+
+    pub async fn delete_page_comment(&self, comment_id: &str) -> Result<(), ApiError> {
+        generated_apis::comment_api::delete_footer_comment(
+            &self.generated,
+            parse_i64_id(comment_id)?,
+        )
+        .await
+        .map_err(generated_error)
+    }
+
+    pub async fn list_blog_comments(
+        &self,
+        search: &ConfluenceCommentSearch,
+    ) -> Result<ConfluenceCommentPage, ApiError> {
+        let page = generated_apis::comment_api::get_blog_post_footer_comments(
+            &self.generated,
+            parse_i64_id(&search.content_id)?,
+            Some(generated_models::PrimaryBodyRepresentation::Storage),
+            None,
+            None,
+            None,
+            Some(limit_i32(search.limit)),
+        )
+        .await
+        .map_err(generated_error)?;
+
+        Ok(page.into())
+    }
+
+    pub async fn add_blog_comment(
+        &self,
+        comment: &ConfluenceCommentCreate,
+    ) -> Result<ConfluenceComment, ApiError> {
+        let created = generated_apis::comment_api::create_footer_comment(
+            &self.generated,
+            comment.to_generated_blog_footer(),
         )
         .await
         .map_err(generated_error)?;
@@ -745,6 +893,15 @@ pub struct ConfluencePageCreate {
     pub root_level: Option<bool>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluencePageCopy {
+    pub source_id: String,
+    pub title: String,
+    pub space_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub root_level: bool,
+}
+
 impl ConfluencePageCreate {
     fn to_generated(&self) -> generated_models::CreatePageRequest {
         let mut request = generated_models::CreatePageRequest::new(self.space_id.clone());
@@ -983,6 +1140,34 @@ pub struct ConfluencePagePage {
     pub results: Vec<ConfluencePage>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluenceContentTreeSearch {
+    pub page_id: String,
+    pub limit: u32,
+    pub depth: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceContentTreePage {
+    #[serde(default)]
+    pub results: Vec<ConfluenceContentNode>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfluenceContentNode {
+    pub id: Option<String>,
+    pub status: Option<String>,
+    pub title: Option<String>,
+    #[serde(rename = "type")]
+    pub content_type: Option<String>,
+    pub space_id: Option<String>,
+    pub parent_id: Option<String>,
+    pub depth: Option<i32>,
+    pub child_position: Option<i32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfluencePage {
@@ -1116,13 +1301,13 @@ pub struct ConfluenceLabel {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfluenceCommentSearch {
-    pub page_id: String,
+    pub content_id: String,
     pub limit: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfluenceCommentCreate {
-    pub page_id: String,
+    pub content_id: String,
     pub parent_comment_id: Option<String>,
     pub body: String,
     pub representation: ConfluenceBodyRepresentation,
@@ -1131,7 +1316,24 @@ pub struct ConfluenceCommentCreate {
 impl ConfluenceCommentCreate {
     fn to_generated_page_footer(&self) -> generated_models::CreateFooterCommentModel {
         let mut comment = generated_models::CreateFooterCommentModel::new();
-        comment.page_id = Some(self.page_id.clone());
+        comment.page_id = Some(self.content_id.clone());
+        comment
+            .parent_comment_id
+            .clone_from(&self.parent_comment_id);
+        comment.body = Some(Box::new(
+            generated_models::CreateFooterCommentModelBody::CommentBodyWrite(Box::new(
+                generated_models::CommentBodyWrite {
+                    representation: Some(self.representation.as_comment_body_write()),
+                    value: Some(self.body.clone()),
+                },
+            )),
+        ));
+        comment
+    }
+
+    fn to_generated_blog_footer(&self) -> generated_models::CreateFooterCommentModel {
+        let mut comment = generated_models::CreateFooterCommentModel::new();
+        comment.blog_post_id = Some(self.content_id.clone());
         comment
             .parent_comment_id
             .clone_from(&self.parent_comment_id);
@@ -1161,6 +1363,7 @@ pub struct ConfluenceComment {
     pub status: Option<String>,
     pub title: Option<String>,
     pub page_id: Option<String>,
+    pub blog_post_id: Option<String>,
     pub parent_comment_id: Option<String>,
     pub body: Option<String>,
     pub version: Option<ConfluenceVersion>,
@@ -1326,6 +1529,36 @@ impl From<generated_models::PageBulk> for ConfluencePage {
     }
 }
 
+impl From<generated_models::ChildrenResponse> for ConfluenceContentNode {
+    fn from(child: generated_models::ChildrenResponse) -> Self {
+        Self {
+            id: child.id,
+            status: child.status.map(|status| status.to_string()),
+            title: child.title,
+            content_type: child.r#type,
+            space_id: child.space_id,
+            parent_id: None,
+            depth: None,
+            child_position: child.child_position.flatten(),
+        }
+    }
+}
+
+impl From<generated_models::DescendantsResponse> for ConfluenceContentNode {
+    fn from(descendant: generated_models::DescendantsResponse) -> Self {
+        Self {
+            id: descendant.id,
+            status: descendant.status.map(|status| status.to_string()),
+            title: descendant.title,
+            content_type: descendant.r#type,
+            space_id: None,
+            parent_id: descendant.parent_id,
+            depth: descendant.depth,
+            child_position: descendant.child_position.flatten(),
+        }
+    }
+}
+
 impl From<generated_models::CreatePage200Response> for ConfluencePage {
     fn from(page: generated_models::CreatePage200Response) -> Self {
         Self {
@@ -1409,6 +1642,19 @@ impl From<generated_models::MultiEntityResultPageCommentModel> for ConfluenceCom
     }
 }
 
+impl From<generated_models::MultiEntityResultBlogPostCommentModel> for ConfluenceCommentPage {
+    fn from(page: generated_models::MultiEntityResultBlogPostCommentModel) -> Self {
+        Self {
+            results: page
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(ConfluenceComment::from)
+                .collect(),
+        }
+    }
+}
+
 impl From<generated_models::PageCommentModel> for ConfluenceComment {
     fn from(comment: generated_models::PageCommentModel) -> Self {
         Self {
@@ -1416,6 +1662,22 @@ impl From<generated_models::PageCommentModel> for ConfluenceComment {
             status: comment.status.map(|status| status.to_string()),
             title: comment.title,
             page_id: comment.page_id,
+            blog_post_id: None,
+            parent_comment_id: None,
+            body: body_from_generated_bulk(comment.body),
+            version: version_from_generated(comment.version),
+        }
+    }
+}
+
+impl From<generated_models::BlogPostCommentModel> for ConfluenceComment {
+    fn from(comment: generated_models::BlogPostCommentModel) -> Self {
+        Self {
+            id: comment.id,
+            status: comment.status.map(|status| status.to_string()),
+            title: comment.title,
+            page_id: None,
+            blog_post_id: comment.blog_post_id,
             parent_comment_id: None,
             body: body_from_generated_bulk(comment.body),
             version: version_from_generated(comment.version),
@@ -1430,6 +1692,7 @@ impl From<generated_models::CreateFooterComment201Response> for ConfluenceCommen
             status: comment.status.map(|status| status.to_string()),
             title: comment.title,
             page_id: comment.page_id,
+            blog_post_id: comment.blog_post_id,
             parent_comment_id: comment.parent_comment_id,
             body: body_from_generated(comment.body),
             version: version_from_generated(comment.version),
@@ -1656,6 +1919,43 @@ mod tests {
     }
 
     #[test]
+    fn converts_direct_child_content_node() {
+        let child = ConfluenceContentNode::from(generated_models::ChildrenResponse {
+            id: Some("333".to_owned()),
+            status: None,
+            title: Some("Folder".to_owned()),
+            r#type: Some("folder".to_owned()),
+            space_id: Some("12345".to_owned()),
+            child_position: Some(Some(4)),
+        });
+
+        assert_eq!(child.id.as_deref(), Some("333"));
+        assert_eq!(child.content_type.as_deref(), Some("folder"));
+        assert_eq!(child.space_id.as_deref(), Some("12345"));
+        assert_eq!(child.child_position, Some(4));
+        assert_eq!(child.depth, None);
+    }
+
+    #[test]
+    fn converts_descendant_content_node() {
+        let descendant = ConfluenceContentNode::from(generated_models::DescendantsResponse {
+            id: Some("444".to_owned()),
+            status: None,
+            title: Some("Whiteboard".to_owned()),
+            r#type: Some("whiteboard".to_owned()),
+            parent_id: Some("333".to_owned()),
+            depth: Some(2),
+            child_position: Some(Some(1)),
+        });
+
+        assert_eq!(descendant.id.as_deref(), Some("444"));
+        assert_eq!(descendant.content_type.as_deref(), Some("whiteboard"));
+        assert_eq!(descendant.parent_id.as_deref(), Some("333"));
+        assert_eq!(descendant.depth, Some(2));
+        assert_eq!(descendant.child_position, Some(1));
+    }
+
+    #[test]
     fn parses_blog_post_page() {
         let page: ConfluenceBlogPostPage = serde_json::from_str(
             r#"{
@@ -1706,7 +2006,7 @@ mod tests {
     #[test]
     fn builds_generated_footer_comment_request() {
         let comment = ConfluenceCommentCreate {
-            page_id: "111".to_owned(),
+            content_id: "111".to_owned(),
             parent_comment_id: Some("222".to_owned()),
             body: "<p>Looks good</p>".to_owned(),
             representation: ConfluenceBodyRepresentation::Storage,

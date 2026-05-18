@@ -4,19 +4,20 @@ use atla_core::{
     ConfluenceAttachment, ConfluenceAttachmentSearch, ConfluenceAttachmentUpload,
     ConfluenceBlogPost, ConfluenceBlogPostCreate, ConfluenceBlogPostSearch,
     ConfluenceBlogPostUpdate, ConfluenceBodyRepresentation, ConfluenceClient, ConfluenceComment,
-    ConfluenceCommentCreate, ConfluenceCommentPage, ConfluenceCommentSearch,
-    ConfluenceContentStatus, ConfluenceLabelPage, ConfluenceLabelSearch, ConfluencePage,
-    ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch,
-    ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpaceSearch,
-    ConfluenceSpaceUpdate,
+    ConfluenceCommentCreate, ConfluenceCommentPage, ConfluenceCommentSearch, ConfluenceContentNode,
+    ConfluenceContentStatus, ConfluenceContentTreeSearch, ConfluenceLabelPage,
+    ConfluenceLabelSearch, ConfluencePage, ConfluencePageCopy, ConfluencePageCreate,
+    ConfluencePageSearch, ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchResult,
+    ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpaceSearch, ConfluenceSpaceUpdate,
 };
 use std::fs;
 use std::path::Path;
 
 use crate::cli::{
-    AttachmentAction, AttachmentCommand, BlogAction, BlogCommand, BodyRepresentation,
-    ConfluenceCommand, ConfluenceResource, ContentViewFormat, GlobalArgs, OutputFormat, PageAction,
-    PageCommand, PageCommentAction, PageLabelAction, SpaceAction, SpaceCommand,
+    AttachmentAction, AttachmentCommand, BlogAction, BlogCommand, BlogCommentAction,
+    BlogLabelAction, BodyRepresentation, ConfluenceCommand, ConfluenceResource, ContentViewFormat,
+    GlobalArgs, OutputFormat, PageAction, PageCommand, PageCommentAction, PageLabelAction,
+    SpaceAction, SpaceCommand,
 };
 use crate::context::AppContext;
 use crate::output;
@@ -255,6 +256,7 @@ async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<(
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let representation = confluence_body_representation(representation)?;
 
             if global.dry_run {
                 if let Some(space) = &space {
@@ -279,7 +281,7 @@ async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<(
                     space_id,
                     title,
                     body,
-                    representation: representation.into(),
+                    representation,
                     status: status_from_draft(draft),
                     private: private.then_some(true),
                 })
@@ -383,6 +385,7 @@ async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<(
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let representation = confluence_body_representation(representation)?;
 
             if global.dry_run {
                 println!(
@@ -424,7 +427,7 @@ async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<(
                     title,
                     space_id: existing.space_id,
                     body,
-                    representation: representation.into(),
+                    representation,
                     version: next_version,
                     message,
                 })
@@ -472,6 +475,12 @@ async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<(
                 })?;
             print_deleted("blogPost", &id, global)?;
         }
+        BlogAction::Label { action } => {
+            run_blog_label(action, global).await?;
+        }
+        BlogAction::Comment { action } => {
+            run_blog_comment(action, global).await?;
+        }
     }
 
     Ok(())
@@ -510,7 +519,8 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
                 return Ok(());
             }
 
-            let body = read_body(body, body_file.as_deref())?;
+            let (body, representation) =
+                prepare_optional_body(read_body(body, body_file.as_deref())?, representation)?;
             let client = ctx.confluence_client()?;
             let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
             let page = client
@@ -519,7 +529,7 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
                     title,
                     parent_id: parent,
                     body,
-                    representation: representation.into(),
+                    representation,
                     status: status_from_draft(draft),
                     private: private.then_some(true),
                     root_level: root_level.then_some(true),
@@ -629,6 +639,98 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
                 print_page(&page, global)?;
             }
         }
+        PageAction::Children { id, depth, limit } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let search = ConfluenceContentTreeSearch {
+                page_id: id,
+                limit: limit.clamp(1, 250),
+                depth: depth.map(|depth| depth.clamp(1, 100)),
+            };
+
+            if global.dry_run {
+                let endpoint = if let Some(depth) = search.depth {
+                    format!(
+                        "{}/wiki/api/v2/pages/{}/descendants?limit={}&depth={depth}",
+                        profile.instance.trim_end_matches('/'),
+                        search.page_id,
+                        search.limit
+                    )
+                } else {
+                    format!(
+                        "{}/wiki/api/v2/pages/{}/direct-children?limit={}",
+                        profile.instance.trim_end_matches('/'),
+                        search.page_id,
+                        search.limit
+                    )
+                };
+                println!("Would GET {endpoint} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let children = client.list_page_children(&search).await.with_context(|| {
+                format!(
+                    "failed to list Confluence page children for `{}` from {}",
+                    search.page_id,
+                    client.instance_url()
+                )
+            })?;
+
+            print_content_nodes(&children.results, global)?;
+        }
+        PageAction::Copy {
+            source_id,
+            title,
+            space,
+            space_id,
+            parent,
+            root_level,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                if let Some(space) = &space {
+                    println!(
+                        "Would GET {}/wiki/api/v2/spaces?keys={space}&limit=1 using profile `{profile_name}`",
+                        profile.instance.trim_end_matches('/')
+                    );
+                }
+                println!(
+                    "Would GET {}/wiki/api/v2/pages/{}?body-format=storage using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    source_id
+                );
+                println!(
+                    "Would POST {}/wiki/api/v2/pages using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let resolved_space_id = resolve_space_id(&client, space.as_deref(), space_id).await?;
+            let page = client
+                .copy_page(&ConfluencePageCopy {
+                    source_id: source_id.clone(),
+                    title,
+                    space_id: resolved_space_id,
+                    parent_id: parent,
+                    root_level,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to copy Confluence page `{source_id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_page(&page, global)?;
+        }
         PageAction::Update {
             id,
             title,
@@ -690,9 +792,11 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
                 return Ok(());
             }
 
-            let body = read_body(body, body_file.as_deref())?.ok_or_else(|| {
-                anyhow::anyhow!("page body update and move require --body or --body-file")
-            })?;
+            let (body, representation) = prepare_required_body(
+                read_body(body, body_file.as_deref())?,
+                representation,
+                "page body update and move require --body or --body-file",
+            )?;
             let title = title
                 .or(existing.title)
                 .ok_or_else(|| anyhow::anyhow!("page `{id}` did not include a title"))?;
@@ -716,7 +820,7 @@ async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyhow::Result<(
                     space_id: existing.space_id,
                     parent_id: parent,
                     body,
-                    representation: representation.into(),
+                    representation,
                     version: next_version,
                     message,
                 })
@@ -1080,7 +1184,7 @@ async fn run_page_comment(action: PageCommentAction, global: &GlobalArgs) -> any
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
             let search = ConfluenceCommentSearch {
-                page_id,
+                content_id: page_id,
                 limit: limit.clamp(1, 250),
             };
 
@@ -1088,7 +1192,7 @@ async fn run_page_comment(action: PageCommentAction, global: &GlobalArgs) -> any
                 println!(
                     "Would GET {}/wiki/api/v2/pages/{}/footer-comments?limit={} using profile `{profile_name}`",
                     profile.instance.trim_end_matches('/'),
-                    search.page_id,
+                    search.content_id,
                     search.limit
                 );
                 return Ok(());
@@ -1113,8 +1217,11 @@ async fn run_page_comment(action: PageCommentAction, global: &GlobalArgs) -> any
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let body = read_body(body, body_file.as_deref())?
-                .ok_or_else(|| anyhow::anyhow!("missing comment body"))?;
+            let (body, representation) = prepare_required_body(
+                read_body(body, body_file.as_deref())?,
+                representation,
+                "missing comment body",
+            )?;
 
             if global.dry_run {
                 println!(
@@ -1127,15 +1234,219 @@ async fn run_page_comment(action: PageCommentAction, global: &GlobalArgs) -> any
             let client = ctx.confluence_client()?;
             let comment = client
                 .add_page_comment(&ConfluenceCommentCreate {
-                    page_id,
+                    content_id: page_id,
                     parent_comment_id: parent,
                     body,
-                    representation: representation.into(),
+                    representation,
                 })
                 .await
                 .with_context(|| {
                     format!(
                         "failed to add Confluence page comment from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_comment(&comment, global)?;
+        }
+        PageCommentAction::Delete {
+            page_id,
+            comment_id,
+            yes,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if !yes && !global.dry_run {
+                anyhow::bail!("refusing to delete Confluence comment `{comment_id}` without --yes");
+            }
+
+            if global.dry_run {
+                println!(
+                    "Would DELETE {}/wiki/api/v2/footer-comments/{} for page `{page_id}` using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    comment_id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            client
+                .delete_page_comment(&comment_id)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to delete Confluence comment `{comment_id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_deleted("comment", &comment_id, global)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_blog_label(action: BlogLabelAction, global: &GlobalArgs) -> anyhow::Result<()> {
+    match action {
+        BlogLabelAction::List {
+            blog_id,
+            prefix,
+            limit,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let search = ConfluenceLabelSearch {
+                content_id: blog_id,
+                prefix,
+                limit: limit.clamp(1, 250),
+            };
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/wiki/api/v2/blogposts/{}/labels?limit={} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    search.content_id,
+                    search.limit
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let labels = client.list_blog_labels(&search).await.with_context(|| {
+                format!(
+                    "failed to list Confluence blog labels from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_labels(&labels, global)?;
+        }
+        BlogLabelAction::Add { blog_id, labels } => {
+            if labels.is_empty() {
+                anyhow::bail!("provide at least one label");
+            }
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/wiki/rest/api/content/{}/label using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    blog_id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let labels = client
+                .add_blog_labels(&blog_id, &labels)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to add Confluence blog labels from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_labels(&labels, global)?;
+        }
+        BlogLabelAction::Remove { blog_id, label } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would DELETE {}/wiki/rest/api/content/{}/label?name={} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    blog_id,
+                    label
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            client
+                .remove_blog_label(&blog_id, &label)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to remove Confluence blog label `{label}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_deleted("label", &label, global)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_blog_comment(action: BlogCommentAction, global: &GlobalArgs) -> anyhow::Result<()> {
+    match action {
+        BlogCommentAction::List { blog_id, limit } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let search = ConfluenceCommentSearch {
+                content_id: blog_id,
+                limit: limit.clamp(1, 250),
+            };
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/wiki/api/v2/blogposts/{}/footer-comments?limit={} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    search.content_id,
+                    search.limit
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let comments = client.list_blog_comments(&search).await.with_context(|| {
+                format!(
+                    "failed to list Confluence blog comments from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_comments(&comments, global)?;
+        }
+        BlogCommentAction::Add {
+            blog_id,
+            body,
+            body_file,
+            parent,
+            representation,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let body = read_body(body, body_file.as_deref())?
+                .ok_or_else(|| anyhow::anyhow!("missing comment body"))?;
+            let representation = confluence_body_representation(representation)?;
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/wiki/api/v2/footer-comments using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let comment = client
+                .add_blog_comment(&ConfluenceCommentCreate {
+                    content_id: blog_id,
+                    parent_comment_id: parent,
+                    body,
+                    representation,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to add Confluence blog comment from {}",
                         client.instance_url()
                     )
                 })?;
@@ -1190,6 +1501,49 @@ fn read_body(body: Option<String>, body_file: Option<&Path>) -> anyhow::Result<O
             .map(Some),
         (None, None) => Ok(None),
         (Some(_), Some(_)) => unreachable!("clap prevents --body and --body-file together"),
+    }
+}
+
+fn prepare_optional_body(
+    body: Option<String>,
+    representation: BodyRepresentation,
+) -> anyhow::Result<(Option<String>, ConfluenceBodyRepresentation)> {
+    match representation {
+        BodyRepresentation::Markdown => body
+            .map(markdown_body_to_adf)
+            .transpose()
+            .map(|body| (body, ConfluenceBodyRepresentation::AtlasDocFormat)),
+        _ => Ok((body, confluence_body_representation(representation)?)),
+    }
+}
+
+fn prepare_required_body(
+    body: Option<String>,
+    representation: BodyRepresentation,
+    missing_message: &str,
+) -> anyhow::Result<(String, ConfluenceBodyRepresentation)> {
+    let (body, representation) = prepare_optional_body(body, representation)?;
+    Ok((
+        body.ok_or_else(|| anyhow::anyhow!(missing_message.to_owned()))?,
+        representation,
+    ))
+}
+
+fn markdown_body_to_adf(body: String) -> anyhow::Result<String> {
+    serde_json::to_string(&markdown::markdown_to_adf(&body))
+        .context("failed to encode Markdown body as Atlas Doc Format")
+}
+
+fn confluence_body_representation(
+    representation: BodyRepresentation,
+) -> anyhow::Result<ConfluenceBodyRepresentation> {
+    match representation {
+        BodyRepresentation::Storage => Ok(ConfluenceBodyRepresentation::Storage),
+        BodyRepresentation::Wiki => Ok(ConfluenceBodyRepresentation::Wiki),
+        BodyRepresentation::AtlasDocFormat => Ok(ConfluenceBodyRepresentation::AtlasDocFormat),
+        BodyRepresentation::Markdown => {
+            anyhow::bail!("--representation markdown is supported for pages and page comments only")
+        }
     }
 }
 
@@ -1254,16 +1608,6 @@ fn open_web_url(url: &str) -> anyhow::Result<()> {
         _ => {
             println!("{url}");
             Ok(())
-        }
-    }
-}
-
-impl From<BodyRepresentation> for ConfluenceBodyRepresentation {
-    fn from(value: BodyRepresentation) -> Self {
-        match value {
-            BodyRepresentation::Storage => Self::Storage,
-            BodyRepresentation::Wiki => Self::Wiki,
-            BodyRepresentation::AtlasDocFormat => Self::AtlasDocFormat,
         }
     }
 }
@@ -1562,6 +1906,44 @@ fn comment_version(comment: &ConfluenceComment) -> Option<String> {
         .map(|number| number.to_string())
 }
 
+fn print_content_nodes(nodes: &[ConfluenceContentNode], global: &GlobalArgs) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        nodes,
+        nodes.iter().filter_map(|node| node.id.clone()).collect(),
+        &[
+            "id",
+            "type",
+            "title",
+            "status",
+            "space_id",
+            "parent_id",
+            "depth",
+            "child_position",
+        ],
+        nodes
+            .iter()
+            .map(|node| {
+                vec![
+                    node.id.as_deref().unwrap_or("-").to_owned(),
+                    node.content_type.as_deref().unwrap_or("-").to_owned(),
+                    node.title.as_deref().unwrap_or("-").to_owned(),
+                    node.status.as_deref().unwrap_or("-").to_owned(),
+                    node.space_id.as_deref().unwrap_or("-").to_owned(),
+                    node.parent_id.as_deref().unwrap_or("-").to_owned(),
+                    node.depth
+                        .map(|depth| depth.to_string())
+                        .unwrap_or_else(|| "-".to_owned()),
+                    node.child_position
+                        .map(|position| position.to_string())
+                        .unwrap_or_else(|| "-".to_owned()),
+                ]
+            })
+            .collect(),
+        None,
+    )
+}
+
 fn print_pages(pages: &[ConfluencePage], global: &GlobalArgs) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
@@ -1751,5 +2133,37 @@ fn print_space(space: &ConfluenceSpace, global: &GlobalArgs) -> anyhow::Result<(
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn converts_markdown_body_to_adf_write_body() {
+        let (body, representation) = prepare_optional_body(
+            Some("# Title\n\n**Important**".to_owned()),
+            BodyRepresentation::Markdown,
+        )
+        .expect("convert markdown");
+
+        assert_eq!(representation, ConfluenceBodyRepresentation::AtlasDocFormat);
+        let body = body.expect("converted body");
+        let adf: serde_json::Value = serde_json::from_str(&body).expect("adf json");
+        assert_eq!(adf["type"], "doc");
+        assert_eq!(adf["content"][0]["type"], "heading");
+    }
+
+    #[test]
+    fn rejects_markdown_for_non_page_write_paths() {
+        let error = confluence_body_representation(BodyRepresentation::Markdown)
+            .expect_err("markdown should require page-specific conversion");
+
+        assert!(
+            error
+                .to_string()
+                .contains("supported for pages and page comments only")
+        );
     }
 }

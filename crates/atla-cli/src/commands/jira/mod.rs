@@ -2,8 +2,10 @@ use anyhow::Context;
 use atla_core::{
     JiraAssigneeTarget, JiraBoardPage, JiraBoardSearch, JiraComment, JiraCommentPage,
     JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate, JiraIssueLabelUpdate,
-    JiraIssueList, JiraIssueSearch, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint,
-    JiraSprintPage, JiraSprintSearch, JiraTransition, JiraUser,
+    JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch, JiraIssueType,
+    JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage,
+    JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate,
+    JiraWorklogPage,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -11,8 +13,8 @@ use std::path::Path;
 
 use crate::cli::{
     BoardAction, BoardCommand, GlobalArgs, IssueAction, IssueCommand, IssueCommentAction,
-    JiraCommand, JiraResource, OutputFormat, ProjectAction, ProjectCommand, SprintAction,
-    SprintCommand,
+    IssueLinkAction, IssueWorklogAction, JiraCommand, JiraResource, OutputFormat, ProjectAction,
+    ProjectCommand, SprintAction, SprintCommand,
 };
 use crate::context::AppContext;
 use crate::output;
@@ -403,7 +405,78 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
                 print_comments(&page, global)?;
             }
+            IssueCommentAction::Update {
+                key,
+                comment_id,
+                body,
+                body_file,
+            } => {
+                let ctx = AppContext::load(global)?;
+                let profile_name = ctx.profile_name();
+                let profile = ctx.profile();
+                let body = read_required_text(body, body_file.as_deref(), "comment body")?;
+
+                if global.dry_run {
+                    println!(
+                        "Would PUT {}/rest/api/3/issue/{}/comment/{} using profile `{profile_name}`",
+                        profile.instance.trim_end_matches('/'),
+                        key,
+                        comment_id
+                    );
+                    return Ok(());
+                }
+
+                let client = ctx.jira_client()?;
+                let comment = client
+                    .update_comment(&key, &comment_id, &body)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to update comment `{comment_id}` on Jira issue `{key}` from {}",
+                            client.instance_url()
+                        )
+                    })?;
+
+                print_comment(&comment, global)?;
+            }
+            IssueCommentAction::Delete {
+                key,
+                comment_id,
+                yes,
+            } => {
+                let ctx = AppContext::load(global)?;
+                let profile_name = ctx.profile_name();
+                let profile = ctx.profile();
+
+                if !yes && !global.dry_run {
+                    anyhow::bail!("refusing to delete Jira comment `{comment_id}` without --yes");
+                }
+
+                if global.dry_run {
+                    println!(
+                        "Would DELETE {}/rest/api/3/issue/{}/comment/{} using profile `{profile_name}`",
+                        profile.instance.trim_end_matches('/'),
+                        key,
+                        comment_id
+                    );
+                    return Ok(());
+                }
+
+                let client = ctx.jira_client()?;
+                client
+                    .delete_comment(&key, &comment_id)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to delete comment `{comment_id}` on Jira issue `{key}` from {}",
+                            client.instance_url()
+                        )
+                    })?;
+                print_deleted("comment", &comment_id, global)?;
+            }
         },
+        IssueAction::Link { action } => run_issue_link(action, global).await?,
+        IssueAction::Worklog { action } => run_issue_worklog(action, global).await?,
     }
 
     Ok(())
@@ -440,6 +513,158 @@ async fn run_search(jql: String, limit: u32, global: &GlobalArgs) -> anyhow::Res
     })?;
 
     print_issues(&page.issues, global)?;
+    Ok(())
+}
+
+async fn run_issue_link(action: IssueLinkAction, global: &GlobalArgs) -> anyhow::Result<()> {
+    match action {
+        IssueLinkAction::Add {
+            key,
+            link_type,
+            target,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/rest/api/3/issueLink using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            client
+                .create_issue_link(&JiraIssueLinkCreate {
+                    source_key: key.clone(),
+                    target_key: target.clone(),
+                    link_type,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to link Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_issue_update(&key, global)?;
+        }
+        IssueLinkAction::List { key } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/rest/api/3/issue/{}?fields=issuelinks using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let links = client.list_issue_links(&key).await.with_context(|| {
+                format!(
+                    "failed to list links for Jira issue `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_issue_links(&links, global)?;
+        }
+        IssueLinkAction::Remove { link_id, yes } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if !yes && !global.dry_run {
+                anyhow::bail!("refusing to delete Jira issue link `{link_id}` without --yes");
+            }
+
+            if global.dry_run {
+                println!(
+                    "Would DELETE {}/rest/api/3/issueLink/{} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    link_id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            client.delete_issue_link(&link_id).await.with_context(|| {
+                format!(
+                    "failed to delete Jira issue link `{link_id}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_deleted("issueLink", &link_id, global)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_issue_worklog(action: IssueWorklogAction, global: &GlobalArgs) -> anyhow::Result<()> {
+    match action {
+        IssueWorklogAction::Add { key, time, comment } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/rest/api/3/issue/{}/worklog using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let worklog = client
+                .add_worklog(&JiraWorklogCreate {
+                    issue_id_or_key: key.clone(),
+                    time_spent: time,
+                    comment,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to add worklog to Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_worklog(&worklog, global)?;
+        }
+        IssueWorklogAction::List { key, limit } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let limit = limit.clamp(1, 1000);
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/rest/api/3/issue/{}/worklog?startAt=0&maxResults={} using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    key,
+                    limit
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let page = client.list_worklogs(&key, limit).await.with_context(|| {
+                format!(
+                    "failed to list worklogs for Jira issue `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_worklogs(&page, global)?;
+        }
+    }
+
     Ok(())
 }
 
@@ -504,6 +729,29 @@ async fn run_project(command: ProjectCommand, global: &GlobalArgs) -> anyhow::Re
             })?;
 
             print_project(&project, global)?;
+        }
+        ProjectAction::IssueTypes { key } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/rest/api/3/project/{} then GET /rest/api/3/issuetype/project using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let issue_types = client.list_issue_types(&key).await.with_context(|| {
+                format!(
+                    "failed to list issue types for Jira project `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_issue_types(&issue_types, global)?;
         }
     }
 
@@ -587,6 +835,164 @@ async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> anyhow::Resu
             })?;
 
             print_sprint(&sprint, global)?;
+        }
+        SprintAction::Create {
+            board,
+            name,
+            start,
+            end,
+            goal,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/rest/agile/1.0/sprint using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let sprint = client
+                .create_sprint(&JiraSprintCreate {
+                    board_id: board,
+                    name,
+                    start_date: start,
+                    end_date: end,
+                    goal,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to create Jira sprint from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_sprint(&sprint, global)?;
+        }
+        SprintAction::Start { id, start, end } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would PUT {}/rest/agile/1.0/sprint/{} with state active using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let sprint = client
+                .update_sprint(&JiraSprintUpdate {
+                    id,
+                    state: Some("active".to_owned()),
+                    name: None,
+                    start_date: start,
+                    end_date: end,
+                    goal: None,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to start Jira sprint `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_sprint(&sprint, global)?;
+        }
+        SprintAction::Close { id } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would PUT {}/rest/agile/1.0/sprint/{} with state closed using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let sprint = client
+                .update_sprint(&JiraSprintUpdate {
+                    id,
+                    state: Some("closed".to_owned()),
+                    name: None,
+                    start_date: None,
+                    end_date: None,
+                    goal: None,
+                })
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to close Jira sprint `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_sprint(&sprint, global)?;
+        }
+        SprintAction::Add { id, issues } => {
+            if issues.is_empty() {
+                anyhow::bail!("provide at least one issue with --issues");
+            }
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/rest/agile/1.0/sprint/{}/issue using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            client
+                .move_issues_to_sprint(id, &issues)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to move issues to Jira sprint `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_sprint_issue_move(id, &issues, global)?;
+        }
+        SprintAction::Remove { id, issue } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let issues = vec![issue];
+
+            if global.dry_run {
+                println!(
+                    "Would POST {}/rest/agile/1.0/backlog/issue for sprint `{id}` using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            client
+                .move_issues_to_backlog(&issues)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to remove issue from Jira sprint `{id}` via backlog move from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_sprint_issue_move(id, &issues, global)?;
         }
     }
 
@@ -991,6 +1397,121 @@ fn print_comment(comment: &JiraComment, global: &GlobalArgs) -> anyhow::Result<(
     }
 }
 
+fn print_issue_links(links: &[JiraIssueLink], global: &GlobalArgs) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        links,
+        links.iter().filter_map(|link| link.id.clone()).collect(),
+        &["id", "type", "inward", "outward", "summary"],
+        links
+            .iter()
+            .map(|link| {
+                let issue = link.outward_issue.as_ref().or(link.inward_issue.as_ref());
+                vec![
+                    link.id.as_deref().unwrap_or("-").to_owned(),
+                    link.link_type.as_deref().unwrap_or("-").to_owned(),
+                    link.inward_issue
+                        .as_ref()
+                        .and_then(|issue| issue.key.as_deref())
+                        .unwrap_or("-")
+                        .to_owned(),
+                    link.outward_issue
+                        .as_ref()
+                        .and_then(|issue| issue.key.as_deref())
+                        .unwrap_or("-")
+                        .to_owned(),
+                    issue
+                        .and_then(|issue| issue.summary.as_deref())
+                        .unwrap_or("-")
+                        .to_owned(),
+                ]
+            })
+            .collect(),
+        None,
+    )
+}
+
+fn print_worklogs(page: &JiraWorklogPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        page,
+        page.worklogs
+            .iter()
+            .filter_map(|worklog| worklog.id.clone())
+            .collect(),
+        &["id", "author", "time", "seconds", "started", "comment"],
+        page.worklogs
+            .iter()
+            .map(|worklog| {
+                vec![
+                    worklog.id.as_deref().unwrap_or("-").to_owned(),
+                    worklog
+                        .author
+                        .as_ref()
+                        .and_then(|author| author.display_name.as_deref())
+                        .unwrap_or("-")
+                        .to_owned(),
+                    worklog.time_spent.as_deref().unwrap_or("-").to_owned(),
+                    worklog
+                        .time_spent_seconds
+                        .map(|seconds| seconds.to_string())
+                        .unwrap_or_else(|| "-".to_owned()),
+                    worklog.started.as_deref().unwrap_or("-").to_owned(),
+                    worklog
+                        .comment_text()
+                        .unwrap_or_else(|| "-".to_owned())
+                        .replace('\n', " "),
+                ]
+            })
+            .collect(),
+        page.total
+            .map(|total| format!("Showing {} of {total} worklogs.", page.worklogs.len())),
+    )
+}
+
+fn print_worklog(worklog: &JiraWorklog, global: &GlobalArgs) -> anyhow::Result<()> {
+    print_worklogs(
+        &JiraWorklogPage {
+            start_at: 0,
+            max_results: 1,
+            total: Some(1),
+            worklogs: vec![worklog.clone()],
+        },
+        global,
+    )
+}
+
+fn print_issue_types(types: &[JiraIssueType], global: &GlobalArgs) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        types,
+        types
+            .iter()
+            .filter_map(|issue_type| issue_type.id.clone())
+            .collect(),
+        &["id", "name", "subtask", "description"],
+        types
+            .iter()
+            .map(|issue_type| {
+                vec![
+                    issue_type.id.as_deref().unwrap_or("-").to_owned(),
+                    issue_type.name.as_deref().unwrap_or("-").to_owned(),
+                    issue_type
+                        .subtask
+                        .map(|subtask| subtask.to_string())
+                        .unwrap_or_else(|| "-".to_owned()),
+                    issue_type
+                        .description
+                        .as_deref()
+                        .unwrap_or("-")
+                        .replace('\n', " "),
+                ]
+            })
+            .collect(),
+        None,
+    )
+}
+
 fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
@@ -1112,6 +1633,60 @@ fn print_sprint(sprint: &JiraSprint, global: &GlobalArgs) -> anyhow::Result<()> 
             if let Some(goal) = &sprint.goal {
                 println!("Goal: {goal}");
             }
+            Ok(())
+        }
+    }
+}
+
+fn print_sprint_issue_move(
+    sprint_id: u64,
+    issues: &[String],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "sprintId": sprint_id,
+            "issues": issues
+        })),
+        OutputFormat::Keys => {
+            for issue in issues {
+                println!("{issue}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("sprint_id,issue");
+            for issue in issues {
+                println!("{},{}", sprint_id, output::csv_cell(issue));
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Sprint: {sprint_id}");
+            println!("Issues: {}", issues.join(", "));
+            Ok(())
+        }
+    }
+}
+
+fn print_deleted(kind: &str, id: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "deleted": true,
+            "kind": kind,
+            "id": id
+        })),
+        OutputFormat::Keys => {
+            println!("{id}");
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("kind,id,deleted");
+            println!("{},{},true", output::csv_cell(kind), output::csv_cell(id));
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Deleted {kind} {id}");
             Ok(())
         }
     }

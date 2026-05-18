@@ -44,6 +44,7 @@ pub enum BodyRepresentation {
     Storage,
     Wiki,
     AtlasDocFormat,
+    Markdown,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -196,6 +197,14 @@ pub enum IssueAction {
         #[command(subcommand)]
         action: IssueCommentAction,
     },
+    Link {
+        #[command(subcommand)]
+        action: IssueLinkAction,
+    },
+    Worklog {
+        #[command(subcommand)]
+        action: IssueWorklogAction,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -206,6 +215,55 @@ pub enum IssueCommentAction {
         body: Option<String>,
         #[arg(long)]
         body_file: Option<PathBuf>,
+    },
+    List {
+        key: String,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Update {
+        key: String,
+        comment_id: String,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+    },
+    Delete {
+        key: String,
+        comment_id: String,
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IssueLinkAction {
+    Add {
+        key: String,
+        #[arg(long = "type")]
+        link_type: String,
+        #[arg(long)]
+        target: String,
+    },
+    List {
+        key: String,
+    },
+    Remove {
+        link_id: String,
+        #[arg(long)]
+        yes: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IssueWorklogAction {
+    Add {
+        key: String,
+        #[arg(long)]
+        time: String,
+        #[arg(long)]
+        comment: Option<String>,
     },
     List {
         key: String,
@@ -259,6 +317,38 @@ pub enum SprintAction {
     View {
         id: u64,
     },
+    Create {
+        #[arg(long)]
+        board: u64,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        start: Option<String>,
+        #[arg(long)]
+        end: Option<String>,
+        #[arg(long)]
+        goal: Option<String>,
+    },
+    Start {
+        id: u64,
+        #[arg(long)]
+        start: Option<String>,
+        #[arg(long)]
+        end: Option<String>,
+    },
+    Close {
+        id: u64,
+    },
+    Add {
+        id: u64,
+        #[arg(long, value_delimiter = ',')]
+        issues: Vec<String>,
+    },
+    Remove {
+        id: u64,
+        #[arg(long)]
+        issue: String,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -276,6 +366,9 @@ pub enum ProjectAction {
         limit: u32,
     },
     View {
+        key: String,
+    },
+    IssueTypes {
         key: String,
     },
 }
@@ -345,6 +438,26 @@ pub enum PageAction {
         web: bool,
         #[arg(long, value_enum)]
         format: Option<ContentViewFormat>,
+    },
+    Children {
+        id: String,
+        #[arg(long)]
+        depth: Option<u32>,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Copy {
+        source_id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(short = 's', long)]
+        space: Option<String>,
+        #[arg(long)]
+        space_id: Option<String>,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long)]
+        root_level: bool,
     },
     Update {
         id: String,
@@ -426,6 +539,12 @@ pub enum PageCommentAction {
         #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
         representation: BodyRepresentation,
     },
+    Delete {
+        page_id: String,
+        comment_id: String,
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -492,6 +611,53 @@ pub enum BlogAction {
         draft: bool,
         #[arg(long)]
         yes: bool,
+    },
+    Label {
+        #[command(subcommand)]
+        action: BlogLabelAction,
+    },
+    Comment {
+        #[command(subcommand)]
+        action: BlogCommentAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BlogLabelAction {
+    List {
+        blog_id: String,
+        #[arg(long)]
+        prefix: Option<String>,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Add {
+        blog_id: String,
+        labels: Vec<String>,
+    },
+    Remove {
+        blog_id: String,
+        label: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BlogCommentAction {
+    List {
+        blog_id: String,
+        #[arg(long, default_value_t = 25)]
+        limit: u32,
+    },
+    Add {
+        blog_id: String,
+        #[arg(conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
     },
 }
 

@@ -51,6 +51,25 @@ impl JiraClient {
             .map_err(generated_error)
     }
 
+    pub async fn list_issue_types(
+        &self,
+        project_id_or_key: &str,
+    ) -> Result<Vec<JiraIssueType>, ApiError> {
+        let project = self.get_project(project_id_or_key).await?;
+        let project_id = project.id.ok_or_else(|| {
+            ApiError::Decode(format!(
+                "project `{project_id_or_key}` did not include an id"
+            ))
+        })?;
+
+        read_json(
+            self.raw_client
+                .get("/rest/api/3/issuetype/project")
+                .query(&[("projectId", project_id)]),
+        )
+        .await
+    }
+
     pub async fn create_issue(
         &self,
         issue: &JiraIssueCreate,
@@ -187,6 +206,24 @@ impl JiraClient {
         Ok(comment.into())
     }
 
+    pub async fn update_comment(
+        &self,
+        issue_id_or_key: &str,
+        comment_id: &str,
+        body: &str,
+    ) -> Result<JiraComment, ApiError> {
+        let value: serde_json::Value = read_json(
+            self.raw_client
+                .put(&format!(
+                    "/rest/api/3/issue/{issue_id_or_key}/comment/{comment_id}"
+                ))
+                .json(&serde_json::json!({ "body": text_adf(body) })),
+        )
+        .await?;
+
+        jira_comment_from_value(value)
+    }
+
     pub async fn list_comments(
         &self,
         issue_id_or_key: &str,
@@ -202,6 +239,55 @@ impl JiraClient {
         .map_err(generated_error)?;
 
         Ok(page.into())
+    }
+
+    pub async fn delete_comment(
+        &self,
+        issue_id_or_key: &str,
+        comment_id: &str,
+    ) -> Result<(), ApiError> {
+        read_empty(self.raw_client.delete(&format!(
+            "/rest/api/3/issue/{issue_id_or_key}/comment/{comment_id}"
+        )))
+        .await
+    }
+
+    pub async fn create_issue_link(&self, link: &JiraIssueLinkCreate) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .post("/rest/api/3/issueLink")
+                .json(&link.to_json()),
+        )
+        .await
+    }
+
+    pub async fn list_issue_links(
+        &self,
+        issue_id_or_key: &str,
+    ) -> Result<Vec<JiraIssueLink>, ApiError> {
+        let value: serde_json::Value = read_json(
+            self.raw_client
+                .get(&format!("/rest/api/3/issue/{issue_id_or_key}"))
+                .query(&[("fields", "issuelinks")]),
+        )
+        .await?;
+
+        Ok(value
+            .get("fields")
+            .and_then(|fields| fields.get("issuelinks"))
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(jira_issue_link_from_value)
+            .collect())
+    }
+
+    pub async fn delete_issue_link(&self, link_id: &str) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .delete(&format!("/rest/api/3/issueLink/{link_id}")),
+        )
+        .await
     }
 
     pub async fn delete_issue(
@@ -291,6 +377,74 @@ impl JiraClient {
         read_json(
             self.raw_client
                 .get(&format!("/rest/agile/1.0/sprint/{sprint_id}")),
+        )
+        .await
+    }
+
+    pub async fn create_sprint(&self, sprint: &JiraSprintCreate) -> Result<JiraSprint, ApiError> {
+        read_json(
+            self.raw_client
+                .post("/rest/agile/1.0/sprint")
+                .json(&sprint.to_json()),
+        )
+        .await
+    }
+
+    pub async fn update_sprint(&self, update: &JiraSprintUpdate) -> Result<JiraSprint, ApiError> {
+        read_json(
+            self.raw_client
+                .put(&format!("/rest/agile/1.0/sprint/{}", update.id))
+                .json(&update.to_json()),
+        )
+        .await
+    }
+
+    pub async fn move_issues_to_sprint(
+        &self,
+        sprint_id: u64,
+        issues: &[String],
+    ) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .post(&format!("/rest/agile/1.0/sprint/{sprint_id}/issue"))
+                .json(&serde_json::json!({ "issues": issues })),
+        )
+        .await
+    }
+
+    pub async fn move_issues_to_backlog(&self, issues: &[String]) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .post("/rest/agile/1.0/backlog/issue")
+                .json(&serde_json::json!({ "issues": issues })),
+        )
+        .await
+    }
+
+    pub async fn add_worklog(&self, worklog: &JiraWorklogCreate) -> Result<JiraWorklog, ApiError> {
+        read_json(
+            self.raw_client
+                .post(&format!(
+                    "/rest/api/3/issue/{}/worklog",
+                    worklog.issue_id_or_key
+                ))
+                .json(&worklog.to_json()),
+        )
+        .await
+    }
+
+    pub async fn list_worklogs(
+        &self,
+        issue_id_or_key: &str,
+        max_results: u32,
+    ) -> Result<JiraWorklogPage, ApiError> {
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/api/3/issue/{issue_id_or_key}/worklog"))
+                .query(&[
+                    ("startAt", "0".to_owned()),
+                    ("maxResults", limit_i32(max_results).to_string()),
+                ]),
         )
         .await
     }
@@ -674,6 +828,41 @@ impl From<generated_models::Comment> for JiraComment {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraIssueLinkCreate {
+    pub source_key: String,
+    pub target_key: String,
+    pub link_type: String,
+}
+
+impl JiraIssueLinkCreate {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": { "name": self.link_type },
+            "inwardIssue": { "key": self.source_key },
+            "outwardIssue": { "key": self.target_key }
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueLink {
+    pub id: Option<String>,
+    pub link_type: Option<String>,
+    pub inward_issue: Option<JiraLinkedIssue>,
+    pub outward_issue: Option<JiraLinkedIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraLinkedIssue {
+    pub id: Option<String>,
+    pub key: Option<String>,
+    pub summary: Option<String>,
+    pub status: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraUser {
@@ -771,6 +960,134 @@ pub struct JiraSprint {
     pub complete_date: Option<String>,
     pub origin_board_id: Option<u64>,
     pub goal: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraSprintCreate {
+    pub board_id: u64,
+    pub name: String,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub goal: Option<String>,
+}
+
+impl JiraSprintCreate {
+    fn to_json(&self) -> serde_json::Value {
+        let mut value = serde_json::json!({
+            "originBoardId": self.board_id,
+            "name": self.name,
+        });
+        let object = value.as_object_mut().expect("sprint create is object");
+        if let Some(start_date) = &self.start_date {
+            object.insert("startDate".to_owned(), start_date.clone().into());
+        }
+        if let Some(end_date) = &self.end_date {
+            object.insert("endDate".to_owned(), end_date.clone().into());
+        }
+        if let Some(goal) = &self.goal {
+            object.insert("goal".to_owned(), goal.clone().into());
+        }
+        value
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraSprintUpdate {
+    pub id: u64,
+    pub state: Option<String>,
+    pub name: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub goal: Option<String>,
+}
+
+impl JiraSprintUpdate {
+    fn to_json(&self) -> serde_json::Value {
+        let mut object = serde_json::Map::new();
+        if let Some(state) = &self.state {
+            object.insert("state".to_owned(), state.clone().into());
+        }
+        if let Some(name) = &self.name {
+            object.insert("name".to_owned(), name.clone().into());
+        }
+        if let Some(start_date) = &self.start_date {
+            object.insert("startDate".to_owned(), start_date.clone().into());
+        }
+        if let Some(end_date) = &self.end_date {
+            object.insert("endDate".to_owned(), end_date.clone().into());
+        }
+        if let Some(goal) = &self.goal {
+            object.insert("goal".to_owned(), goal.clone().into());
+        }
+        serde_json::Value::Object(object)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraWorklogCreate {
+    pub issue_id_or_key: String,
+    pub time_spent: String,
+    pub comment: Option<String>,
+}
+
+impl JiraWorklogCreate {
+    fn to_json(&self) -> serde_json::Value {
+        let mut value = serde_json::json!({ "timeSpent": self.time_spent });
+        if let Some(comment) = &self.comment {
+            value
+                .as_object_mut()
+                .expect("worklog create is object")
+                .insert("comment".to_owned(), text_adf(comment));
+        }
+        value
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraWorklogPage {
+    #[serde(default)]
+    pub start_at: u32,
+    #[serde(default)]
+    pub max_results: u32,
+    #[serde(default)]
+    pub total: Option<u32>,
+    #[serde(default)]
+    pub worklogs: Vec<JiraWorklog>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraWorklog {
+    pub id: Option<String>,
+    pub time_spent: Option<String>,
+    pub time_spent_seconds: Option<u64>,
+    pub author: Option<JiraWorklogAuthor>,
+    pub comment: Option<serde_json::Value>,
+    pub started: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraWorklogAuthor {
+    pub display_name: Option<String>,
+    pub account_id: Option<String>,
+}
+
+impl JiraWorklog {
+    pub fn comment_text(&self) -> Option<String> {
+        let object = self.comment.as_ref()?.as_object()?;
+        Some(adf_plain_text(&object.clone().into_iter().collect())).filter(|text| !text.is_empty())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraIssueType {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub subtask: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -892,6 +1209,78 @@ fn adf_plain_text(body: &std::collections::HashMap<String, serde_json::Value>) -
     let mut parts = Vec::new();
     collect_adf_text(&value, &mut parts);
     parts.join("\n")
+}
+
+fn jira_comment_from_value(value: serde_json::Value) -> Result<JiraComment, ApiError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| ApiError::Decode("Jira comment response was not an object".to_owned()))?;
+    let body_text = object
+        .get("body")
+        .and_then(serde_json::Value::as_object)
+        .map(|body| adf_plain_text(&body.clone().into_iter().collect()))
+        .filter(|text| !text.is_empty());
+
+    Ok(JiraComment {
+        id: object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        body_text,
+        author_display_name: object
+            .get("author")
+            .and_then(|author| author.get("displayName"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        created: object
+            .get("created")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        updated: object
+            .get("updated")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
+fn jira_issue_link_from_value(value: &serde_json::Value) -> JiraIssueLink {
+    JiraIssueLink {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        link_type: value
+            .get("type")
+            .and_then(|link_type| link_type.get("name"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        inward_issue: value.get("inwardIssue").map(jira_linked_issue_from_value),
+        outward_issue: value.get("outwardIssue").map(jira_linked_issue_from_value),
+    }
+}
+
+fn jira_linked_issue_from_value(value: &serde_json::Value) -> JiraLinkedIssue {
+    JiraLinkedIssue {
+        id: value
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        key: value
+            .get("key")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        summary: value
+            .get("fields")
+            .and_then(|fields| fields.get("summary"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        status: value
+            .get("fields")
+            .and_then(|fields| fields.get("status"))
+            .and_then(|status| status.get("name"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+    }
 }
 
 fn collect_adf_text(value: &serde_json::Value, parts: &mut Vec<String>) {

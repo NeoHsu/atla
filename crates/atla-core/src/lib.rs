@@ -12,9 +12,10 @@ pub use confluence::{
     ConfluenceAttachmentSearch, ConfluenceAttachmentUpload, ConfluenceBlogPost,
     ConfluenceBlogPostCreate, ConfluenceBlogPostPage, ConfluenceBlogPostSearch,
     ConfluenceBlogPostUpdate, ConfluenceBodyRepresentation, ConfluenceClient, ConfluenceComment,
-    ConfluenceCommentCreate, ConfluenceCommentPage, ConfluenceCommentSearch,
-    ConfluenceContentStatus, ConfluenceLabel, ConfluenceLabelPage, ConfluenceLabelSearch,
-    ConfluencePage, ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch,
+    ConfluenceCommentCreate, ConfluenceCommentPage, ConfluenceCommentSearch, ConfluenceContentNode,
+    ConfluenceContentStatus, ConfluenceContentTreePage, ConfluenceContentTreeSearch,
+    ConfluenceLabel, ConfluenceLabelPage, ConfluenceLabelSearch, ConfluencePage,
+    ConfluencePageCopy, ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch,
     ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchPage, ConfluenceSearchResult,
     ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpacePage, ConfluenceSpaceSearch,
     ConfluenceSpaceUpdate,
@@ -22,8 +23,10 @@ pub use confluence::{
 pub use jira::{
     JiraAssigneeTarget, JiraBoard, JiraBoardPage, JiraBoardSearch, JiraClient, JiraComment,
     JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate,
-    JiraIssueLabelUpdate, JiraIssueList, JiraIssueSearch, JiraIssueSearchPage, JiraIssueUpdate,
-    JiraProject, JiraProjectPage, JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch,
-    JiraStatus, JiraTransition, JiraUser,
+    JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch,
+    JiraIssueSearchPage, JiraIssueType, JiraIssueUpdate, JiraLinkedIssue, JiraProject,
+    JiraProjectPage, JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage,
+    JiraSprintSearch, JiraSprintUpdate, JiraStatus, JiraTransition, JiraUser, JiraWorklog,
+    JiraWorklogCreate, JiraWorklogPage,
 };
 pub use profile::{AtlaConfig, ConfigStore, Profile};
