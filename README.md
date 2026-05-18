@@ -2,23 +2,168 @@
 
 Unified Atlassian CLI for Jira and Confluence.
 
-`atla` is planned as a Rust CLI with:
+`atla` is a Rust CLI for day-to-day Atlassian Cloud work. It provides Jira and
+Confluence commands with profile-based authentication, human-friendly tables,
+and machine-friendly output formats.
 
-- Jira Cloud and Confluence Cloud support.
-- API clients generated from Atlassian OpenAPI specs.
-- Human-friendly table output and machine-friendly JSON/CSV/keys output.
-- Profile-based authentication with tokens stored outside config files.
+## Install
+
+Download a prebuilt binary from GitHub Releases, use the generated installer, or
+install through Homebrew or mise after the first release is published.
+
+Installer script:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/atla/releases/latest/download/atla-installer.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/atla/releases/latest/download/atla-installer.ps1 | iex"
+```
+
+Direct release downloads:
+
+| Platform | Asset |
+| --- | --- |
+| Apple Silicon macOS | `atla-aarch64-apple-darwin.tar.xz` |
+| Intel macOS | `atla-x86_64-apple-darwin.tar.xz` |
+| ARM64 Linux | `atla-aarch64-unknown-linux-gnu.tar.xz` |
+| x64 Linux | `atla-x86_64-unknown-linux-gnu.tar.xz` |
+| x64 Windows | `atla-x86_64-pc-windows-msvc.zip` |
+
+Each archive contains the prebuilt `atla` executable plus README, license, and
+changelog files. Checksums are published next to the release assets.
+
+Homebrew:
+
+```bash
+brew install NeoHsu/tap/atla
+```
+
+mise:
+
+```bash
+mise use -g github:NeoHsu/atla
+```
+
+In `mise.toml`:
+
+```toml
+[tools]
+"github:NeoHsu/atla" = "latest"
+```
+
+From source:
+
+```bash
+cargo install --git https://github.com/NeoHsu/atla atla
+```
 
 ## Current Status
 
-This repository is in Phase 1 setup:
+Phase 1 is ready for an initial binary release.
 
-- Cargo workspace skeleton.
-- CLI command tree.
-- Core module boundaries for auth, profile, client, and markdown conversion.
-- Generated API crates reserved for OpenAPI generator output.
+| Area | Status | Notes |
+| --- | --- | --- |
+| Workspace and CLI | Stable | Cargo workspace, command tree, global output/profile flags. |
+| Authentication | Stable | Profile config in `~/.config/atla/config.toml`; tokens stored in OS keyring. |
+| Jira commands | Stable | Projects, search, issues, comments, assignment, transitions, boards, sprints. |
+| Confluence commands | Stable | Spaces, pages, blogs, search, attachments, page labels, page comments. |
+| Generated clients | Stable | Jira v3, Confluence v2, and scoped Confluence v1 clients are checked in. |
+| Release automation | Stable | GitHub Releases and Homebrew formula publishing via cargo-dist. |
+| Spec refresh automation | Stable | Scheduled workflow opens PRs for Atlassian OpenAPI spec updates. |
 
-See `docs/project-atla/adr/init_atla_cli.md` in the planning workspace for the full ADR.
+## Feature Matrix
+
+| Product | Resource | Commands | Status |
+| --- | --- | --- | --- |
+| Core | Auth | `login`, `logout`, `status`, `switch` | Stable |
+| Core | Config | `set`, `get`, `list` | Stable |
+| Jira | Projects | `list`, `view` | Stable |
+| Jira | Search | JQL search with table, JSON, CSV, and key output | Stable |
+| Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` | Stable |
+| Jira | Issue fields | Summary, description, arbitrary JSON fields, labels | Stable |
+| Jira | Assignment | `assign --to me`, account ID, or user query | Stable |
+| Jira | Transitions | List or apply transitions, with interactive selection when possible | Stable |
+| Jira | Comments | `comment add`, `comment list` | Stable |
+| Jira | Boards | `board list` with project, type, and name filters | Stable |
+| Jira | Sprints | `sprint list`, `sprint active`, `sprint view` | Stable |
+| Confluence | Spaces | `list`, `view`, `create`, `update`, `delete` | Stable |
+| Confluence | Pages | `list`, `view`, `create`, `update`, `move`, `delete` | Stable |
+| Confluence | Page content | Storage, wiki, Atlas Doc Format input; storage, ADF, markdown view output | Stable |
+| Confluence | Page labels | `label list`, `label add`, `label remove` | Stable |
+| Confluence | Page comments | `comment add`, `comment list` | Stable |
+| Confluence | Blogs | `list`, `view`, `create`, `update`, `delete` | Stable |
+| Confluence | Search | CQL search through scoped v1 REST endpoint | Stable |
+| Confluence | Attachments | `list`, `view`, `upload`, `download`, `delete` | Stable |
+| Output | Formats | `table`, `json`, `csv`, `keys` | Stable |
+| Safety | Dry runs | Global `--dry-run` for mutating workflows | Stable |
+
+## Configuration
+
+`atla` stores profile configuration in `~/.config/atla/config.toml` by default.
+API tokens are stored through the OS keyring and are not written to config files.
+
+For isolated development runs, override the config path:
+
+```bash
+ATLA_CONFIG=/tmp/atla-config.toml cargo run -p atla -- config list
+```
+
+Initial auth:
+
+```bash
+atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+atla auth status
+atla config set default-project PROJ
+atla config list --output json
+```
+
+## Usage
+
+Jira examples:
+
+```bash
+atla jira project list
+atla jira project list --query platform --limit 25 --output json
+atla jira project view PROJ
+atla jira search "project = PROJ order by created desc"
+atla jira issue list --project PROJ --status "In Progress"
+atla jira issue create --project PROJ --type Task --summary "Fix login"
+atla jira issue update PROJ-123 --summary "Updated summary"
+atla jira issue edit PROJ-123 --labels add:urgent,remove:low
+atla jira issue view PROJ-123 --web
+atla jira issue assign PROJ-123 --to me
+atla jira issue transition PROJ-123 --to Done
+atla jira issue comment add PROJ-123 "Ready for review"
+atla jira issue delete PROJ-123 --yes
+atla jira board list --project PROJ
+atla jira sprint active --board 84
+```
+
+Confluence examples:
+
+```bash
+atla confluence space list
+atla confluence space create "Development" --key DEV --description "Team docs"
+atla confluence page list --space DEV
+atla confluence page view 67890 --format markdown
+atla confluence page create --space DEV --title "Meeting Notes" --body-file notes.html
+atla confluence page update 67890 --title "Updated Notes"
+atla confluence page move 67890 --parent 12345
+atla confluence page label add 67890 runbook urgent
+atla confluence page comment add 67890 "Looks good"
+atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
+atla confluence search "type=page AND space=DEV"
+atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
+atla confluence attachment download 13579 --output ./diagram.png
+```
+
+Confluence v2 remains the primary generated client. Confluence search,
+attachment upload, and page label mutation use scoped Confluence v1 REST
+endpoints where v2 does not expose the required operation.
 
 ## Development
 
@@ -29,98 +174,30 @@ cargo check
 cargo test
 ```
 
-## Configuration
-
-`atla` stores profile configuration in `~/.config/atla/config.toml` by default.
-API tokens are stored through the OS keyring and are not written to the config file.
-
-For isolated development runs, override the config path:
+Refresh Atlassian specs and generated clients:
 
 ```bash
-ATLA_CONFIG=/tmp/atla-config.toml cargo run -p atla -- config list
+scripts/update-specs.sh
+scripts/generate.sh --in-place
+cargo check --workspace
 ```
 
-Initial auth commands:
+## Release
+
+Releases are built by cargo-dist. The release workflow runs on version tags such
+as `v0.1.0`, builds Linux, macOS, and Windows binaries, creates a GitHub
+Release, and publishes the Homebrew formula to `NeoHsu/homebrew-tap`.
+
+Release checklist:
 
 ```bash
-atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
-atla auth status
-atla config set default-project PROJ
-atla config list --output json
+cargo test --workspace
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-First Jira command:
+Required GitHub secret:
 
-```bash
-atla jira project list
-atla jira project list --query platform --limit 25 --output json
-atla jira project list --output keys
-atla jira project view PROJ
-atla jira project view PROJ --output json
-atla jira search "project = PROJ order by created desc"
-atla jira search "assignee = currentUser() and status != Done" --limit 25 --output keys
-atla jira issue list --project PROJ --status "In Progress"
-atla jira issue list --jql "project = PROJ and assignee = currentUser()" --limit 25
-atla jira issue create --project PROJ --type Task --summary "Fix login"
-atla jira issue create --project PROJ --type Bug --summary "Checkout fails" --description "Steps to reproduce..."
-atla jira issue update PROJ-123 --summary "Updated summary"
-atla jira issue update PROJ-123 --field 'priority={"name":"High"}'
-atla jira issue edit PROJ-123 --labels add:urgent,remove:low
-atla jira issue view PROJ-123
-atla jira issue view PROJ-123 --output json
-atla jira issue view PROJ-123 --web
-atla jira issue assign PROJ-123 --to me
-atla jira issue assign PROJ-123 --to "Jane Doe"
-atla jira issue assign PROJ-123 --to 5b10ac8d82e05b22cc7d4ef5 --account-id
-atla jira issue transition PROJ-123
-atla jira issue transition PROJ-123 --to Done
-atla jira issue comment add PROJ-123 "Ready for review"
-atla jira issue comment list PROJ-123
-atla jira issue delete PROJ-123 --yes
-atla jira board list --project PROJ
-atla jira board list --type scrum --limit 25
-atla jira sprint list --board 84
-atla jira sprint active --board 84
-atla jira sprint view 37
-```
-
-First Confluence commands:
-
-```bash
-atla confluence space list
-atla confluence space list --key DEV --output json
-atla confluence space view DEV
-atla confluence space view DEV --output json
-atla confluence space create "Development" --key DEV --description "Team docs"
-atla confluence space update DEV --name "Development Docs"
-atla confluence space delete DEV --yes
-atla confluence page list --space DEV
-atla confluence page list --space-id 12345 --title "Meeting Notes"
-atla confluence page view 67890
-atla confluence page view 67890 --output json
-atla confluence page view 67890 --format markdown
-atla confluence page view 67890 --web
-atla confluence page create --space DEV --title "Meeting Notes" --body-file notes.html
-atla confluence page update 67890 --title "Updated Notes"
-atla confluence page update 67890 --body-file updated.html
-atla confluence page move 67890 --parent 12345
-atla confluence page label list 67890
-atla confluence page label add 67890 runbook urgent
-atla confluence page label remove 67890 urgent
-atla confluence page comment add 67890 "Looks good"
-atla confluence page comment list 67890
-atla confluence page delete 67890 --yes
-atla confluence blog list --space DEV
-atla confluence blog view 24680
-atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
-atla confluence blog update 24680 --title "Updated Release Notes"
-atla confluence blog delete 24680 --yes
-atla confluence search "type=page AND space=DEV"
-atla confluence attachment list 67890
-atla confluence attachment view 13579
-atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
-atla confluence attachment download 13579 --output ./diagram.png
-atla confluence attachment delete 13579 --yes
-```
-
-Confluence v2 remains the primary generated client. Confluence search, attachment upload, and page label mutation use scoped Confluence v1 REST endpoints where v2 does not expose the required operation.
+| Secret | Purpose |
+| --- | --- |
+| `HOMEBREW_TAP_TOKEN` | Personal access token or GitHub App token with write access to `NeoHsu/homebrew-tap`. |
