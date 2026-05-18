@@ -1,15 +1,18 @@
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, KeyringCredentialStore};
 use atla_core::{
-    AtlaConfig, AtlassianClient, ConfigStore, JiraClient, JiraComment, JiraCommentPage,
-    JiraCreatedIssue, JiraIssue, JiraIssueCreate, JiraIssueList, JiraIssueSearch, JiraIssueUpdate,
-    JiraProject, JiraProjectSearch, JiraTransition, Profile,
+    AtlaConfig, AtlassianClient, ConfigStore, JiraAssigneeTarget, JiraBoardPage, JiraBoardSearch,
+    JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign,
+    JiraIssueCreate, JiraIssueList, JiraIssueSearch, JiraIssueUpdate, JiraProject,
+    JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch, JiraTransition, JiraUser,
+    Profile,
 };
 use std::path::Path;
 
 use crate::cli::{
-    GlobalArgs, IssueAction, IssueCommand, IssueCommentAction, JiraCommand, JiraResource,
-    OutputFormat, ProjectAction, ProjectCommand,
+    BoardAction, BoardCommand, GlobalArgs, IssueAction, IssueCommand, IssueCommentAction,
+    JiraCommand, JiraResource, OutputFormat, ProjectAction, ProjectCommand, SprintAction,
+    SprintCommand,
 };
 use crate::config;
 use crate::output;
@@ -18,8 +21,8 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
     match command.resource {
         JiraResource::Issue(command) => run_issue(command, global).await?,
         JiraResource::Project(command) => run_project(command, global).await?,
-        JiraResource::Sprint => println!("jira sprint commands are planned"),
-        JiraResource::Board => println!("jira board commands are planned"),
+        JiraResource::Sprint(command) => run_sprint(command, global).await?,
+        JiraResource::Board(command) => run_board(command, global).await?,
         JiraResource::Search { jql, limit } => run_search(jql, limit, global).await?,
     }
 
@@ -175,6 +178,85 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             })?;
 
             print_issue(&issue, global)?;
+        }
+        IssueAction::Delete {
+            key,
+            delete_subtasks,
+            yes,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if !yes && !global.dry_run {
+                anyhow::bail!("refusing to delete Jira issue `{key}` without --yes");
+            }
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{}?deleteSubtasks={delete_subtasks}",
+                    profile.instance.trim_end_matches('/'),
+                    key
+                );
+                println!("Would DELETE {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            client
+                .delete_issue(&key, delete_subtasks)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to delete Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_issue_delete(&key, global)?;
+        }
+        IssueAction::Assign {
+            key,
+            to,
+            account_id,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let target = if to.eq_ignore_ascii_case("me") {
+                JiraAssigneeTarget::Me
+            } else if account_id {
+                JiraAssigneeTarget::AccountId(to)
+            } else {
+                JiraAssigneeTarget::Query(to)
+            };
+            let assign = JiraIssueAssign {
+                issue_id_or_key: key,
+                target,
+            };
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{}/assignee",
+                    profile.instance.trim_end_matches('/'),
+                    assign.issue_id_or_key
+                );
+                println!("Would PUT {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let user = client.assign_issue(&assign).await.with_context(|| {
+                format!(
+                    "failed to assign Jira issue `{}` from {}",
+                    assign.issue_id_or_key,
+                    client.instance_url()
+                )
+            })?;
+
+            print_issue_assign(&assign.issue_id_or_key, &user, global)?;
         }
         IssueAction::Transition { key, to } => {
             let store = ConfigStore::default_store().context("failed to find config location")?;
@@ -388,6 +470,136 @@ async fn run_project(command: ProjectCommand, global: &GlobalArgs) -> anyhow::Re
     Ok(())
 }
 
+async fn run_board(command: BoardCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+    match command.action {
+        BoardAction::List {
+            project,
+            board_type,
+            name,
+            limit,
+        } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+            let search = JiraBoardSearch {
+                start_at: 0,
+                max_results: limit.clamp(1, 1000),
+                board_type,
+                name,
+                project_key_or_id: project.or_else(|| profile.default_project.clone()),
+            };
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/agile/1.0/board?startAt={}&maxResults={}",
+                    profile.instance.trim_end_matches('/'),
+                    search.start_at,
+                    search.max_results
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let page = client.search_boards(&search).await.with_context(|| {
+                format!("failed to list Jira boards from {}", client.instance_url())
+            })?;
+
+            print_boards(&page, global)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+    match command.action {
+        SprintAction::List {
+            board,
+            state,
+            limit,
+        } => {
+            run_sprint_list(board, state, limit, global).await?;
+        }
+        SprintAction::Active { board, limit } => {
+            run_sprint_list(board, Some("active".to_owned()), limit, global).await?;
+        }
+        SprintAction::View { id } => {
+            let store = ConfigStore::default_store().context("failed to find config location")?;
+            let atla_config = store.load().context("failed to load config")?;
+            let (profile_name, profile) = active_profile(&atla_config, global)?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/agile/1.0/sprint/{id}",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let token = token_for_profile(profile_name, profile)?;
+            let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+            let sprint = client.get_sprint(id).await.with_context(|| {
+                format!(
+                    "failed to load Jira sprint `{id}` from {}",
+                    client.instance_url()
+                )
+            })?;
+
+            print_sprint(&sprint, global)?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn run_sprint_list(
+    board_id: u64,
+    state: Option<String>,
+    limit: u32,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    let store = ConfigStore::default_store().context("failed to find config location")?;
+    let atla_config = store.load().context("failed to load config")?;
+    let (profile_name, profile) = active_profile(&atla_config, global)?;
+    let search = JiraSprintSearch {
+        board_id,
+        start_at: 0,
+        max_results: limit.clamp(1, 1000),
+        state,
+    };
+
+    if global.dry_run {
+        let url = format!(
+            "{}/rest/agile/1.0/board/{}/sprint?startAt={}&maxResults={}",
+            profile.instance.trim_end_matches('/'),
+            search.board_id,
+            search.start_at,
+            search.max_results
+        );
+        if let Some(state) = &search.state {
+            println!("Would GET {url} with state `{state}` using profile `{profile_name}`");
+        } else {
+            println!("Would GET {url} using profile `{profile_name}`");
+        }
+        return Ok(());
+    }
+
+    let token = token_for_profile(profile_name, profile)?;
+    let client = JiraClient::new(AtlassianClient::from_profile(profile, token));
+    let page = client.list_sprints(&search).await.with_context(|| {
+        format!(
+            "failed to list Jira sprints for board `{board_id}` from {}",
+            client.instance_url()
+        )
+    })?;
+
+    print_sprints(&page, global)?;
+    Ok(())
+}
+
 fn active_profile<'a>(
     atla_config: &'a AtlaConfig,
     global: &GlobalArgs,
@@ -590,6 +802,63 @@ fn print_issue_update(key: &str, global: &GlobalArgs) -> anyhow::Result<()> {
     }
 }
 
+fn print_issue_delete(key: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "key": key,
+            "deleted": true
+        })),
+        OutputFormat::Keys => {
+            println!("{key}");
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,deleted");
+            println!("{},true", csv_cell(key));
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Deleted: {key}");
+            Ok(())
+        }
+    }
+}
+
+fn print_issue_assign(key: &str, user: &JiraUser, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "key": key,
+            "assigned": true,
+            "assignee": user
+        })),
+        OutputFormat::Keys => {
+            println!("{key}");
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("key,assigned,accountId,displayName");
+            println!(
+                "{},true,{},{}",
+                csv_cell(key),
+                csv_cell(user.account_id.as_deref().unwrap_or_default()),
+                csv_cell(user.display_name.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("Assigned: {key}");
+            println!(
+                "Assignee: {}",
+                user.display_name
+                    .as_deref()
+                    .or(user.account_id.as_deref())
+                    .unwrap_or("-")
+            );
+            Ok(())
+        }
+    }
+}
+
 fn print_transitions(transitions: &[JiraTransition], global: &GlobalArgs) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => output::print_json(transitions),
@@ -765,6 +1034,165 @@ fn print_comment(comment: &JiraComment, global: &GlobalArgs) -> anyhow::Result<(
             }
             if let Some(body) = &comment.body_text {
                 println!("Body: {body}");
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(page),
+        OutputFormat::Keys => {
+            for board in &page.values {
+                if let Some(id) = board.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,name,type,self");
+            for board in &page.values {
+                println!(
+                    "{},{},{},{}",
+                    csv_cell(&board.id.map(|id| id.to_string()).unwrap_or_default()),
+                    csv_cell(board.name.as_deref().unwrap_or_default()),
+                    csv_cell(board.board_type.as_deref().unwrap_or_default()),
+                    csv_cell(board.self_url.as_deref().unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<8} {:<10} NAME", "ID", "TYPE");
+            for board in &page.values {
+                println!(
+                    "{:<8} {:<10} {}",
+                    board.id.map(|id| id.to_string()).unwrap_or("-".to_owned()),
+                    board.board_type.as_deref().unwrap_or("-"),
+                    board.name.as_deref().unwrap_or("-")
+                );
+            }
+            if let Some(total) = page.total {
+                println!();
+                println!("Showing {} of {total} boards.", page.values.len());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_sprints(page: &JiraSprintPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(page),
+        OutputFormat::Keys => {
+            for sprint in &page.values {
+                if let Some(id) = sprint.id {
+                    println!("{id}");
+                }
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,name,state,originBoardId,startDate,endDate,completeDate,goal");
+            for sprint in &page.values {
+                println!(
+                    "{},{},{},{},{},{},{},{}",
+                    csv_cell(&sprint.id.map(|id| id.to_string()).unwrap_or_default()),
+                    csv_cell(sprint.name.as_deref().unwrap_or_default()),
+                    csv_cell(sprint.state.as_deref().unwrap_or_default()),
+                    csv_cell(
+                        &sprint
+                            .origin_board_id
+                            .map(|id| id.to_string())
+                            .unwrap_or_default()
+                    ),
+                    csv_cell(sprint.start_date.as_deref().unwrap_or_default()),
+                    csv_cell(sprint.end_date.as_deref().unwrap_or_default()),
+                    csv_cell(sprint.complete_date.as_deref().unwrap_or_default()),
+                    csv_cell(sprint.goal.as_deref().unwrap_or_default())
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{:<8} {:<10} {:<12} NAME", "ID", "STATE", "BOARD");
+            for sprint in &page.values {
+                println!(
+                    "{:<8} {:<10} {:<12} {}",
+                    sprint.id.map(|id| id.to_string()).unwrap_or("-".to_owned()),
+                    sprint.state.as_deref().unwrap_or("-"),
+                    sprint
+                        .origin_board_id
+                        .map(|id| id.to_string())
+                        .unwrap_or("-".to_owned()),
+                    sprint.name.as_deref().unwrap_or("-")
+                );
+            }
+            if let Some(total) = page.total {
+                println!();
+                println!("Showing {} of {total} sprints.", page.values.len());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn print_sprint(sprint: &JiraSprint, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(sprint),
+        OutputFormat::Keys => {
+            if let Some(id) = sprint.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,name,state,originBoardId,startDate,endDate,completeDate,goal");
+            println!(
+                "{},{},{},{},{},{},{},{}",
+                csv_cell(&sprint.id.map(|id| id.to_string()).unwrap_or_default()),
+                csv_cell(sprint.name.as_deref().unwrap_or_default()),
+                csv_cell(sprint.state.as_deref().unwrap_or_default()),
+                csv_cell(
+                    &sprint
+                        .origin_board_id
+                        .map(|id| id.to_string())
+                        .unwrap_or_default()
+                ),
+                csv_cell(sprint.start_date.as_deref().unwrap_or_default()),
+                csv_cell(sprint.end_date.as_deref().unwrap_or_default()),
+                csv_cell(sprint.complete_date.as_deref().unwrap_or_default()),
+                csv_cell(sprint.goal.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!(
+                "ID: {}",
+                sprint.id.map(|id| id.to_string()).unwrap_or("-".to_owned())
+            );
+            println!("Name: {}", sprint.name.as_deref().unwrap_or("-"));
+            println!("State: {}", sprint.state.as_deref().unwrap_or("-"));
+            println!(
+                "Board: {}",
+                sprint
+                    .origin_board_id
+                    .map(|id| id.to_string())
+                    .unwrap_or("-".to_owned())
+            );
+            if let Some(start_date) = &sprint.start_date {
+                println!("Start: {start_date}");
+            }
+            if let Some(end_date) = &sprint.end_date {
+                println!("End: {end_date}");
+            }
+            if let Some(complete_date) = &sprint.complete_date {
+                println!("Complete: {complete_date}");
+            }
+            if let Some(goal) = &sprint.goal {
+                println!("Goal: {goal}");
             }
             Ok(())
         }

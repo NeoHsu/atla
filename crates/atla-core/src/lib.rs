@@ -17,8 +17,10 @@ pub use confluence::{
     ConfluenceSpaceSearch,
 };
 pub use jira::{
-    JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueCreate,
-    JiraIssueList, JiraIssueSearch, JiraIssueSearchPage, JiraIssueUpdate, JiraProject,
-    JiraProjectPage, JiraProjectSearch, JiraStatus, JiraTransition,
+    JiraAssigneeTarget, JiraBoard, JiraBoardPage, JiraBoardSearch, JiraClient, JiraComment,
+    JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate, JiraIssueList,
+    JiraIssueSearch, JiraIssueSearchPage, JiraIssueUpdate, JiraProject, JiraProjectPage,
+    JiraProjectSearch, JiraSprint, JiraSprintPage, JiraSprintSearch, JiraStatus, JiraTransition,
+    JiraUser,
 };
 pub use profile::{AtlaConfig, ConfigStore, Profile};

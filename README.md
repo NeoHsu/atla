@@ -67,10 +67,19 @@ atla jira issue update PROJ-123 --summary "Updated summary"
 atla jira issue update PROJ-123 --field 'priority={"name":"High"}'
 atla jira issue view PROJ-123
 atla jira issue view PROJ-123 --output json
+atla jira issue assign PROJ-123 --to me
+atla jira issue assign PROJ-123 --to "Jane Doe"
+atla jira issue assign PROJ-123 --to 5b10ac8d82e05b22cc7d4ef5 --account-id
 atla jira issue transition PROJ-123
 atla jira issue transition PROJ-123 --to Done
 atla jira issue comment add PROJ-123 "Ready for review"
 atla jira issue comment list PROJ-123
+atla jira issue delete PROJ-123 --yes
+atla jira board list --project PROJ
+atla jira board list --type scrum --limit 25
+atla jira sprint list --board 84
+atla jira sprint active --board 84
+atla jira sprint view 37
 ```
 
 First Confluence commands:

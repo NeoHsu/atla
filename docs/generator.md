@@ -49,6 +49,12 @@ Jira is currently generated as a scoped partial client under `crates/atla-jira-a
 - Issue create and issue update.
 - Issue transitions and issue comments.
 
+Jira Software Agile endpoints for boards and sprints are not part of the Jira platform v3 OpenAPI source spec used for `atla-jira-api`. Atla currently calls the scoped Agile REST endpoints directly from `atla-core`:
+
+- `GET /rest/agile/1.0/board`
+- `GET /rest/agile/1.0/board/{boardId}/sprint`
+- `GET /rest/agile/1.0/sprint/{sprintId}`
+
 Confluence Cloud v2 generation is smaller and is now generated in-place under `crates/atla-confluence-api`:
 
 - 31 generated API modules.

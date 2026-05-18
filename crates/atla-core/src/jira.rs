@@ -1,7 +1,7 @@
 use atla_jira_api::{apis as generated_apis, models as generated_models};
 use serde::{Deserialize, Serialize};
 
-use crate::client::{ApiError, AtlassianClient};
+use crate::client::{ApiError, AtlassianClient, read_empty, read_json};
 
 #[derive(Debug, Clone)]
 pub struct JiraClient {
@@ -194,6 +194,118 @@ impl JiraClient {
 
         Ok(page.into())
     }
+
+    pub async fn delete_issue(
+        &self,
+        issue_id_or_key: &str,
+        delete_subtasks: bool,
+    ) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .delete(&format!("/rest/api/3/issue/{issue_id_or_key}"))
+                .query(&[("deleteSubtasks", delete_subtasks)]),
+        )
+        .await
+    }
+
+    pub async fn assign_issue(&self, assign: &JiraIssueAssign) -> Result<JiraUser, ApiError> {
+        let user = match &assign.target {
+            JiraAssigneeTarget::Me => self.current_user().await?,
+            JiraAssigneeTarget::AccountId(account_id) => JiraUser {
+                account_id: Some(account_id.clone()),
+                display_name: None,
+                active: None,
+            },
+            JiraAssigneeTarget::Query(query) => {
+                let users = self
+                    .find_assignable_users(&assign.issue_id_or_key, query)
+                    .await?;
+                resolve_assignable_user(query, users)?
+            }
+        };
+        let account_id = user.account_id.clone().ok_or_else(|| {
+            ApiError::Decode("selected Jira user did not include an accountId".to_owned())
+        })?;
+
+        read_empty(
+            self.raw_client
+                .put(&format!(
+                    "/rest/api/3/issue/{}/assignee",
+                    assign.issue_id_or_key
+                ))
+                .json(&JiraAssignIssueRequest { account_id }),
+        )
+        .await?;
+
+        Ok(user)
+    }
+
+    pub async fn search_boards(&self, search: &JiraBoardSearch) -> Result<JiraBoardPage, ApiError> {
+        let mut query = vec![
+            ("startAt", search.start_at.to_string()),
+            ("maxResults", search.max_results.to_string()),
+        ];
+        if let Some(board_type) = &search.board_type {
+            query.push(("type", board_type.clone()));
+        }
+        if let Some(name) = &search.name {
+            query.push(("name", name.clone()));
+        }
+        if let Some(project_key_or_id) = &search.project_key_or_id {
+            query.push(("projectKeyOrId", project_key_or_id.clone()));
+        }
+
+        read_json(self.raw_client.get("/rest/agile/1.0/board").query(&query)).await
+    }
+
+    pub async fn list_sprints(
+        &self,
+        search: &JiraSprintSearch,
+    ) -> Result<JiraSprintPage, ApiError> {
+        let mut query = vec![
+            ("startAt", search.start_at.to_string()),
+            ("maxResults", search.max_results.to_string()),
+        ];
+        if let Some(state) = &search.state {
+            query.push(("state", state.clone()));
+        }
+
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/board/{}/sprint", search.board_id))
+                .query(&query),
+        )
+        .await
+    }
+
+    pub async fn get_sprint(&self, sprint_id: u64) -> Result<JiraSprint, ApiError> {
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/sprint/{sprint_id}")),
+        )
+        .await
+    }
+
+    async fn current_user(&self) -> Result<JiraUser, ApiError> {
+        read_json(self.raw_client.get("/rest/api/3/myself")).await
+    }
+
+    async fn find_assignable_users(
+        &self,
+        issue_id_or_key: &str,
+        query_text: &str,
+    ) -> Result<Vec<JiraUser>, ApiError> {
+        read_json(
+            self.raw_client
+                .get("/rest/api/3/user/assignable/search")
+                .query(&[
+                    ("issueKey", issue_id_or_key.to_owned()),
+                    ("query", query_text.to_owned()),
+                    ("maxResults", "50".to_owned()),
+                ]),
+        )
+        .await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,6 +376,19 @@ impl JiraIssueList {
             max_results: self.max_results,
         })
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraIssueAssign {
+    pub issue_id_or_key: String,
+    pub target: JiraAssigneeTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JiraAssigneeTarget {
+    Me,
+    AccountId(String),
+    Query(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -513,6 +638,105 @@ impl From<generated_models::Comment> for JiraComment {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct JiraUser {
+    pub account_id: Option<String>,
+    pub display_name: Option<String>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraAssignIssueRequest {
+    account_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraBoardSearch {
+    pub start_at: u64,
+    pub max_results: u32,
+    pub board_type: Option<String>,
+    pub name: Option<String>,
+    pub project_key_or_id: Option<String>,
+}
+
+impl Default for JiraBoardSearch {
+    fn default() -> Self {
+        Self {
+            start_at: 0,
+            max_results: 50,
+            board_type: None,
+            name: None,
+            project_key_or_id: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraBoardPage {
+    #[serde(default)]
+    pub start_at: u64,
+    #[serde(default)]
+    pub max_results: u32,
+    #[serde(default)]
+    pub total: Option<u64>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
+    #[serde(default)]
+    pub values: Vec<JiraBoard>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraBoard {
+    pub id: Option<u64>,
+    pub name: Option<String>,
+    #[serde(rename = "type")]
+    pub board_type: Option<String>,
+    #[serde(rename = "self")]
+    pub self_url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraSprintSearch {
+    pub board_id: u64,
+    pub start_at: u64,
+    pub max_results: u32,
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraSprintPage {
+    #[serde(default)]
+    pub start_at: u64,
+    #[serde(default)]
+    pub max_results: u32,
+    #[serde(default)]
+    pub total: Option<u64>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
+    #[serde(default)]
+    pub values: Vec<JiraSprint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraSprint {
+    pub id: Option<u64>,
+    #[serde(rename = "self")]
+    pub self_url: Option<String>,
+    pub state: Option<String>,
+    pub name: Option<String>,
+    pub start_date: Option<String>,
+    pub end_date: Option<String>,
+    pub complete_date: Option<String>,
+    pub origin_board_id: Option<u64>,
+    pub goal: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JiraProjectPage {
     #[serde(default)]
     pub start_at: u64,
@@ -653,6 +877,40 @@ fn collect_adf_text(value: &serde_json::Value, parts: &mut Vec<String>) {
 
 fn quote_jql_value(value: &str) -> String {
     format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn resolve_assignable_user(query: &str, users: Vec<JiraUser>) -> Result<JiraUser, ApiError> {
+    let exact_matches = users
+        .iter()
+        .filter(|user| {
+            user.account_id.as_deref() == Some(query)
+                || user
+                    .display_name
+                    .as_deref()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(query))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if exact_matches.len() == 1 {
+        return Ok(exact_matches.into_iter().next().expect("one exact match"));
+    }
+
+    match users.as_slice() {
+        [user] => Ok(user.clone()),
+        [] => Err(ApiError::Decode(format!(
+            "no assignable Jira user matched `{query}`"
+        ))),
+        _ => {
+            let names = users
+                .iter()
+                .filter_map(|user| user.display_name.as_deref())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(ApiError::Decode(format!(
+                "multiple assignable Jira users matched `{query}`; pass --account-id. matches: {names}"
+            )))
+        }
+    }
 }
 
 fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
@@ -863,6 +1121,106 @@ mod tests {
         assert_eq!(comment.id.as_deref(), Some("10010"));
         assert_eq!(comment.body_text.as_deref(), Some("Line one\nLine two"));
         assert_eq!(comment.author_display_name.as_deref(), Some("Neo"));
+    }
+
+    #[test]
+    fn parses_board_page() {
+        let page: JiraBoardPage = serde_json::from_str(
+            r#"{
+                "isLast": false,
+                "maxResults": 2,
+                "startAt": 0,
+                "total": 5,
+                "values": [
+                    {
+                        "id": 84,
+                        "name": "scrum board",
+                        "self": "https://example.atlassian.net/rest/agile/1.0/board/84",
+                        "type": "scrum"
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse board page");
+
+        assert_eq!(page.total, Some(5));
+        assert_eq!(page.values[0].id, Some(84));
+        assert_eq!(page.values[0].board_type.as_deref(), Some("scrum"));
+    }
+
+    #[test]
+    fn parses_sprint_page() {
+        let page: JiraSprintPage = serde_json::from_str(
+            r#"{
+                "isLast": false,
+                "maxResults": 2,
+                "startAt": 0,
+                "total": 5,
+                "values": [
+                    {
+                        "id": 37,
+                        "self": "https://example.atlassian.net/rest/agile/1.0/sprint/37",
+                        "state": "active",
+                        "name": "Sprint 1",
+                        "startDate": "2026-05-18T00:00:00.000+0000",
+                        "endDate": "2026-06-01T00:00:00.000+0000",
+                        "originBoardId": 84,
+                        "goal": "Ship the CLI"
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse sprint page");
+
+        let sprint = &page.values[0];
+        assert_eq!(sprint.id, Some(37));
+        assert_eq!(sprint.state.as_deref(), Some("active"));
+        assert_eq!(sprint.origin_board_id, Some(84));
+        assert_eq!(sprint.goal.as_deref(), Some("Ship the CLI"));
+    }
+
+    #[test]
+    fn resolves_assignable_user_by_exact_display_name() {
+        let user = resolve_assignable_user(
+            "Neo",
+            vec![
+                JiraUser {
+                    account_id: Some("account-1".to_owned()),
+                    display_name: Some("Neo".to_owned()),
+                    active: Some(true),
+                },
+                JiraUser {
+                    account_id: Some("account-2".to_owned()),
+                    display_name: Some("Neon".to_owned()),
+                    active: Some(true),
+                },
+            ],
+        )
+        .expect("resolved user");
+
+        assert_eq!(user.account_id.as_deref(), Some("account-1"));
+    }
+
+    #[test]
+    fn rejects_ambiguous_assignable_users() {
+        let error = resolve_assignable_user(
+            "neo",
+            vec![
+                JiraUser {
+                    account_id: Some("account-1".to_owned()),
+                    display_name: Some("Neo One".to_owned()),
+                    active: Some(true),
+                },
+                JiraUser {
+                    account_id: Some("account-2".to_owned()),
+                    display_name: Some("Neo Two".to_owned()),
+                    active: Some(true),
+                },
+            ],
+        )
+        .expect_err("ambiguous user");
+
+        assert!(error.to_string().contains("multiple assignable Jira users"));
     }
 
     #[test]

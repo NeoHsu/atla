@@ -99,8 +99,8 @@ pub struct JiraCommand {
 pub enum JiraResource {
     Issue(IssueCommand),
     Project(ProjectCommand),
-    Sprint,
-    Board,
+    Sprint(SprintCommand),
+    Board(BoardCommand),
     Search {
         jql: String,
         #[arg(long, default_value_t = 50)]
@@ -156,6 +156,20 @@ pub enum IssueAction {
     View {
         key: String,
     },
+    Delete {
+        key: String,
+        #[arg(long)]
+        delete_subtasks: bool,
+        #[arg(long)]
+        yes: bool,
+    },
+    Assign {
+        key: String,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        account_id: bool,
+    },
     Transition {
         key: String,
         #[arg(long)]
@@ -180,6 +194,53 @@ pub enum IssueCommentAction {
         key: String,
         #[arg(long, default_value_t = 25)]
         limit: u32,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct BoardCommand {
+    #[command(subcommand)]
+    pub action: BoardAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum BoardAction {
+    List {
+        #[arg(long)]
+        project: Option<String>,
+        #[arg(long = "type")]
+        board_type: Option<String>,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct SprintCommand {
+    #[command(subcommand)]
+    pub action: SprintAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SprintAction {
+    List {
+        #[arg(long)]
+        board: u64,
+        #[arg(long)]
+        state: Option<String>,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    Active {
+        #[arg(long)]
+        board: u64,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    View {
+        id: u64,
     },
 }
 
