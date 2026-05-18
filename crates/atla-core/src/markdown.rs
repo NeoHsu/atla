@@ -1,21 +1,97 @@
 use serde_json::{Value, json};
 
 pub fn markdown_to_adf(markdown: &str) -> Value {
+    let blocks = parse_markdown_blocks(markdown);
     json!({
         "type": "doc",
         "version": 1,
-        "content": [
-            {
-                "type": "paragraph",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": markdown
-                    }
-                ]
-            }
-        ]
+        "content": blocks,
     })
+}
+
+fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
+    let lines = markdown.lines().collect::<Vec<_>>();
+    let mut blocks = Vec::new();
+    let mut index = 0;
+
+    while index < lines.len() {
+        let line = lines[index];
+        if line.trim().is_empty() {
+            index += 1;
+            continue;
+        }
+
+        if let Some((language, code, next_index)) = parse_fenced_code(&lines, index) {
+            blocks.push(adf_code_block(&language, &code));
+            index = next_index;
+            continue;
+        }
+
+        if let Some(level) = markdown_heading_level(line) {
+            let text = line.trim_start().trim_start_matches('#').trim_start();
+            blocks.push(json!({
+                "type": "heading",
+                "attrs": { "level": level },
+                "content": parse_inline_markdown(text),
+            }));
+            index += 1;
+            continue;
+        }
+
+        if is_rule(line) {
+            blocks.push(json!({ "type": "rule" }));
+            index += 1;
+            continue;
+        }
+
+        if line.trim_start().starts_with('>') {
+            let (quote, next_index) = collect_prefixed_block(&lines, index, '>');
+            blocks.push(json!({
+                "type": "blockquote",
+                "content": parse_markdown_blocks(&quote),
+            }));
+            index = next_index;
+            continue;
+        }
+
+        if task_list_marker(line).is_some() {
+            let (items, next_index) = collect_task_items(&lines, index);
+            blocks.push(json!({
+                "type": "taskList",
+                "content": items,
+            }));
+            index = next_index;
+            continue;
+        }
+
+        if unordered_list_text(line).is_some() {
+            let (items, next_index) = collect_list_items(&lines, index, false);
+            blocks.push(json!({
+                "type": "bulletList",
+                "content": items,
+            }));
+            index = next_index;
+            continue;
+        }
+
+        if ordered_list_text(line).is_some() {
+            let order = ordered_list_order(line).unwrap_or(1);
+            let (items, next_index) = collect_list_items(&lines, index, true);
+            blocks.push(json!({
+                "type": "orderedList",
+                "attrs": { "order": order },
+                "content": items,
+            }));
+            index = next_index;
+            continue;
+        }
+
+        let (paragraph, next_index) = collect_paragraph(&lines, index);
+        blocks.push(adf_paragraph(&paragraph));
+        index = next_index;
+    }
+
+    blocks
 }
 
 pub fn adf_to_markdown(adf: &Value) -> String {
@@ -63,6 +139,305 @@ fn render_block(value: &Value, depth: usize) -> String {
             }
         },
         _ => String::new(),
+    }
+}
+
+fn parse_fenced_code(lines: &[&str], start: usize) -> Option<(String, String, usize)> {
+    let line = lines[start].trim_start();
+    let fence = if line.starts_with("```") {
+        "```"
+    } else if line.starts_with("~~~") {
+        "~~~"
+    } else {
+        return None;
+    };
+    let language = line.trim_start_matches(fence).trim().to_owned();
+    let mut code = Vec::new();
+    let mut index = start + 1;
+    while index < lines.len() {
+        if lines[index].trim_start().starts_with(fence) {
+            return Some((language, code.join("\n"), index + 1));
+        }
+        code.push(lines[index]);
+        index += 1;
+    }
+
+    Some((language, code.join("\n"), index))
+}
+
+fn markdown_heading_level(line: &str) -> Option<u64> {
+    let trimmed = line.trim_start();
+    let level = trimmed.chars().take_while(|ch| *ch == '#').count();
+    if (1..=6).contains(&level) && trimmed.chars().nth(level) == Some(' ') {
+        Some(level as u64)
+    } else {
+        None
+    }
+}
+
+fn is_rule(line: &str) -> bool {
+    let trimmed = line.trim();
+    matches!(trimmed, "---" | "***" | "___")
+}
+
+fn collect_prefixed_block(lines: &[&str], start: usize, prefix: char) -> (String, usize) {
+    let mut collected = Vec::new();
+    let mut index = start;
+    while index < lines.len() {
+        let trimmed = lines[index].trim_start();
+        if !trimmed.starts_with(prefix) {
+            break;
+        }
+        collected.push(trimmed[1..].trim_start());
+        index += 1;
+    }
+    (collected.join("\n"), index)
+}
+
+fn collect_task_items(lines: &[&str], start: usize) -> (Vec<Value>, usize) {
+    let mut items = Vec::new();
+    let mut index = start;
+    while index < lines.len() {
+        let Some((checked, text)) = task_list_marker(lines[index]) else {
+            break;
+        };
+        items.push(json!({
+            "type": "taskItem",
+            "attrs": {
+                "localId": format!("task-{}", index + 1),
+                "state": if checked { "DONE" } else { "TODO" },
+            },
+            "content": parse_inline_markdown(text),
+        }));
+        index += 1;
+    }
+    (items, index)
+}
+
+fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value>, usize) {
+    let mut items = Vec::new();
+    let mut index = start;
+    while index < lines.len() {
+        let text = if ordered {
+            ordered_list_text(lines[index])
+        } else {
+            unordered_list_text(lines[index])
+        };
+        let Some(text) = text else {
+            break;
+        };
+        items.push(json!({
+            "type": "listItem",
+            "content": [
+                adf_paragraph(text)
+            ],
+        }));
+        index += 1;
+    }
+    (items, index)
+}
+
+fn collect_paragraph(lines: &[&str], start: usize) -> (String, usize) {
+    let mut collected = Vec::new();
+    let mut index = start;
+    while index < lines.len() {
+        let line = lines[index];
+        if line.trim().is_empty()
+            || parse_fenced_code(lines, index).is_some()
+            || markdown_heading_level(line).is_some()
+            || is_rule(line)
+            || line.trim_start().starts_with('>')
+            || task_list_marker(line).is_some()
+            || unordered_list_text(line).is_some()
+            || ordered_list_text(line).is_some()
+        {
+            break;
+        }
+        collected.push(line.trim());
+        index += 1;
+    }
+    (collected.join(" "), index)
+}
+
+fn task_list_marker(line: &str) -> Option<(bool, &str)> {
+    let text = unordered_list_text(line)?;
+    let trimmed = text.trim_start();
+    if trimmed.len() >= 4 && trimmed.as_bytes()[0] == b'[' && trimmed.as_bytes()[2] == b']' {
+        let marker = trimmed.as_bytes()[1] as char;
+        if marker == ' ' || marker.eq_ignore_ascii_case(&'x') {
+            return Some((marker.eq_ignore_ascii_case(&'x'), trimmed[3..].trim_start()));
+        }
+    }
+    None
+}
+
+fn unordered_list_text(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    let marker = trimmed.chars().next()?;
+    if matches!(marker, '-' | '*' | '+') && trimmed.chars().nth(1) == Some(' ') {
+        Some(trimmed[2..].trim_start())
+    } else {
+        None
+    }
+}
+
+fn ordered_list_text(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    let digits = trimmed.chars().take_while(|ch| ch.is_ascii_digit()).count();
+    if digits > 0
+        && trimmed.chars().nth(digits) == Some('.')
+        && trimmed.chars().nth(digits + 1) == Some(' ')
+    {
+        Some(trimmed[digits + 2..].trim_start())
+    } else {
+        None
+    }
+}
+
+fn ordered_list_order(line: &str) -> Option<u64> {
+    let trimmed = line.trim_start();
+    let digits = trimmed.chars().take_while(|ch| ch.is_ascii_digit()).count();
+    trimmed[..digits].parse().ok()
+}
+
+fn adf_paragraph(text: &str) -> Value {
+    json!({
+        "type": "paragraph",
+        "content": parse_inline_markdown(text),
+    })
+}
+
+fn adf_code_block(language: &str, code: &str) -> Value {
+    let mut block = json!({
+        "type": "codeBlock",
+        "content": [
+            {
+                "type": "text",
+                "text": code,
+            }
+        ],
+    });
+    if !language.is_empty() {
+        block["attrs"] = json!({ "language": language });
+    }
+    block
+}
+
+fn parse_inline_markdown(text: &str) -> Vec<Value> {
+    let mut nodes = Vec::new();
+    let mut plain = String::new();
+    let mut index = 0;
+
+    while index < text.len() {
+        let rest = &text[index..];
+        if let Some((node, consumed)) = parse_inline_token(rest) {
+            push_plain_text(&mut nodes, &mut plain);
+            nodes.push(node);
+            index += consumed;
+        } else if let Some(ch) = rest.chars().next() {
+            plain.push(ch);
+            index += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    push_plain_text(&mut nodes, &mut plain);
+    nodes
+}
+
+fn parse_inline_token(text: &str) -> Option<(Value, usize)> {
+    if let Some(rest) = text.strip_prefix("**") {
+        let end = rest.find("**")?;
+        let inner = &rest[..end];
+        return Some((marked_text(inner, "strong"), end + 4));
+    }
+    if let Some(rest) = text.strip_prefix('*') {
+        let end = rest.find('*')?;
+        let inner = &rest[..end];
+        return Some((marked_text(inner, "em"), end + 2));
+    }
+    if let Some(rest) = text.strip_prefix("~~") {
+        let end = rest.find("~~")?;
+        let inner = &rest[..end];
+        return Some((marked_text(inner, "strike"), end + 4));
+    }
+    if let Some(rest) = text.strip_prefix('`') {
+        let end = rest.find('`')?;
+        let inner = &rest[..end];
+        return Some((marked_text(inner, "code"), end + 2));
+    }
+    if let Some(rest) = text.strip_prefix('[') {
+        let label_end = rest.find(']')?;
+        let after_label = &rest[label_end + 1..];
+        if let Some(after_open) = after_label.strip_prefix('(') {
+            let url_end = after_open.find(')')?;
+            let label = &rest[..label_end];
+            let url = &after_open[..url_end];
+            return Some((link_text(label, url), label_end + 1 + 1 + url_end + 1));
+        }
+    }
+    if let Some(rest) = text.strip_prefix("![") {
+        let alt_end = rest.find(']')?;
+        let after_alt = &rest[alt_end + 1..];
+        if let Some(after_open) = after_alt.strip_prefix('(') {
+            let url_end = after_open.find(')')?;
+            let alt = &rest[..alt_end];
+            let url = &after_open[..url_end];
+            return Some((inline_card(url, alt), alt_end + 2 + url_end + 2));
+        }
+    }
+    None
+}
+
+fn push_plain_text(nodes: &mut Vec<Value>, plain: &mut String) {
+    if !plain.is_empty() {
+        nodes.push(json!({
+            "type": "text",
+            "text": std::mem::take(plain),
+        }));
+    }
+}
+
+fn marked_text(text: &str, mark_type: &str) -> Value {
+    json!({
+        "type": "text",
+        "text": text,
+        "marks": [
+            { "type": mark_type }
+        ],
+    })
+}
+
+fn link_text(text: &str, url: &str) -> Value {
+    json!({
+        "type": "text",
+        "text": text,
+        "marks": [
+            {
+                "type": "link",
+                "attrs": { "href": url }
+            }
+        ],
+    })
+}
+
+fn inline_card(url: &str, alt: &str) -> Value {
+    if alt.is_empty() {
+        json!({
+            "type": "inlineCard",
+            "attrs": { "url": url },
+        })
+    } else {
+        json!({
+            "type": "text",
+            "text": alt,
+            "marks": [
+                {
+                    "type": "link",
+                    "attrs": { "href": url }
+                }
+            ],
+        })
     }
 }
 
@@ -414,6 +789,60 @@ mod tests {
         });
 
         assert_eq!(adf_to_markdown(&adf), "## Runbook\n\nDeploy steps");
+    }
+
+    #[test]
+    fn converts_markdown_blocks_to_adf() {
+        let adf = markdown_to_adf(
+            r#"# Runbook
+
+Deploy **fast** with [docs](https://example.com).
+
+- Build
+- Test
+
+1. Ship
+
+- [x] Verify
+
+> Heads up
+
+```bash
+cargo test
+```
+
+---
+"#,
+        );
+
+        let content = adf["content"].as_array().expect("content array");
+        assert_eq!(content[0]["type"], json!("heading"));
+        assert_eq!(content[0]["attrs"]["level"], json!(1));
+        assert_eq!(content[1]["type"], json!("paragraph"));
+        assert_eq!(
+            content[1]["content"][1]["marks"][0]["type"],
+            json!("strong")
+        );
+        assert_eq!(content[1]["content"][3]["marks"][0]["type"], json!("link"));
+        assert_eq!(content[2]["type"], json!("bulletList"));
+        assert_eq!(content[3]["type"], json!("orderedList"));
+        assert_eq!(content[4]["type"], json!("taskList"));
+        assert_eq!(content[4]["content"][0]["attrs"]["state"], json!("DONE"));
+        assert_eq!(content[5]["type"], json!("blockquote"));
+        assert_eq!(content[6]["type"], json!("codeBlock"));
+        assert_eq!(content[6]["attrs"]["language"], json!("bash"));
+        assert_eq!(content[7]["type"], json!("rule"));
+    }
+
+    #[test]
+    fn round_trips_common_markdown_subset() {
+        let markdown = "## Runbook\n\nDeploy **fast** and `safe`.\n\n- Build\n- Test";
+        let adf = markdown_to_adf(markdown);
+
+        assert_eq!(
+            adf_to_markdown(&adf),
+            "## Runbook\n\nDeploy **fast** and `safe`.\n\n- Build\n- Test"
+        );
     }
 
     #[test]
