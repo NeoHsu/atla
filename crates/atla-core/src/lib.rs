@@ -21,12 +21,12 @@ pub use confluence::{
     ConfluenceSpaceUpdate,
 };
 pub use jira::{
-    JiraAssigneeTarget, JiraBoard, JiraBoardPage, JiraBoardSearch, JiraClient, JiraComment,
-    JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate,
-    JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch,
-    JiraIssueSearchPage, JiraIssueType, JiraIssueUpdate, JiraLinkedIssue, JiraProject,
-    JiraProjectPage, JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage,
-    JiraSprintSearch, JiraSprintUpdate, JiraStatus, JiraTransition, JiraUser, JiraWorklog,
-    JiraWorklogCreate, JiraWorklogPage,
+    JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage,
+    JiraBoardSearch, JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue,
+    JiraIssueAssign, JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate,
+    JiraIssueList, JiraIssueSearch, JiraIssueSearchPage, JiraIssueType, JiraIssueUpdate,
+    JiraLinkedIssue, JiraProject, JiraProjectPage, JiraProjectSearch, JiraSprint, JiraSprintCreate,
+    JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraStatus, JiraTransition, JiraUser,
+    JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
 };
 pub use profile::{AtlaConfig, ConfigStore, Profile};

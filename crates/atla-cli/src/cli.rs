@@ -118,6 +118,8 @@ pub enum JiraResource {
         jql: String,
         #[arg(long, default_value_t = 50)]
         limit: u32,
+        #[arg(long)]
+        fields: Option<String>,
     },
 }
 
@@ -140,6 +142,8 @@ pub enum IssueAction {
         jql: Option<String>,
         #[arg(long, default_value_t = 50)]
         limit: u32,
+        #[arg(long)]
+        fields: Option<String>,
     },
     Create {
         #[arg(long)]
@@ -173,6 +177,8 @@ pub enum IssueAction {
         key: String,
         #[arg(long)]
         web: bool,
+        #[arg(long)]
+        fields: Option<String>,
     },
     Delete {
         key: String,
@@ -192,10 +198,16 @@ pub enum IssueAction {
         key: String,
         #[arg(long)]
         to: Option<String>,
+        #[arg(long = "field")]
+        fields: Vec<String>,
     },
     Comment {
         #[command(subcommand)]
         action: IssueCommentAction,
+    },
+    Attachment {
+        #[command(subcommand)]
+        action: IssueAttachmentAction,
     },
     Link {
         #[command(subcommand)]
@@ -234,6 +246,17 @@ pub enum IssueCommentAction {
         comment_id: String,
         #[arg(long)]
         yes: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum IssueAttachmentAction {
+    Download {
+        target: String,
+        #[arg(long)]
+        all: bool,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 

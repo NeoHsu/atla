@@ -1,5 +1,6 @@
 use atla_jira_api::{apis as generated_apis, models as generated_models};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 use crate::client::{ApiError, AtlassianClient, read_empty, read_json};
 
@@ -108,7 +109,7 @@ impl JiraClient {
             Some(&search.jql),
             None,
             Some(limit_i32(search.max_results)),
-            Some(issue_fields()),
+            Some(search.issue_fields()),
         )
         .await
         .map_err(generated_error)?;
@@ -116,11 +117,15 @@ impl JiraClient {
         Ok(page.into())
     }
 
-    pub async fn get_issue(&self, issue_id_or_key: &str) -> Result<JiraIssue, ApiError> {
+    pub async fn get_issue(
+        &self,
+        issue_id_or_key: &str,
+        fields: Option<Vec<String>>,
+    ) -> Result<JiraIssue, ApiError> {
         generated_apis::issues_api::get_issue(
             &self.generated,
             issue_id_or_key,
-            Some(issue_fields()),
+            Some(issue_fields(fields.as_deref())),
         )
         .await
         .map(JiraIssue::from)
@@ -131,23 +136,21 @@ impl JiraClient {
         &self,
         issue_id_or_key: &str,
     ) -> Result<Vec<JiraTransition>, ApiError> {
-        let transitions =
-            generated_apis::issues_api::get_transitions(&self.generated, issue_id_or_key)
-                .await
-                .map_err(generated_error)?;
+        let transitions: JiraTransitionPage = read_json(
+            self.raw_client
+                .get(&format!("/rest/api/3/issue/{issue_id_or_key}/transitions"))
+                .query(&[("expand", "transitions.fields")]),
+        )
+        .await?;
 
-        Ok(transitions
-            .transitions
-            .unwrap_or_default()
-            .into_iter()
-            .map(JiraTransition::from)
-            .collect())
+        Ok(transitions.transitions.into_iter().collect())
     }
 
     pub async fn transition_issue(
         &self,
         issue_id_or_key: &str,
         transition_id_or_name: &str,
+        fields: serde_json::Map<String, serde_json::Value>,
     ) -> Result<JiraTransition, ApiError> {
         let transitions = self.list_transitions(issue_id_or_key).await?;
         let transition = transitions
@@ -179,13 +182,32 @@ impl JiraClient {
         let transition_id = transition.id.clone().ok_or_else(|| {
             ApiError::Decode("selected transition did not include an id".to_owned())
         })?;
+        let missing_fields = transition
+            .required_fields()
+            .into_iter()
+            .filter(|field| !fields.contains_key(*field))
+            .collect::<Vec<_>>();
+        if !missing_fields.is_empty() {
+            return Err(ApiError::Decode(format!(
+                "transition `{transition_id_or_name}` requires field(s): {}",
+                missing_fields.join(", ")
+            )));
+        }
 
-        let request = generated_models::IssueTransitionRequest::new(
-            generated_models::IssueTransitionRequestTransition::new(transition_id),
+        let mut request = serde_json::Map::new();
+        request.insert(
+            "transition".to_owned(),
+            serde_json::json!({ "id": transition_id }),
         );
-        generated_apis::issues_api::do_transition(&self.generated, issue_id_or_key, request)
-            .await
-            .map_err(generated_error)?;
+        if !fields.is_empty() {
+            request.insert("fields".to_owned(), serde_json::Value::Object(fields));
+        }
+        read_empty(
+            self.raw_client
+                .post(&format!("/rest/api/3/issue/{issue_id_or_key}/transitions"))
+                .json(&serde_json::Value::Object(request)),
+        )
+        .await?;
 
         Ok(transition)
     }
@@ -280,6 +302,93 @@ impl JiraClient {
             .flatten()
             .map(jira_issue_link_from_value)
             .collect())
+    }
+
+    pub async fn get_attachment(&self, id: &str) -> Result<JiraAttachment, ApiError> {
+        read_json(self.raw_client.get(&format!("/rest/api/3/attachment/{id}"))).await
+    }
+
+    pub async fn list_issue_attachments(
+        &self,
+        issue_id_or_key: &str,
+    ) -> Result<Vec<JiraAttachment>, ApiError> {
+        let issue = self
+            .get_issue(issue_id_or_key, Some(vec!["attachment".to_owned()]))
+            .await?;
+        issue
+            .fields
+            .get("attachment")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(serde_json::from_value)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| ApiError::Decode(format!("failed to decode attachments: {error}")))
+    }
+
+    pub async fn download_attachment(
+        &self,
+        id: &str,
+        output: Option<&Path>,
+    ) -> Result<JiraAttachmentDownload, ApiError> {
+        let attachment = self.get_attachment(id).await?;
+        self.download_attachment_metadata(attachment, output).await
+    }
+
+    pub async fn download_issue_attachments(
+        &self,
+        issue_id_or_key: &str,
+        output_dir: Option<&Path>,
+    ) -> Result<Vec<JiraAttachmentDownload>, ApiError> {
+        let attachments = self.list_issue_attachments(issue_id_or_key).await?;
+        let mut downloads = Vec::new();
+        for attachment in attachments {
+            let output = output_dir.map(|dir| dir.join(attachment_filename(&attachment)));
+            downloads.push(
+                self.download_attachment_metadata(attachment, output.as_deref())
+                    .await?,
+            );
+        }
+
+        Ok(downloads)
+    }
+
+    async fn download_attachment_metadata(
+        &self,
+        attachment: JiraAttachment,
+        output: Option<&Path>,
+    ) -> Result<JiraAttachmentDownload, ApiError> {
+        let id = attachment.id.as_deref().unwrap_or("attachment");
+        let content = attachment.content.clone().ok_or_else(|| {
+            ApiError::Decode(format!("attachment `{id}` did not include a content URL"))
+        })?;
+        let response = self.raw_client.get(&content).send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.unwrap_or_default();
+            return Err(ApiError::Http { status, body });
+        }
+        let bytes = response.bytes().await.map_err(ApiError::Request)?;
+        let filename = attachment_filename(&attachment);
+        let path = attachment_output_path(output, filename);
+        if let Some(parent) = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                ApiError::Decode(format!("failed to create {}: {error}", parent.display()))
+            })?;
+        }
+        std::fs::write(&path, &bytes).map_err(|error| {
+            ApiError::Decode(format!("failed to write {}: {error}", path.display()))
+        })?;
+
+        Ok(JiraAttachmentDownload {
+            attachment,
+            path,
+            bytes: bytes.len() as u64,
+        })
     }
 
     pub async fn delete_issue_link(&self, link_id: &str) -> Result<(), ApiError> {
@@ -492,6 +601,13 @@ impl Default for JiraProjectSearch {
 pub struct JiraIssueSearch {
     pub jql: String,
     pub max_results: u32,
+    pub fields: Option<Vec<String>>,
+}
+
+impl JiraIssueSearch {
+    fn issue_fields(&self) -> Vec<String> {
+        issue_fields(self.fields.as_deref())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -501,6 +617,7 @@ pub struct JiraIssueList {
     pub assignee: Option<String>,
     pub jql: Option<String>,
     pub max_results: u32,
+    pub fields: Option<Vec<String>>,
 }
 
 impl JiraIssueList {
@@ -509,6 +626,7 @@ impl JiraIssueList {
             return Ok(JiraIssueSearch {
                 jql: jql.clone(),
                 max_results: self.max_results,
+                fields: self.fields.clone(),
             });
         }
 
@@ -537,6 +655,7 @@ impl JiraIssueList {
         Ok(JiraIssueSearch {
             jql: format!("{} ORDER BY updated DESC", clauses.join(" AND ")),
             max_results: self.max_results,
+            fields: self.fields.clone(),
         })
     }
 }
@@ -744,7 +863,25 @@ impl From<generated_models::IssueBean> for JiraIssue {
 pub struct JiraTransition {
     pub id: Option<String>,
     pub name: Option<String>,
+    #[serde(rename = "toStatus", alias = "to")]
     pub to_status: Option<JiraStatus>,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl JiraTransition {
+    pub fn required_fields(&self) -> Vec<&str> {
+        self.fields
+            .iter()
+            .filter_map(|(id, metadata)| {
+                metadata
+                    .get("required")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+                    .then_some(id.as_str())
+            })
+            .collect()
+    }
 }
 
 impl From<generated_models::Transition> for JiraTransition {
@@ -753,8 +890,16 @@ impl From<generated_models::Transition> for JiraTransition {
             id: transition.id,
             name: transition.name,
             to_status: transition.to.map(|status| JiraStatus::from(*status)),
+            fields: serde_json::Map::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JiraTransitionPage {
+    #[serde(default)]
+    transitions: Vec<JiraTransition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -852,6 +997,27 @@ pub struct JiraIssueLink {
     pub link_type: Option<String>,
     pub inward_issue: Option<JiraLinkedIssue>,
     pub outward_issue: Option<JiraLinkedIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraAttachment {
+    pub id: Option<String>,
+    pub filename: Option<String>,
+    pub mime_type: Option<String>,
+    pub size: Option<u64>,
+    pub author: Option<JiraUser>,
+    pub created: Option<String>,
+    pub content: Option<String>,
+    pub thumbnail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JiraAttachmentDownload {
+    pub attachment: JiraAttachment,
+    pub path: PathBuf,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1148,11 +1314,35 @@ impl From<generated_models::Project> for JiraProject {
     }
 }
 
-fn issue_fields() -> Vec<String> {
+pub fn default_issue_fields() -> Vec<String> {
     ["summary", "status", "assignee", "issuetype", "priority"]
         .into_iter()
         .map(str::to_owned)
         .collect()
+}
+
+fn issue_fields(fields: Option<&[String]>) -> Vec<String> {
+    fields
+        .filter(|fields| !fields.is_empty())
+        .map(|fields| fields.to_vec())
+        .unwrap_or_else(default_issue_fields)
+}
+
+fn attachment_output_path(output: Option<&Path>, filename: &str) -> PathBuf {
+    match output {
+        Some(output) if output.is_dir() => output.join(filename),
+        Some(output) => output.to_path_buf(),
+        None => PathBuf::from(filename),
+    }
+}
+
+fn attachment_filename(attachment: &JiraAttachment) -> &str {
+    attachment
+        .filename
+        .as_deref()
+        .and_then(|filename| Path::new(filename).file_name()?.to_str())
+        .or(attachment.id.as_deref())
+        .unwrap_or("attachment")
 }
 
 fn limit_i32(limit: u32) -> i32 {
@@ -1502,6 +1692,7 @@ mod tests {
             assignee: Some("me".to_owned()),
             jql: None,
             max_results: 25,
+            fields: None,
         };
 
         let search = list.to_search(Some("PROJ")).expect("search");
@@ -1511,6 +1702,7 @@ mod tests {
             "project = \"PROJ\" AND status = \"In Progress\" AND assignee = currentUser() ORDER BY updated DESC"
         );
         assert_eq!(search.max_results, 25);
+        assert_eq!(search.issue_fields(), default_issue_fields());
     }
 
     #[test]
@@ -1521,12 +1713,27 @@ mod tests {
             assignee: None,
             jql: Some("status = Open".to_owned()),
             max_results: 10,
+            fields: None,
         };
 
         let search = list.to_search(None).expect("search");
 
         assert_eq!(search.jql, "status = Open");
         assert_eq!(search.max_results, 10);
+    }
+
+    #[test]
+    fn issue_search_uses_requested_fields() {
+        let search = JiraIssueSearch {
+            jql: "project = PROJ".to_owned(),
+            max_results: 10,
+            fields: Some(vec!["summary".to_owned(), "attachment".to_owned()]),
+        };
+
+        assert_eq!(
+            search.issue_fields(),
+            vec!["summary".to_owned(), "attachment".to_owned()]
+        );
     }
 
     #[test]
@@ -1549,6 +1756,91 @@ mod tests {
                 .and_then(|status| status.name.as_deref()),
             Some("Done")
         );
+    }
+
+    #[test]
+    fn parses_transition_metadata_required_fields() {
+        let page: JiraTransitionPage = serde_json::from_value(serde_json::json!({
+            "transitions": [{
+                "id": "41",
+                "name": "Validation",
+                "to": { "id": "10002", "name": "Validation" },
+                "fields": {
+                    "customfield_12345": { "required": true, "name": "QA note" },
+                    "customfield_67890": { "required": false, "name": "Optional date" }
+                }
+            }]
+        }))
+        .expect("transition metadata");
+
+        let transition = &page.transitions[0];
+        assert_eq!(transition.name.as_deref(), Some("Validation"));
+        assert_eq!(
+            transition
+                .to_status
+                .as_ref()
+                .and_then(|status| status.name.as_deref()),
+            Some("Validation")
+        );
+        assert_eq!(transition.required_fields(), vec!["customfield_12345"]);
+    }
+
+    #[test]
+    fn parses_jira_attachment_metadata() {
+        let attachment: JiraAttachment = serde_json::from_value(serde_json::json!({
+            "id": "10042",
+            "filename": "error-screenshot.png",
+            "mimeType": "image/png",
+            "size": 2048,
+            "created": "2026-05-18T10:00:00.000+0000",
+            "content": "https://example.atlassian.net/rest/api/3/attachment/content/10042",
+            "author": {
+                "accountId": "abc",
+                "displayName": "Neo",
+                "active": true
+            }
+        }))
+        .expect("attachment metadata");
+
+        assert_eq!(attachment.id.as_deref(), Some("10042"));
+        assert_eq!(attachment.filename.as_deref(), Some("error-screenshot.png"));
+        assert_eq!(attachment.mime_type.as_deref(), Some("image/png"));
+        assert_eq!(attachment.size, Some(2048));
+        assert_eq!(
+            attachment
+                .author
+                .as_ref()
+                .and_then(|author| author.display_name.as_deref()),
+            Some("Neo")
+        );
+    }
+
+    #[test]
+    fn builds_attachment_output_paths() {
+        assert_eq!(
+            attachment_output_path(None, "error.png"),
+            std::path::PathBuf::from("error.png")
+        );
+        assert_eq!(
+            attachment_output_path(Some(std::path::Path::new("downloaded.png")), "error.png"),
+            std::path::PathBuf::from("downloaded.png")
+        );
+    }
+
+    #[test]
+    fn attachment_filename_uses_basename() {
+        let attachment = JiraAttachment {
+            id: Some("10042".to_owned()),
+            filename: Some("../error.png".to_owned()),
+            mime_type: None,
+            size: None,
+            author: None,
+            created: None,
+            content: None,
+            thumbnail: None,
+        };
+
+        assert_eq!(attachment_filename(&attachment), "error.png");
     }
 
     #[test]

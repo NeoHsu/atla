@@ -86,6 +86,9 @@ impl AtlassianClient {
     }
 
     pub fn url(&self, path: &str) -> String {
+        if path.starts_with("http://") || path.starts_with("https://") {
+            return path.to_owned();
+        }
         format!(
             "{}/{}",
             self.instance.base_url,
@@ -148,6 +151,20 @@ mod tests {
         assert_eq!(
             client.url("/rest/api/3/project/search"),
             "https://example.atlassian.net/rest/api/3/project/search"
+        );
+    }
+
+    #[test]
+    fn leaves_absolute_urls_unchanged() {
+        let client = AtlassianClient::new(
+            AtlassianInstance::new("https://example.atlassian.net/"),
+            "neo@example.com",
+            "token",
+        );
+
+        assert_eq!(
+            client.url("https://api.media.atlassian.com/file/123"),
+            "https://api.media.atlassian.com/file/123"
         );
     }
 }

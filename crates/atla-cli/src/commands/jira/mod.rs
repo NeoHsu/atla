@@ -1,20 +1,20 @@
 use anyhow::Context;
 use atla_core::{
-    JiraAssigneeTarget, JiraBoardPage, JiraBoardSearch, JiraComment, JiraCommentPage,
-    JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate, JiraIssueLabelUpdate,
-    JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch, JiraIssueType,
-    JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage,
-    JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate,
-    JiraWorklogPage,
+    JiraAssigneeTarget, JiraAttachmentDownload, JiraBoardPage, JiraBoardSearch, JiraComment,
+    JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate,
+    JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch,
+    JiraIssueType, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint, JiraSprintCreate,
+    JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser, JiraWorklog,
+    JiraWorklogCreate, JiraWorklogPage,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
 use std::path::Path;
 
 use crate::cli::{
-    BoardAction, BoardCommand, GlobalArgs, IssueAction, IssueCommand, IssueCommentAction,
-    IssueLinkAction, IssueWorklogAction, JiraCommand, JiraResource, OutputFormat, ProjectAction,
-    ProjectCommand, SprintAction, SprintCommand,
+    BoardAction, BoardCommand, GlobalArgs, IssueAction, IssueAttachmentAction, IssueCommand,
+    IssueCommentAction, IssueLinkAction, IssueWorklogAction, JiraCommand, JiraResource,
+    OutputFormat, ProjectAction, ProjectCommand, SprintAction, SprintCommand,
 };
 use crate::context::AppContext;
 use crate::output;
@@ -25,7 +25,9 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
         JiraResource::Project(command) => run_project(command, global).await?,
         JiraResource::Sprint(command) => run_sprint(command, global).await?,
         JiraResource::Board(command) => run_board(command, global).await?,
-        JiraResource::Search { jql, limit } => run_search(jql, limit, global).await?,
+        JiraResource::Search { jql, limit, fields } => {
+            run_search(jql, limit, fields, global).await?
+        }
     }
 
     Ok(())
@@ -39,16 +41,19 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             assignee,
             jql,
             limit,
+            fields,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let requested_fields = parse_issue_fields(fields.as_deref())?;
             let list = JiraIssueList {
                 project_key: project,
                 status,
                 assignee,
                 jql,
                 max_results: limit.clamp(1, 5000),
+                fields: requested_fields.clone(),
             };
             let search = list
                 .to_search(profile.default_project.as_deref())
@@ -56,9 +61,10 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
             if global.dry_run {
                 let url = format!(
-                    "{}/rest/api/3/search/jql?maxResults={}&fields=summary,status,assignee,issuetype,priority",
+                    "{}/rest/api/3/search/jql?maxResults={}&fields={}",
                     profile.instance.trim_end_matches('/'),
-                    search.max_results
+                    search.max_results,
+                    issue_fields_for_url(requested_fields.as_deref())
                 );
                 println!(
                     "Would GET {url} with JQL `{}` using profile `{profile_name}`",
@@ -72,7 +78,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                 format!("failed to list Jira issues from {}", client.instance_url())
             })?;
 
-            print_issues(&page.issues, global)?;
+            print_issues(&page.issues, global, requested_fields.as_deref())?;
         }
         IssueAction::Create {
             project,
@@ -168,10 +174,11 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
             print_issue_update(&issue.issue_id_or_key, global)?;
         }
-        IssueAction::View { key, web } => {
+        IssueAction::View { key, web, fields } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let requested_fields = parse_issue_fields(fields.as_deref())?;
 
             if global.dry_run {
                 if web {
@@ -183,9 +190,10 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                     return Ok(());
                 }
                 let url = format!(
-                    "{}/rest/api/3/issue/{}?fields=summary,status,assignee,issuetype,priority",
+                    "{}/rest/api/3/issue/{}?fields={}",
                     profile.instance.trim_end_matches('/'),
-                    key
+                    key,
+                    issue_fields_for_url(requested_fields.as_deref())
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
                 return Ok(());
@@ -201,14 +209,17 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             }
 
             let client = ctx.jira_client()?;
-            let issue = client.get_issue(&key).await.with_context(|| {
-                format!(
-                    "failed to load Jira issue `{key}` from {}",
-                    client.instance_url()
-                )
-            })?;
+            let issue = client
+                .get_issue(&key, requested_fields.clone())
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to load Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
 
-            print_issue(&issue, global)?;
+            print_issue(&issue, global, requested_fields.as_deref())?;
         }
         IssueAction::Delete {
             key,
@@ -287,10 +298,11 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
             print_issue_assign(&assign.issue_id_or_key, &user, global)?;
         }
-        IssueAction::Transition { key, to } => {
+        IssueAction::Transition { key, to, fields } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let fields = parse_fields(&fields)?;
 
             if global.dry_run {
                 let url = format!(
@@ -300,22 +312,27 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                 );
                 if let Some(to) = &to {
                     println!(
-                        "Would GET {url}, then POST transition `{to}` using profile `{profile_name}`"
+                        "Would GET {url}?expand=transitions.fields, then POST transition `{to}` using profile `{profile_name}`"
                     );
                 } else {
-                    println!("Would GET {url} using profile `{profile_name}`");
+                    println!(
+                        "Would GET {url}?expand=transitions.fields using profile `{profile_name}`"
+                    );
                 }
                 return Ok(());
             }
 
             let client = ctx.jira_client()?;
             if let Some(to) = to {
-                let transition = client.transition_issue(&key, &to).await.with_context(|| {
-                    format!(
-                        "failed to transition Jira issue `{key}` from {}",
-                        client.instance_url()
-                    )
-                })?;
+                let transition = client
+                    .transition_issue(&key, &to, fields)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to transition Jira issue `{key}` from {}",
+                            client.instance_url()
+                        )
+                    })?;
                 print_transition_update(&key, &transition, global)?;
             } else {
                 let transitions = client.list_transitions(&key).await.with_context(|| {
@@ -334,7 +351,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                             anyhow::anyhow!("selected transition did not include an id or name")
                         })?;
                     let transition = client
-                        .transition_issue(&key, transition_id)
+                        .transition_issue(&key, transition_id, fields)
                         .await
                         .with_context(|| {
                             format!(
@@ -475,6 +492,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                 print_deleted("comment", &comment_id, global)?;
             }
         },
+        IssueAction::Attachment { action } => run_issue_attachment(action, global).await?,
         IssueAction::Link { action } => run_issue_link(action, global).await?,
         IssueAction::Worklog { action } => run_issue_worklog(action, global).await?,
     }
@@ -482,20 +500,28 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
     Ok(())
 }
 
-async fn run_search(jql: String, limit: u32, global: &GlobalArgs) -> anyhow::Result<()> {
+async fn run_search(
+    jql: String,
+    limit: u32,
+    fields: Option<String>,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
     let ctx = AppContext::load(global)?;
     let profile_name = ctx.profile_name();
     let profile = ctx.profile();
+    let requested_fields = parse_issue_fields(fields.as_deref())?;
     let search = JiraIssueSearch {
         jql,
         max_results: limit.clamp(1, 5000),
+        fields: requested_fields.clone(),
     };
 
     if global.dry_run {
         let url = format!(
-            "{}/rest/api/3/search/jql?maxResults={}&fields=summary,status,assignee,issuetype,priority",
+            "{}/rest/api/3/search/jql?maxResults={}&fields={}",
             profile.instance.trim_end_matches('/'),
-            search.max_results
+            search.max_results,
+            issue_fields_for_url(requested_fields.as_deref())
         );
         println!(
             "Would GET {url} with JQL `{}` using profile `{profile_name}`",
@@ -512,7 +538,70 @@ async fn run_search(jql: String, limit: u32, global: &GlobalArgs) -> anyhow::Res
         )
     })?;
 
-    print_issues(&page.issues, global)?;
+    print_issues(&page.issues, global, requested_fields.as_deref())?;
+    Ok(())
+}
+
+async fn run_issue_attachment(
+    action: IssueAttachmentAction,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match action {
+        IssueAttachmentAction::Download {
+            target,
+            all,
+            output,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                if all {
+                    println!(
+                        "Would GET {}/rest/api/3/issue/{}?fields=attachment, then download each attachment using profile `{profile_name}`",
+                        profile.instance.trim_end_matches('/'),
+                        target
+                    );
+                } else {
+                    println!(
+                        "Would GET {}/rest/api/3/attachment/{}, then download its content using profile `{profile_name}`",
+                        profile.instance.trim_end_matches('/'),
+                        target
+                    );
+                }
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let downloads = if all {
+                client
+                    .download_issue_attachments(&target, output.as_deref())
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to download Jira issue attachments for `{target}` from {}",
+                            client.instance_url()
+                        )
+                    })?
+            } else {
+                vec![
+                    client
+                        .download_attachment(&target, output.as_deref())
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "failed to download Jira attachment `{target}` from {}",
+                                client.instance_url()
+                            )
+                        })?,
+                ]
+            };
+
+            print_attachment_downloads(&downloads, global)?;
+        }
+    }
+
     Ok(())
 }
 
@@ -1076,7 +1165,16 @@ fn print_projects(
     )
 }
 
-fn print_issues(issues: &[JiraIssue], global: &GlobalArgs) -> anyhow::Result<()> {
+fn print_issues(
+    issues: &[JiraIssue],
+    global: &GlobalArgs,
+    requested_fields: Option<&[String]>,
+) -> anyhow::Result<()> {
+    let extra_fields = display_extra_issue_fields(requested_fields);
+    let mut headers = vec![
+        "key", "summary", "status", "assignee", "type", "priority", "id",
+    ];
+    headers.extend(extra_fields.iter().map(String::as_str));
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         issues,
@@ -1084,13 +1182,11 @@ fn print_issues(issues: &[JiraIssue], global: &GlobalArgs) -> anyhow::Result<()>
             .iter()
             .filter_map(|issue| issue.key.clone())
             .collect(),
-        &[
-            "key", "summary", "status", "assignee", "type", "priority", "id",
-        ],
+        &headers,
         issues
             .iter()
             .map(|issue| {
-                vec![
+                let mut row = vec![
                     issue.key.as_deref().unwrap_or("-").to_owned(),
                     issue.summary().unwrap_or("-").to_owned(),
                     issue.status_name().unwrap_or("-").to_owned(),
@@ -1098,14 +1194,25 @@ fn print_issues(issues: &[JiraIssue], global: &GlobalArgs) -> anyhow::Result<()>
                     issue.issue_type_name().unwrap_or("-").to_owned(),
                     issue.priority_name().unwrap_or("-").to_owned(),
                     issue.id.as_deref().unwrap_or("-").to_owned(),
-                ]
+                ];
+                row.extend(
+                    extra_fields
+                        .iter()
+                        .map(|field| issue_field_cell(issue, field)),
+                );
+                row
             })
             .collect(),
         None,
     )
 }
 
-fn print_issue(issue: &JiraIssue, global: &GlobalArgs) -> anyhow::Result<()> {
+fn print_issue(
+    issue: &JiraIssue,
+    global: &GlobalArgs,
+    requested_fields: Option<&[String]>,
+) -> anyhow::Result<()> {
+    let extra_fields = display_extra_issue_fields(requested_fields);
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => output::print_json(issue),
         OutputFormat::Keys => {
@@ -1115,17 +1222,26 @@ fn print_issue(issue: &JiraIssue, global: &GlobalArgs) -> anyhow::Result<()> {
             Ok(())
         }
         OutputFormat::Csv => {
-            println!("key,summary,status,assignee,type,priority,id");
-            println!(
-                "{},{},{},{},{},{},{}",
+            let mut headers = vec![
+                "key", "summary", "status", "assignee", "type", "priority", "id",
+            ];
+            headers.extend(extra_fields.iter().map(String::as_str));
+            println!("{}", headers.join(","));
+            let mut row = vec![
                 output::csv_cell(issue.key.as_deref().unwrap_or_default()),
                 output::csv_cell(issue.summary().unwrap_or_default()),
                 output::csv_cell(issue.status_name().unwrap_or_default()),
                 output::csv_cell(issue.assignee_display_name().unwrap_or_default()),
                 output::csv_cell(issue.issue_type_name().unwrap_or_default()),
                 output::csv_cell(issue.priority_name().unwrap_or_default()),
-                output::csv_cell(issue.id.as_deref().unwrap_or_default())
+                output::csv_cell(issue.id.as_deref().unwrap_or_default()),
+            ];
+            row.extend(
+                extra_fields
+                    .iter()
+                    .map(|field| output::csv_cell(&issue_field_cell(issue, field))),
             );
+            println!("{}", row.join(","));
             Ok(())
         }
         OutputFormat::Table => {
@@ -1137,6 +1253,9 @@ fn print_issue(issue: &JiraIssue, global: &GlobalArgs) -> anyhow::Result<()> {
             println!("Priority: {}", issue.priority_name().unwrap_or("-"));
             if let Some(id) = &issue.id {
                 println!("ID: {id}");
+            }
+            for field in extra_fields {
+                println!("{field}: {}", issue_field_cell(issue, &field));
             }
             Ok(())
         }
@@ -1259,7 +1378,7 @@ fn print_transitions(transitions: &[JiraTransition], global: &GlobalArgs) -> any
             .iter()
             .filter_map(|transition| transition.id.clone())
             .collect(),
-        &["id", "name", "toStatus"],
+        &["id", "name", "toStatus", "requiredFields"],
         transitions
             .iter()
             .map(|transition| {
@@ -1272,6 +1391,7 @@ fn print_transitions(transitions: &[JiraTransition], global: &GlobalArgs) -> any
                         .and_then(|status| status.name.as_deref())
                         .unwrap_or("-")
                         .to_owned(),
+                    transition.required_fields().join(", "),
                 ]
             })
             .collect(),
@@ -1509,6 +1629,38 @@ fn print_issue_types(types: &[JiraIssueType], global: &GlobalArgs) -> anyhow::Re
             })
             .collect(),
         None,
+    )
+}
+
+fn print_attachment_downloads(
+    downloads: &[JiraAttachmentDownload],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        downloads,
+        downloads
+            .iter()
+            .map(|download| download.path.display().to_string())
+            .collect(),
+        &["path", "bytes", "id", "filename"],
+        downloads
+            .iter()
+            .map(|download| {
+                vec![
+                    download.path.display().to_string(),
+                    download.bytes.to_string(),
+                    download.attachment.id.as_deref().unwrap_or("-").to_owned(),
+                    download
+                        .attachment
+                        .filename
+                        .as_deref()
+                        .unwrap_or("-")
+                        .to_owned(),
+                ]
+            })
+            .collect(),
+        Some(format!("Downloaded {} attachment(s).", downloads.len())),
     )
 }
 
@@ -1803,6 +1955,76 @@ fn parse_fields(fields: &[String]) -> anyhow::Result<serde_json::Map<String, ser
     Ok(parsed)
 }
 
+fn parse_issue_fields(fields: Option<&str>) -> anyhow::Result<Option<Vec<String>>> {
+    let Some(fields) = fields else {
+        return Ok(None);
+    };
+    let parsed = fields
+        .split(',')
+        .map(str::trim)
+        .filter(|field| !field.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if parsed.is_empty() {
+        anyhow::bail!("--fields must include at least one field");
+    }
+
+    Ok(Some(parsed))
+}
+
+fn issue_fields_for_url(fields: Option<&[String]>) -> String {
+    fields
+        .filter(|fields| !fields.is_empty())
+        .map(|fields| fields.join(","))
+        .unwrap_or_else(|| "summary,status,assignee,issuetype,priority".to_owned())
+}
+
+fn display_extra_issue_fields(fields: Option<&[String]>) -> Vec<String> {
+    let Some(fields) = fields else {
+        return Vec::new();
+    };
+    if fields.iter().any(|field| field == "*all") {
+        return Vec::new();
+    }
+    fields
+        .iter()
+        .filter(|field| {
+            !matches!(
+                field.as_str(),
+                "summary" | "status" | "assignee" | "issuetype" | "priority"
+            )
+        })
+        .cloned()
+        .collect()
+}
+
+fn issue_field_cell(issue: &JiraIssue, field: &str) -> String {
+    issue
+        .fields
+        .get(field)
+        .map(value_cell)
+        .unwrap_or_else(|| "-".to_owned())
+}
+
+fn value_cell(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "-".to_owned(),
+        serde_json::Value::Bool(value) => value.to_string(),
+        serde_json::Value::Number(value) => value.to_string(),
+        serde_json::Value::String(value) => value.clone(),
+        serde_json::Value::Array(values) => {
+            values.iter().map(value_cell).collect::<Vec<_>>().join(", ")
+        }
+        serde_json::Value::Object(object) => object
+            .get("name")
+            .or_else(|| object.get("displayName"))
+            .or_else(|| object.get("value"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| serde_json::to_string(value).unwrap_or_else(|_| "-".to_owned())),
+    }
+}
+
 fn select_transition(transitions: &[JiraTransition]) -> anyhow::Result<&JiraTransition> {
     let items = transitions
         .iter()
@@ -1859,5 +2081,48 @@ fn open_web_url(url: &str) -> anyhow::Result<()> {
             println!("{url}");
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_issue_fields_list() {
+        let fields = parse_issue_fields(Some("summary, description,attachment"))
+            .expect("issue fields")
+            .expect("some fields");
+
+        assert_eq!(
+            fields,
+            vec![
+                "summary".to_owned(),
+                "description".to_owned(),
+                "attachment".to_owned()
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_transition_field_json_values() {
+        let fields = parse_fields(&[
+            r#"customfield_12345={"value":"Ready"}"#.to_owned(),
+            r#"customfield_67890="2026-05-18""#.to_owned(),
+        ])
+        .expect("transition fields");
+
+        assert_eq!(
+            fields["customfield_12345"],
+            serde_json::json!({ "value": "Ready" })
+        );
+        assert_eq!(fields["customfield_67890"], serde_json::json!("2026-05-18"));
+    }
+
+    #[test]
+    fn requested_all_fields_does_not_expand_table_columns() {
+        let fields = vec!["*all".to_owned()];
+
+        assert!(display_extra_issue_fields(Some(&fields)).is_empty());
     }
 }
