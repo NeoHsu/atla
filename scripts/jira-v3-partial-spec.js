@@ -68,6 +68,15 @@ const selectedOperations = {
         },
       },
     },
+    delete: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+        queryParameter("deleteSubtasks", { type: "boolean" }),
+      ],
+      responses: {
+        204: { description: "Returned if the request is successful." },
+      },
+    },
   },
   "/rest/api/3/issue/{issueIdOrKey}/comment": {
     get: {
@@ -88,10 +97,39 @@ const selectedOperations = {
       },
     },
   },
+  "/rest/api/3/issue/{issueIdOrKey}/comment/{id}": {
+    get: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+        pathParameter("id", { type: "string" }),
+      ],
+      response: "Comment",
+    },
+    put: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+        pathParameter("id", { type: "string" }),
+      ],
+      request: "CommentCreateRequest",
+      responses: {
+        200: jsonResponse("Comment"),
+      },
+    },
+    delete: {
+      parameters: [
+        pathParameter("issueIdOrKey", { type: "string" }),
+        pathParameter("id", { type: "string" }),
+      ],
+      responses: {
+        204: { description: "Returned if the request is successful." },
+      },
+    },
+  },
   "/rest/api/3/issue/{issueIdOrKey}/transitions": {
     get: {
       parameters: [
         pathParameter("issueIdOrKey", { type: "string" }),
+        queryParameter("expand", { type: "string" }),
       ],
       response: "Transitions",
     },
@@ -107,6 +145,40 @@ const selectedOperations = {
       },
     },
   },
+  "/rest/api/3/issuetype/project": {
+    get: {
+      parameters: [
+        queryParameter("projectId", { type: "string" }),
+      ],
+      response: "IssueTypeList",
+    },
+  },
+  "/rest/api/3/attachment/{id}": {
+    get: {
+      parameters: [
+        pathParameter("id", { type: "string" }),
+      ],
+      response: "Attachment",
+    },
+  },
+  "/rest/api/3/issueLink": {
+    post: {
+      request: "LinkIssueRequestJsonBean",
+      responses: {
+        201: { description: "Returned if the request is successful." },
+      },
+    },
+  },
+  "/rest/api/3/issueLink/{linkId}": {
+    delete: {
+      parameters: [
+        pathParameter("linkId", { type: "string" }),
+      ],
+      responses: {
+        204: { description: "Returned if the request is successful." },
+      },
+    },
+  },
 };
 
 const partial = {
@@ -118,7 +190,7 @@ const partial = {
   servers: spec.servers,
   security: spec.security,
   tags: (spec.tags || []).filter((tag) =>
-    ["Issue search", "Issues", "Projects"].includes(tag.name),
+    ["Issue search", "Issues", "Projects", "Issue attachments", "Issue links", "Issue type schemes"].includes(tag.name),
   ),
   paths: {},
   components: {
@@ -230,6 +302,10 @@ function simplifiedSchemas() {
           type: "object",
           additionalProperties: true,
         },
+        update: {
+          type: "object",
+          additionalProperties: true,
+        },
       },
     },
     IssueTransitionRequest: {
@@ -242,6 +318,10 @@ function simplifiedSchemas() {
           properties: {
             id: { type: "string" },
           },
+        },
+        fields: {
+          type: "object",
+          additionalProperties: true,
         },
       },
     },
@@ -363,6 +443,56 @@ function simplifiedSchemas() {
         fields: {
           type: "object",
           additionalProperties: true,
+        },
+      },
+    },
+    IssueTypeList: {
+      type: "array",
+      items: { "$ref": "#/components/schemas/IssueType" },
+    },
+    IssueType: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        name: { type: "string" },
+        description: { type: "string" },
+        subtask: { type: "boolean" },
+        iconUrl: { type: "string" },
+      },
+    },
+    Attachment: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        filename: { type: "string" },
+        mimeType: { type: "string" },
+        size: { type: "integer", format: "int64" },
+        content: { type: "string" },
+        thumbnail: { type: "string" },
+        created: { type: "string" },
+        author: { "$ref": "#/components/schemas/User" },
+      },
+    },
+    LinkIssueRequestJsonBean: {
+      type: "object",
+      properties: {
+        type: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+          },
+        },
+        inwardIssue: {
+          type: "object",
+          properties: {
+            key: { type: "string" },
+          },
+        },
+        outwardIssue: {
+          type: "object",
+          properties: {
+            key: { type: "string" },
+          },
         },
       },
     },

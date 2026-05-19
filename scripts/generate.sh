@@ -57,14 +57,51 @@ if [[ "${in_place}" -eq 1 ]]; then
   out_root="${repo_root}/crates"
 fi
 
+replace_in_file() {
+  local file="$1"
+  local pattern="$2"
+  local replacement="$3"
+
+  python - "$file" "$pattern" "$replacement" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+pattern = sys.argv[2]
+replacement = sys.argv[3]
+text = path.read_text()
+updated = re.sub(pattern, replacement, text, flags=re.MULTILINE)
+path.write_text(updated)
+PY
+}
+
+prepend_line_if_missing() {
+  local file="$1"
+  local line="$2"
+
+  python - "$file" "$line" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+line = sys.argv[2]
+text = path.read_text()
+prefix = f"{line}\n"
+if not text.startswith(prefix):
+    text = prefix + text
+path.write_text(text)
+PY
+}
+
 fix_generated_manifest() {
   local manifest="$1"
 
   # openapi-generator 7.22.0 emits a default feature named rustls-tls while the
   # generated feature is named rustls.
-  sed -i 's/default = \["rustls-tls"\]/default = ["rustls"]/g' "${manifest}"
-  sed -i -E 's#reqwest = \{ version = "\^0\.[0-9]+", default-features = false, features = \[[^]]+\] \}#reqwest.workspace = true#g' "${manifest}"
-  sed -i 's/rustls = \["reqwest\/rustls"\]/rustls = ["reqwest\/rustls-tls"]/g' "${manifest}"
+  replace_in_file "${manifest}" 'default = \["rustls-tls"\]' 'default = ["rustls"]'
+  replace_in_file "${manifest}" 'reqwest = \{ version = "\^0\.[0-9]+", default-features = false, features = \[[^]]+\] \}' 'reqwest.workspace = true'
+  replace_in_file "${manifest}" 'rustls = \["reqwest/rustls"\]' 'rustls = ["reqwest/rustls-tls"]'
 }
 
 fix_generated_lints() {
@@ -72,13 +109,8 @@ fix_generated_lints() {
 
   # The Confluence spec produces a handful of model modules with double
   # underscores. They compile correctly but violate Rust's non_snake_case lint.
-  if ! grep -q '#!\[allow(non_snake_case)\]' "${lib_rs}"; then
-    sed -i '1i#![allow(non_snake_case)]' "${lib_rs}"
-  fi
-
-  if ! grep -q '#!\[allow(clippy::all)\]' "${lib_rs}"; then
-    sed -i '1i#![allow(clippy::all)]' "${lib_rs}"
-  fi
+  prepend_line_if_missing "${lib_rs}" '#![allow(non_snake_case)]'
+  prepend_line_if_missing "${lib_rs}" '#![allow(clippy::all)]'
 }
 
 format_generated_crate() {

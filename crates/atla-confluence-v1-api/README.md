@@ -29,16 +29,31 @@ Class | Method | HTTP request | Description
 *ContentApi* | [**search_content_by_cql**](docs/ContentApi.md#search_content_by_cql) | **GET** /wiki/rest/api/content/search | Search content by CQL
 *ContentAttachmentsApi* | [**create_attachment**](docs/ContentAttachmentsApi.md#create_attachment) | **POST** /wiki/rest/api/content/{id}/child/attachment | Create attachment
 *ContentAttachmentsApi* | [**create_or_update_attachments**](docs/ContentAttachmentsApi.md#create_or_update_attachments) | **PUT** /wiki/rest/api/content/{id}/child/attachment | Create or update attachment
+*ContentLabelsApi* | [**add_labels_to_content**](docs/ContentLabelsApi.md#add_labels_to_content) | **POST** /wiki/rest/api/content/{id}/label | Add labels to content
+*ContentLabelsApi* | [**remove_label_from_content_using_query_parameter**](docs/ContentLabelsApi.md#remove_label_from_content_using_query_parameter) | **DELETE** /wiki/rest/api/content/{id}/label | Remove label from content using query parameter
 *SearchApi* | [**search_by_cql**](docs/SearchApi.md#search_by_cql) | **GET** /wiki/rest/api/search | Search content
 *SearchApi* | [**search_user**](docs/SearchApi.md#search_user) | **GET** /wiki/rest/api/search/user | Search users
+*SpaceApi* | [**delete_space**](docs/SpaceApi.md#delete_space) | **DELETE** /wiki/rest/api/space/{spaceKey} | Delete space
+*SpaceApi* | [**update_space**](docs/SpaceApi.md#update_space) | **PUT** /wiki/rest/api/space/{spaceKey} | Update space
 
 
 ## Documentation For Models
 
+ - [AddLabelsToContentRequest](docs/AddLabelsToContentRequest.md)
  - [Content](docs/Content.md)
  - [ContentArray](docs/ContentArray.md)
+ - [GenericLinksValue](docs/GenericLinksValue.md)
+ - [Label](docs/Label.md)
+ - [LabelArray](docs/LabelArray.md)
+ - [LabelCreate](docs/LabelCreate.md)
+ - [LongTask](docs/LongTask.md)
+ - [LongTaskLinks](docs/LongTaskLinks.md)
  - [SearchPageResponseSearchResult](docs/SearchPageResponseSearchResult.md)
  - [SearchResult](docs/SearchResult.md)
+ - [Space](docs/Space.md)
+ - [SpaceDescriptionCreate](docs/SpaceDescriptionCreate.md)
+ - [SpaceDescriptionCreatePlain](docs/SpaceDescriptionCreatePlain.md)
+ - [SpaceUpdate](docs/SpaceUpdate.md)
  - [Version](docs/Version.md)
 
 

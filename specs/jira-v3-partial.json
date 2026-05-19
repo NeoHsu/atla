@@ -20,8 +20,20 @@
   ],
   "tags": [
     {
+      "description": "This resource represents issue attachments and the attachment settings for Jira. Use it to get the metadata for an attachment, delete an attachment, and view the metadata for the contents of an attachment. Also, use it to get the attachment settings for Jira.",
+      "name": "Issue attachments"
+    },
+    {
+      "description": "This resource represents links between issues. Use it to get, create, and delete links between issues.\n\nTo use it, the site must have [issue linking](https://confluence.atlassian.com/x/yoXKM) enabled.",
+      "name": "Issue links"
+    },
+    {
       "description": "This resource represents various ways to search for issues. Use it to search for issues with a JQL query and find issues to populate an issue picker.",
       "name": "Issue search"
+    },
+    {
+      "description": "This resource represents issue type schemes in classic projects. Use it to:\n\n *  get issue type schemes and a list of the projects that use them.\n *  associate issue type schemes with projects.\n *  add issue types to issue type schemes.\n *  delete issue types from issue type schemes.\n *  create, update, and delete issue type schemes.\n *  change the order of issue types in issue type schemes.",
+      "name": "Issue type schemes"
     },
     {
       "description": "This resource represents Jira issues. Use it to:\n\n *  create or edit issues, individually or in bulk.\n *  retrieve metadata about the options for creating or editing issues.\n *  delete an issue.\n *  assign a user to an issue.\n *  get issue changelogs.\n *  send notifications about an issue.\n *  get details of the transitions available for an issue.\n *  transition an issue.\n *  Archive issues.\n *  Unarchive issues.\n *  Export archived issues.",
@@ -525,6 +537,71 @@
           }
         ],
         "x-atlassian-connect-scope": "WRITE"
+      },
+      "delete": {
+        "deprecated": false,
+        "description": "Deletes an issue.\n\nAn issue cannot be deleted if it has one or more subtasks. To delete an issue with subtasks, set `deleteSubtasks`. This causes the issue's subtasks to be deleted with the issue.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* and *Delete issues* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project containing the issue.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.",
+        "operationId": "deleteIssue",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deleteSubtasks",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Returned if the request is successful."
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Delete issue",
+        "tags": [
+          "Issues"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "delete:issue:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "DELETE"
       }
     },
     "/rest/api/3/issue/{issueIdOrKey}/comment": {
@@ -698,6 +775,241 @@
         "x-atlassian-connect-scope": "WRITE"
       }
     },
+    "/rest/api/3/issue/{issueIdOrKey}/comment/{id}": {
+      "get": {
+        "deprecated": false,
+        "description": "Returns a comment.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project containing the comment.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n *  If the comment has visibility restrictions, the user belongs to the group or has the role visibility is restricted to.",
+        "operationId": "getComment",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "read:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Get comment",
+        "tags": [
+          "Issue comments"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:comment:jira",
+              "read:comment.property:jira",
+              "read:group:jira",
+              "read:project:jira",
+              "read:project-role:jira",
+              "read:user:jira",
+              "read:avatar:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      },
+      "put": {
+        "deprecated": false,
+        "description": "Updates a comment.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue containing the comment is in.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n *  *Edit all comments*[ project permission](https://confluence.atlassian.com/x/yodKLg) to update any comment or *Edit own comments* to update comment created by the user.\n *  If the comment has visibility restrictions, the user belongs to the group or has the role visibility is restricted to.\n\n**WARNING:** Child comments inherit visibility from their parent comment. Attempting to update a child comment's visibility will result in a 400 (Bad Request) error.",
+        "operationId": "updateComment",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comment"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Update comment",
+        "tags": [
+          "Issue comments"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:comment:jira",
+              "read:comment.property:jira",
+              "read:group:jira",
+              "read:project:jira",
+              "read:project-role:jira",
+              "read:user:jira",
+              "write:comment:jira",
+              "read:avatar:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      },
+      "delete": {
+        "deprecated": false,
+        "description": "Deletes a comment.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue containing the comment is in.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n *  *Delete all comments*[ project permission](https://confluence.atlassian.com/x/yodKLg) to delete any comment or *Delete own comments* to delete comment created by the user,\n *  If the comment has visibility restrictions, the user belongs to the group or has the role visibility is restricted to.",
+        "operationId": "deleteComment",
+        "parameters": [
+          {
+            "name": "issueIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Returned if the request is successful."
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Delete comment",
+        "tags": [
+          "Issue comments"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "delete:comment:jira",
+              "delete:comment.property:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "DELETE"
+      }
+    },
     "/rest/api/3/issue/{issueIdOrKey}/transitions": {
       "get": {
         "deprecated": false,
@@ -708,6 +1020,14 @@
             "name": "issueIdOrKey",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expand",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
@@ -833,6 +1153,266 @@
         ],
         "x-atlassian-connect-scope": "WRITE"
       }
+    },
+    "/rest/api/3/issuetype/project": {
+      "get": {
+        "deprecated": false,
+        "description": "Returns issue types for a project.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:** *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) in the relevant project or *Administer Jira* [global permission](https://confluence.atlassian.com/x/x4dKLg).",
+        "operationId": "getIssueTypesForProject",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueTypeList"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "read:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Get issue types for project",
+        "tags": [
+          "Issue types"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": true
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:issue-type:jira",
+              "read:avatar:jira",
+              "read:project-category:jira",
+              "read:project:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-experimental": true,
+        "x-atlassian-connect-scope": "READ"
+      }
+    },
+    "/rest/api/3/attachment/{id}": {
+      "get": {
+        "deprecated": false,
+        "description": "Returns the metadata for an attachment. Note that the attachment itself is not returned.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n *  If attachments are added in private comments, the comment-level restriction will be applied.",
+        "operationId": "getAttachment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "read:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Get attachment metadata",
+        "tags": [
+          "Issue attachments"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:attachment:jira",
+              "read:user:jira",
+              "read:application-role:jira",
+              "read:avatar:jira",
+              "read:group:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      }
+    },
+    "/rest/api/3/issueLink": {
+      "post": {
+        "deprecated": false,
+        "description": "Creates a link between two issues. Use this operation to indicate a relationship between two issues and optionally add a comment to the from (outward) issue. To use this resource the site must have [Issue Linking](https://confluence.atlassian.com/x/yoXKM) enabled.\n\nThis resource returns nothing on the creation of an issue link. To obtain the ID of the issue link, use `https://your-domain.atlassian.net/rest/api/3/issue/[linked issue key]?fields=issuelinks`.\n\nIf the link request duplicates a link, the response indicates that the issue link was created. If the request included a comment, the comment is added.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  *Browse project* [project permission](https://confluence.atlassian.com/x/yodKLg) for all the projects containing the issues to be linked,\n *  *Link issues* [project permission](https://confluence.atlassian.com/x/yodKLg) on the project containing the from (outward) issue,\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.\n *  If the comment has visibility restrictions, belongs to the group or has the role visibility is restricted to.",
+        "operationId": "linkIssues",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkIssueRequestJsonBean"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Returned if the request is successful."
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Create issue link",
+        "tags": [
+          "Issue links"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:comment:jira",
+              "write:issue:jira",
+              "write:issue-link:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      }
+    },
+    "/rest/api/3/issueLink/{linkId}": {
+      "delete": {
+        "deprecated": false,
+        "description": "Deletes an issue link.\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:**\n\n *  Browse project [project permission](https://confluence.atlassian.com/x/yodKLg) for all the projects containing the issues in the link.\n *  *Link issues* [project permission](https://confluence.atlassian.com/x/yodKLg) for at least one of the projects containing issues in the link.\n *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, permission to view both of the issues.",
+        "operationId": "deleteIssueLink",
+        "parameters": [
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Returned if the request is successful."
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "write:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Delete issue link",
+        "tags": [
+          "Issue links"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "write:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "delete:issue-link:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "DELETE"
+      }
     }
   },
   "components": {
@@ -857,6 +1437,10 @@
           "fields": {
             "type": "object",
             "additionalProperties": true
+          },
+          "update": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -876,6 +1460,10 @@
                 "type": "string"
               }
             }
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": true
           }
         }
       },
@@ -1078,6 +1666,91 @@
           "fields": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "IssueTypeList": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/IssueType"
+        }
+      },
+      "IssueType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "subtask": {
+            "type": "boolean"
+          },
+          "iconUrl": {
+            "type": "string"
+          }
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "content": {
+            "type": "string"
+          },
+          "thumbnail": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "LinkIssueRequestJsonBean": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "inwardIssue": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              }
+            }
+          },
+          "outwardIssue": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              }
+            }
           }
         }
       }

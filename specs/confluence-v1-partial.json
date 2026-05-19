@@ -17,7 +17,15 @@
       "description": ""
     },
     {
+      "name": "Content labels",
+      "description": ""
+    },
+    {
       "name": "Search",
+      "description": ""
+    },
+    {
+      "name": "Space",
       "description": ""
     }
   ],
@@ -680,6 +688,336 @@
         ],
         "x-atlassian-connect-scope": "WRITE"
       }
+    },
+    "/wiki/rest/api/space/{spaceKey}": {
+      "put": {
+        "tags": [
+          "Space"
+        ],
+        "summary": "Update space",
+        "description": "Updates the name, description, or homepage of a space.\n\n-   For security reasons, permissions cannot be updated via the API and\nmust be changed via the user interface instead.\n-   Currently you cannot set space labels when updating a space.\n\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\n'Admin' permission for the space.",
+        "operationId": "updateSpace",
+        "parameters": [
+          {
+            "name": "spaceKey",
+            "in": "path",
+            "description": "The key of the space to update.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The updated space.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpaceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Returned if the space is updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Space"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Returned if the authentication credentials are incorrect or missing\nfrom the request.",
+            "content": {}
+          },
+          "404": {
+            "description": "Returned if any of the following is true:\n\n- There is no space with the given key\n- The calling user does not have permission to update the space.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "write:confluence-space"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "write:confluence-space"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:space-details:confluence",
+              "write:space:confluence",
+              "write:space.permission:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": true
+          }
+        ],
+        "x-codegen-request-body-name": "body",
+        "x-atlassian-connect-scope": "WRITE"
+      },
+      "delete": {
+        "tags": [
+          "Space"
+        ],
+        "summary": "Delete space",
+        "description": "Permanently deletes a space without sending it to the trash. Note, the space will be deleted in a long running task.\nTherefore, the space may not be deleted yet when this method has\nreturned. Clients should poll the status link that is returned in the\nresponse until the task completes.\n\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\n'Admin' permission for the space.",
+        "operationId": "deleteSpace",
+        "parameters": [
+          {
+            "name": "spaceKey",
+            "in": "path",
+            "description": "The key of the space to delete.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Returns a pointer to the status of the space deletion task.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LongTask"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Returned if the authentication credentials are incorrect or missing\nfrom the request.",
+            "content": {}
+          },
+          "404": {
+            "description": "Returned if any of the following is true:\n\n- There is no space with the given key.\n- The calling user does not have permission to delete the space.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "write:confluence-space"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "write:confluence-space"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:content.metadata:confluence",
+              "delete:space:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-connect-scope": "DELETE"
+      }
+    },
+    "/wiki/rest/api/content/{id}/label": {
+      "post": {
+        "tags": [
+          "Content labels"
+        ],
+        "summary": "Add labels to content",
+        "description": "Adds labels to a piece of content. Does not modify the existing labels.\n\nNotes:\n\n- Labels can also be added when creating content ([Create content](#api-content-post)).\n- Labels can be updated when updating content ([Update content](#api-content-id-put)).\nThis will delete the existing labels and replace them with the labels in\nthe request.\n\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\nPermission to update the content.",
+        "operationId": "addLabelsToContent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the content that will have labels added to it.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "The labels to add to the content.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/LabelCreateArray"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LabelCreate"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Returned if the labels are added to the content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LabelArray"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Returned if;\n\n- The body contains labels with invalid characters or too many characters.\n- The body contains too many labels.\n- The target content would contain too many labels after the operation.\n- The calling user does not have permission to edit labels.",
+            "content": {}
+          },
+          "403": {
+            "description": "Returned if the calling user can view but not edit the content.",
+            "content": {}
+          },
+          "404": {
+            "description": "Returned if;\n\n- There is no content with the given ID.\n- The calling user does not have permission to view the content.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "write:confluence-content"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "write:confluence-content"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "read:label:confluence",
+              "write:label:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-codegen-request-body-name": "body",
+        "x-atlassian-connect-scope": "WRITE"
+      },
+      "delete": {
+        "tags": [
+          "Content labels"
+        ],
+        "summary": "Remove label from content using query parameter",
+        "description": "Removes a label from a piece of content. Labels can't be deleted from archived content.\nThis is similar to [Remove label from content](#api-content-id-label-label-delete)\nexcept that the label name is specified via a query parameter.\n\nUse this method if the label name has \"/\" characters, as\n[Remove label from content using query parameter](#api-content-id-label-delete)\ndoes not accept \"/\" characters for the label name.\n\n**[Permissions](https://confluence.atlassian.com/x/_AozKw) required**:\nPermission to update the content.",
+        "operationId": "removeLabelFromContentUsingQueryParameter",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The ID of the content that the label will be removed from.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "description": "The name of the label to be removed.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Returned if the label is removed. The response body will be empty.",
+            "content": {}
+          },
+          "403": {
+            "description": "Returned if the calling user can view but not edit the content.",
+            "content": {}
+          },
+          "404": {
+            "description": "Returned if;\n\n- There is no content with the given ID.\n- The calling user does not have permission to view the content.",
+            "content": {}
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "oAuthDefinitions": [
+              "write:confluence-content"
+            ]
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Current",
+            "scopes": [
+              "write:confluence-content"
+            ]
+          },
+          {
+            "scheme": "oAuthDefinitions",
+            "state": "Beta",
+            "scopes": [
+              "write:label:confluence"
+            ]
+          }
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": false
+          }
+        ],
+        "x-atlassian-connect-scope": "WRITE"
+      }
     }
   },
   "components": {
@@ -834,6 +1172,205 @@
           "minorEdit": {
             "type": "boolean"
           }
+        }
+      },
+      "Space": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "_links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SpaceUpdate": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "nullable": true,
+            "maxLength": 200,
+            "type": "string",
+            "description": "The updated name of the space."
+          },
+          "description": {
+            "$ref": "#/components/schemas/SpaceDescriptionCreate"
+          },
+          "homepage": {
+            "nullable": true,
+            "description": "The updated homepage for this space",
+            "type": "object"
+          },
+          "type": {
+            "description": "The updated type for this space.",
+            "type": "string"
+          },
+          "status": {
+            "nullable": true,
+            "description": "The updated status for this space.",
+            "type": "string"
+          }
+        },
+        "description": "The properties of a space that can be updated."
+      },
+      "LongTask": {
+        "required": [
+          "id",
+          "links"
+        ],
+        "type": "object",
+        "properties": {
+          "ari": {
+            "type": "string",
+            "description": "the ARI for the long task, based on its ID"
+          },
+          "id": {
+            "type": "string",
+            "description": "a unique identifier for the long task"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "status": {
+                "type": "string",
+                "description": "The URL to retrive status of long task."
+              }
+            }
+          }
+        }
+      },
+      "LabelCreateArray": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/LabelCreate"
+        }
+      },
+      "LabelCreate": {
+        "required": [
+          "name",
+          "prefix"
+        ],
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "description": "The prefix for the label. `global`, `my` `team`, etc."
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of the label, which will be shown in the UI."
+          }
+        }
+      },
+      "LabelArray": {
+        "required": [
+          "results",
+          "size"
+        ],
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Label"
+            }
+          },
+          "start": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "_links": {
+            "$ref": "#/components/schemas/GenericLinks"
+          }
+        }
+      },
+      "SpaceDescriptionCreate": {
+        "required": [
+          "plain"
+        ],
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "plain": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "value": {
+                "type": "string",
+                "description": "The space description."
+              },
+              "representation": {
+                "type": "string",
+                "description": "Set to 'plain'."
+              }
+            }
+          }
+        },
+        "description": "The description of the new/updated space. Note, only the 'plain' representation\ncan be used for the description when creating or updating a space."
+      },
+      "Label": {
+        "required": [
+          "id",
+          "label",
+          "name",
+          "prefix"
+        ],
+        "type": "object",
+        "properties": {
+          "prefix": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "GenericLinks": {
+        "type": "object",
+        "additionalProperties": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": true
+            },
+            {
+              "type": "string"
+            }
+          ]
         }
       }
     },

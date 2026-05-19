@@ -113,8 +113,11 @@ impl From<&str> for ContentType {
     }
 }
 
+pub mod issue_attachments_api;
 pub mod issue_comments_api;
+pub mod issue_links_api;
 pub mod issue_search_api;
+pub mod issue_types_api;
 pub mod issues_api;
 pub mod projects_api;
 

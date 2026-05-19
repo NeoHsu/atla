@@ -15,6 +15,8 @@ const selectedPaths = new Set([
   "/wiki/rest/api/search",
   "/wiki/rest/api/search/user",
   "/wiki/rest/api/content/{id}/child/attachment",
+  "/wiki/rest/api/space/{spaceKey}",
+  "/wiki/rest/api/content/{id}/label",
 ]);
 
 const partial = {
@@ -26,7 +28,9 @@ const partial = {
   servers: spec.servers,
   security: spec.security,
   tags: (spec.tags || []).filter((tag) =>
-    ["Content - attachments", "Search"].includes(tag.name),
+    ["Content - attachments", "Search", "Space", "Content labels"].includes(
+      tag.name,
+    ),
   ),
   paths: {},
   components: {
@@ -190,6 +194,20 @@ function simplifiedSchemas() {
         message: { type: "string" },
         number: { type: "integer", format: "int32" },
         minorEdit: { type: "boolean" },
+      },
+    },
+    Space: {
+      type: "object",
+      properties: {
+        id: { type: "integer", format: "int64" },
+        key: { type: "string" },
+        name: { type: "string" },
+        type: { type: "string" },
+        status: { type: "string" },
+        _links: {
+          type: "object",
+          additionalProperties: { type: "string" },
+        },
       },
     },
   };

@@ -5,6 +5,7 @@ All URIs are relative to *https://your-domain.atlassian.net*
 Method | HTTP request | Description
 ------------- | ------------- | -------------
 [**create_issue**](IssuesApi.md#create_issue) | **POST** /rest/api/3/issue | Create issue
+[**delete_issue**](IssuesApi.md#delete_issue) | **DELETE** /rest/api/3/issue/{issueIdOrKey} | Delete issue
 [**do_transition**](IssuesApi.md#do_transition) | **POST** /rest/api/3/issue/{issueIdOrKey}/transitions | Transition issue
 [**edit_issue**](IssuesApi.md#edit_issue) | **PUT** /rest/api/3/issue/{issueIdOrKey} | Edit issue
 [**get_issue**](IssuesApi.md#get_issue) | **GET** /rest/api/3/issue/{issueIdOrKey} | Get issue
@@ -38,6 +39,37 @@ Name | Type | Description  | Required | Notes
 
 - **Content-Type**: application/json
 - **Accept**: application/json
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+
+## delete_issue
+
+> delete_issue(issue_id_or_key, delete_subtasks)
+Delete issue
+
+Deletes an issue.  An issue cannot be deleted if it has one or more subtasks. To delete an issue with subtasks, set `deleteSubtasks`. This causes the issue's subtasks to be deleted with the issue.  This operation can be accessed anonymously.  **[Permissions](#permissions) required:**   *  *Browse projects* and *Delete issues* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project containing the issue.  *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.
+
+### Parameters
+
+
+Name | Type | Description  | Required | Notes
+------------- | ------------- | ------------- | ------------- | -------------
+**issue_id_or_key** | **String** |  | [required] |
+**delete_subtasks** | Option<**bool**> |  |  |
+
+### Return type
+
+ (empty response body)
+
+### Authorization
+
+[OAuth2](../README.md#OAuth2), [basicAuth](../README.md#basicAuth)
+
+### HTTP request headers
+
+- **Content-Type**: Not defined
+- **Accept**: Not defined
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
@@ -137,7 +169,7 @@ Name | Type | Description  | Required | Notes
 
 ## get_transitions
 
-> models::Transitions get_transitions(issue_id_or_key)
+> models::Transitions get_transitions(issue_id_or_key, expand)
 Get transitions
 
 Returns either all transitions or a transition that can be performed by the user on an issue, based on the issue's status.  Note, if a request is made for a transition that does not exist or cannot be performed on the issue, given its status, the response will return any empty transitions list.  This operation can be accessed anonymously.  **[Permissions](#permissions) required: A list or transition is returned only when the user has:**   *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.  *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.  However, if the user does not have the *Transition issues* [ project permission](https://confluence.atlassian.com/x/yodKLg) the response will not list any transitions.
@@ -148,6 +180,7 @@ Returns either all transitions or a transition that can be performed by the user
 Name | Type | Description  | Required | Notes
 ------------- | ------------- | ------------- | ------------- | -------------
 **issue_id_or_key** | **String** |  | [required] |
+**expand** | Option<**String**> |  |  |
 
 ### Return type
 
@@ -163,3 +196,4 @@ Name | Type | Description  | Required | Notes
 - **Accept**: application/json
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+

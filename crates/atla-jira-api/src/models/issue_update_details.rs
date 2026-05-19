@@ -15,10 +15,15 @@ use serde::{Deserialize, Serialize};
 pub struct IssueUpdateDetails {
     #[serde(rename = "fields", skip_serializing_if = "Option::is_none")]
     pub fields: Option<std::collections::HashMap<String, serde_json::Value>>,
+    #[serde(rename = "update", skip_serializing_if = "Option::is_none")]
+    pub update: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 impl IssueUpdateDetails {
     pub fn new() -> IssueUpdateDetails {
-        IssueUpdateDetails { fields: None }
+        IssueUpdateDetails {
+            fields: None,
+            update: None,
+        }
     }
 }

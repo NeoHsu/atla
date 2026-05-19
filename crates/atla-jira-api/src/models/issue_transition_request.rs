@@ -15,12 +15,15 @@ use serde::{Deserialize, Serialize};
 pub struct IssueTransitionRequest {
     #[serde(rename = "transition")]
     pub transition: Box<models::IssueTransitionRequestTransition>,
+    #[serde(rename = "fields", skip_serializing_if = "Option::is_none")]
+    pub fields: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 impl IssueTransitionRequest {
     pub fn new(transition: models::IssueTransitionRequestTransition) -> IssueTransitionRequest {
         IssueTransitionRequest {
             transition: Box::new(transition),
+            fields: None,
         }
     }
 }

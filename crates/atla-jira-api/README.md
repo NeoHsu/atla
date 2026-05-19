@@ -26,10 +26,18 @@ All URIs are relative to *https://your-domain.atlassian.net*
 
 Class | Method | HTTP request | Description
 ------------ | ------------- | ------------- | -------------
+*IssueAttachmentsApi* | [**get_attachment**](docs/IssueAttachmentsApi.md#get_attachment) | **GET** /rest/api/3/attachment/{id} | Get attachment metadata
 *IssueCommentsApi* | [**add_comment**](docs/IssueCommentsApi.md#add_comment) | **POST** /rest/api/3/issue/{issueIdOrKey}/comment | Add comment
+*IssueCommentsApi* | [**delete_comment**](docs/IssueCommentsApi.md#delete_comment) | **DELETE** /rest/api/3/issue/{issueIdOrKey}/comment/{id} | Delete comment
+*IssueCommentsApi* | [**get_comment**](docs/IssueCommentsApi.md#get_comment) | **GET** /rest/api/3/issue/{issueIdOrKey}/comment/{id} | Get comment
 *IssueCommentsApi* | [**get_comments**](docs/IssueCommentsApi.md#get_comments) | **GET** /rest/api/3/issue/{issueIdOrKey}/comment | Get comments
+*IssueCommentsApi* | [**update_comment**](docs/IssueCommentsApi.md#update_comment) | **PUT** /rest/api/3/issue/{issueIdOrKey}/comment/{id} | Update comment
+*IssueLinksApi* | [**delete_issue_link**](docs/IssueLinksApi.md#delete_issue_link) | **DELETE** /rest/api/3/issueLink/{linkId} | Delete issue link
+*IssueLinksApi* | [**link_issues**](docs/IssueLinksApi.md#link_issues) | **POST** /rest/api/3/issueLink | Create issue link
 *IssueSearchApi* | [**search_and_reconsile_issues_using_jql**](docs/IssueSearchApi.md#search_and_reconsile_issues_using_jql) | **GET** /rest/api/3/search/jql | Search for issues using JQL enhanced search (GET)
+*IssueTypesApi* | [**get_issue_types_for_project**](docs/IssueTypesApi.md#get_issue_types_for_project) | **GET** /rest/api/3/issuetype/project | Get issue types for project
 *IssuesApi* | [**create_issue**](docs/IssuesApi.md#create_issue) | **POST** /rest/api/3/issue | Create issue
+*IssuesApi* | [**delete_issue**](docs/IssuesApi.md#delete_issue) | **DELETE** /rest/api/3/issue/{issueIdOrKey} | Delete issue
 *IssuesApi* | [**do_transition**](docs/IssuesApi.md#do_transition) | **POST** /rest/api/3/issue/{issueIdOrKey}/transitions | Transition issue
 *IssuesApi* | [**edit_issue**](docs/IssuesApi.md#edit_issue) | **PUT** /rest/api/3/issue/{issueIdOrKey} | Edit issue
 *IssuesApi* | [**get_issue**](docs/IssuesApi.md#get_issue) | **GET** /rest/api/3/issue/{issueIdOrKey} | Get issue
@@ -40,13 +48,18 @@ Class | Method | HTTP request | Description
 
 ## Documentation For Models
 
+ - [Attachment](docs/Attachment.md)
  - [Comment](docs/Comment.md)
  - [CommentCreateRequest](docs/CommentCreateRequest.md)
  - [CreatedIssue](docs/CreatedIssue.md)
  - [IssueBean](docs/IssueBean.md)
  - [IssueTransitionRequest](docs/IssueTransitionRequest.md)
  - [IssueTransitionRequestTransition](docs/IssueTransitionRequestTransition.md)
+ - [IssueType](docs/IssueType.md)
  - [IssueUpdateDetails](docs/IssueUpdateDetails.md)
+ - [LinkIssueRequestJsonBean](docs/LinkIssueRequestJsonBean.md)
+ - [LinkIssueRequestJsonBeanInwardIssue](docs/LinkIssueRequestJsonBeanInwardIssue.md)
+ - [LinkIssueRequestJsonBeanType](docs/LinkIssueRequestJsonBeanType.md)
  - [PageBeanProject](docs/PageBeanProject.md)
  - [PageOfComments](docs/PageOfComments.md)
  - [Project](docs/Project.md)
@@ -66,3 +79,4 @@ cargo doc --open
 ## Author
 
 ecosystem@atlassian.com
+

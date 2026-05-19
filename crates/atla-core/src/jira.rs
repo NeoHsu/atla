@@ -63,12 +63,14 @@ impl JiraClient {
             ))
         })?;
 
-        read_json(
-            self.raw_client
-                .get("/rest/api/3/issuetype/project")
-                .query(&[("projectId", project_id)]),
+        let issue_types = generated_apis::issue_types_api::get_issue_types_for_project(
+            &self.generated,
+            Some(&project_id),
         )
         .await
+        .map_err(generated_error)?;
+
+        Ok(issue_types.into_iter().map(JiraIssueType::from).collect())
     }
 
     pub async fn create_issue(
@@ -92,12 +94,20 @@ impl JiraClient {
     }
 
     pub async fn update_issue_labels(&self, labels: &JiraIssueLabelUpdate) -> Result<(), ApiError> {
-        read_empty(
-            self.raw_client
-                .put(&format!("/rest/api/3/issue/{}", labels.issue_id_or_key))
-                .json(&labels.to_json()),
-        )
-        .await
+        let json = labels.to_json();
+        let update_map = json
+            .get("update")
+            .and_then(serde_json::Value::as_object)
+            .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
+
+        let details = generated_models::IssueUpdateDetails {
+            fields: None,
+            update: update_map,
+        };
+
+        generated_apis::issues_api::edit_issue(&self.generated, &labels.issue_id_or_key, details)
+            .await
+            .map_err(generated_error)
     }
 
     pub async fn search_issues(
@@ -194,20 +204,23 @@ impl JiraClient {
             )));
         }
 
-        let mut request = serde_json::Map::new();
-        request.insert(
-            "transition".to_owned(),
-            serde_json::json!({ "id": transition_id }),
-        );
-        if !fields.is_empty() {
-            request.insert("fields".to_owned(), serde_json::Value::Object(fields));
-        }
-        read_empty(
-            self.raw_client
-                .post(&format!("/rest/api/3/issue/{issue_id_or_key}/transitions"))
-                .json(&serde_json::Value::Object(request)),
+        let transition_request = generated_models::IssueTransitionRequest {
+            transition: Box::new(generated_models::IssueTransitionRequestTransition::new(
+                transition_id,
+            )),
+            fields: if fields.is_empty() {
+                None
+            } else {
+                Some(fields.into_iter().collect())
+            },
+        };
+        generated_apis::issues_api::do_transition(
+            &self.generated,
+            issue_id_or_key,
+            transition_request,
         )
-        .await?;
+        .await
+        .map_err(generated_error)?;
 
         Ok(transition)
     }
@@ -234,16 +247,16 @@ impl JiraClient {
         comment_id: &str,
         body: &str,
     ) -> Result<JiraComment, ApiError> {
-        let value: serde_json::Value = read_json(
-            self.raw_client
-                .put(&format!(
-                    "/rest/api/3/issue/{issue_id_or_key}/comment/{comment_id}"
-                ))
-                .json(&serde_json::json!({ "body": text_adf(body) })),
+        let comment = generated_apis::issue_comments_api::update_comment(
+            &self.generated,
+            issue_id_or_key,
+            comment_id,
+            generated_models::CommentCreateRequest::new(adf_body(body)),
         )
-        .await?;
+        .await
+        .map_err(generated_error)?;
 
-        jira_comment_from_value(value)
+        Ok(comment.into())
     }
 
     pub async fn list_comments(
@@ -268,35 +281,38 @@ impl JiraClient {
         issue_id_or_key: &str,
         comment_id: &str,
     ) -> Result<(), ApiError> {
-        read_empty(self.raw_client.delete(&format!(
-            "/rest/api/3/issue/{issue_id_or_key}/comment/{comment_id}"
-        )))
+        generated_apis::issue_comments_api::delete_comment(
+            &self.generated,
+            issue_id_or_key,
+            comment_id,
+        )
         .await
+        .map_err(generated_error)
     }
 
     pub async fn create_issue_link(&self, link: &JiraIssueLinkCreate) -> Result<(), ApiError> {
-        read_empty(
-            self.raw_client
-                .post("/rest/api/3/issueLink")
-                .json(&link.to_json()),
-        )
-        .await
+        generated_apis::issue_links_api::link_issues(&self.generated, link.to_generated())
+            .await
+            .map_err(generated_error)
     }
 
     pub async fn list_issue_links(
         &self,
         issue_id_or_key: &str,
     ) -> Result<Vec<JiraIssueLink>, ApiError> {
-        let value: serde_json::Value = read_json(
-            self.raw_client
-                .get(&format!("/rest/api/3/issue/{issue_id_or_key}"))
-                .query(&[("fields", "issuelinks")]),
+        let issue = generated_apis::issues_api::get_issue(
+            &self.generated,
+            issue_id_or_key,
+            Some(vec!["issuelinks".to_owned()]),
         )
-        .await?;
+        .await
+        .map_err(generated_error)?;
 
-        Ok(value
-            .get("fields")
-            .and_then(|fields| fields.get("issuelinks"))
+        let fields: serde_json::Map<String, serde_json::Value> =
+            issue.fields.unwrap_or_default().into_iter().collect();
+
+        Ok(fields
+            .get("issuelinks")
             .and_then(serde_json::Value::as_array)
             .into_iter()
             .flatten()
@@ -305,7 +321,10 @@ impl JiraClient {
     }
 
     pub async fn get_attachment(&self, id: &str) -> Result<JiraAttachment, ApiError> {
-        read_json(self.raw_client.get(&format!("/rest/api/3/attachment/{id}"))).await
+        generated_apis::issue_attachments_api::get_attachment(&self.generated, id)
+            .await
+            .map(JiraAttachment::from)
+            .map_err(generated_error)
     }
 
     pub async fn list_issue_attachments(
@@ -392,11 +411,9 @@ impl JiraClient {
     }
 
     pub async fn delete_issue_link(&self, link_id: &str) -> Result<(), ApiError> {
-        read_empty(
-            self.raw_client
-                .delete(&format!("/rest/api/3/issueLink/{link_id}")),
-        )
-        .await
+        generated_apis::issue_links_api::delete_issue_link(&self.generated, link_id)
+            .await
+            .map_err(generated_error)
     }
 
     pub async fn delete_issue(
@@ -404,12 +421,13 @@ impl JiraClient {
         issue_id_or_key: &str,
         delete_subtasks: bool,
     ) -> Result<(), ApiError> {
-        read_empty(
-            self.raw_client
-                .delete(&format!("/rest/api/3/issue/{issue_id_or_key}"))
-                .query(&[("deleteSubtasks", delete_subtasks)]),
+        generated_apis::issues_api::delete_issue(
+            &self.generated,
+            issue_id_or_key,
+            Some(delete_subtasks),
         )
         .await
+        .map_err(generated_error)
     }
 
     pub async fn assign_issue(&self, assign: &JiraIssueAssign) -> Result<JiraUser, ApiError> {
@@ -623,8 +641,7 @@ pub struct JiraIssueList {
 impl JiraIssueList {
     pub fn to_search(&self, default_project: Option<&str>) -> Result<JiraIssueSearch, ApiError> {
         if let Some(jql) = &self.jql {
-            let final_jql = if let Some(project) = self.project_key.as_deref().or(default_project)
-            {
+            let final_jql = if let Some(project) = self.project_key.as_deref().or(default_project) {
                 format!("project = {} AND ({jql})", quote_jql_value(project))
             } else {
                 jql.clone()
@@ -724,6 +741,7 @@ impl JiraIssueCreate {
 
         generated_models::IssueUpdateDetails {
             fields: Some(fields.into_iter().collect()),
+            update: None,
         }
     }
 }
@@ -781,6 +799,7 @@ impl JiraIssueUpdate {
 
         generated_models::IssueUpdateDetails {
             fields: Some(fields.into_iter().collect()),
+            update: None,
         }
     }
 }
@@ -987,12 +1006,22 @@ pub struct JiraIssueLinkCreate {
 }
 
 impl JiraIssueLinkCreate {
-    fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": { "name": self.link_type },
-            "inwardIssue": { "key": self.source_key },
-            "outwardIssue": { "key": self.target_key }
-        })
+    fn to_generated(&self) -> generated_models::LinkIssueRequestJsonBean {
+        generated_models::LinkIssueRequestJsonBean {
+            r#type: Some(Box::new(generated_models::LinkIssueRequestJsonBeanType {
+                name: Some(self.link_type.clone()),
+            })),
+            inward_issue: Some(Box::new(
+                generated_models::LinkIssueRequestJsonBeanInwardIssue {
+                    key: Some(self.source_key.clone()),
+                },
+            )),
+            outward_issue: Some(Box::new(
+                generated_models::LinkIssueRequestJsonBeanInwardIssue {
+                    key: Some(self.target_key.clone()),
+                },
+            )),
+        }
     }
 }
 
@@ -1016,6 +1045,25 @@ pub struct JiraAttachment {
     pub created: Option<String>,
     pub content: Option<String>,
     pub thumbnail: Option<String>,
+}
+
+impl From<generated_models::Attachment> for JiraAttachment {
+    fn from(attachment: generated_models::Attachment) -> Self {
+        Self {
+            id: attachment.id,
+            filename: attachment.filename,
+            mime_type: attachment.mime_type,
+            size: attachment.size.map(|s| s as u64),
+            author: attachment.author.map(|u| JiraUser {
+                account_id: u.account_id,
+                display_name: u.display_name,
+                active: u.active,
+            }),
+            created: attachment.created,
+            content: attachment.content,
+            thumbnail: attachment.thumbnail,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1262,6 +1310,17 @@ pub struct JiraIssueType {
     pub subtask: Option<bool>,
 }
 
+impl From<generated_models::IssueType> for JiraIssueType {
+    fn from(issue_type: generated_models::IssueType) -> Self {
+        Self {
+            id: issue_type.id,
+            name: issue_type.name,
+            description: issue_type.description,
+            subtask: issue_type.subtask,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraProjectPage {
@@ -1407,6 +1466,7 @@ fn adf_plain_text(body: &std::collections::HashMap<String, serde_json::Value>) -
     parts.join("\n")
 }
 
+#[allow(dead_code)]
 fn jira_comment_from_value(value: serde_json::Value) -> Result<JiraComment, ApiError> {
     let object = value
         .as_object()
@@ -1724,10 +1784,7 @@ mod tests {
 
         let search = list.to_search(None).expect("search");
 
-        assert_eq!(
-            search.jql,
-            "project = \"PROJ\" AND (status = Open)"
-        );
+        assert_eq!(search.jql, "project = \"PROJ\" AND (status = Open)");
         assert_eq!(search.max_results, 10);
     }
 

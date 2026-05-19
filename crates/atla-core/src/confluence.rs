@@ -3,7 +3,7 @@ use atla_confluence_v1_api::{apis as generated_v1_apis, models as generated_v1_m
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::client::{ApiError, AtlassianClient, read_empty, read_json};
+use crate::client::{ApiError, AtlassianClient};
 
 #[derive(Debug, Clone)]
 pub struct ConfluenceClient {
@@ -108,15 +108,13 @@ impl ConfluenceClient {
             ));
         }
 
-        read_empty(
-            self.raw_client
-                .put(&format!(
-                    "/wiki/rest/api/space/{}",
-                    generated_v1_apis::urlencode(&space.key)
-                ))
-                .json(&space.to_v1_update_json()),
+        let _space = generated_v1_apis::space_api::update_space(
+            &self.generated_v1,
+            &space.key,
+            space.to_v1_update_request(),
         )
-        .await?;
+        .await
+        .map_err(generated_v1_error)?;
 
         self.get_space_by_key(&space.key).await?.ok_or_else(|| {
             ApiError::Decode(format!(
@@ -127,11 +125,10 @@ impl ConfluenceClient {
     }
 
     pub async fn delete_space(&self, key: &str) -> Result<(), ApiError> {
-        read_empty(self.raw_client.delete(&format!(
-            "/wiki/rest/api/space/{}",
-            generated_v1_apis::urlencode(key)
-        )))
-        .await
+        let _task = generated_v1_apis::space_api::delete_space(&self.generated_v1, key)
+            .await
+            .map_err(generated_v1_error)?;
+        Ok(())
     }
 
     pub async fn list_pages(
@@ -534,16 +531,21 @@ impl ConfluenceClient {
         content_id: &str,
         labels: &[String],
     ) -> Result<ConfluenceLabelPage, ApiError> {
-        let request = labels
-            .iter()
-            .map(|label| serde_json::json!({ "prefix": "global", "name": label }))
-            .collect::<Vec<_>>();
-        let _value: serde_json::Value = read_json(
-            self.raw_client
-                .post(&format!("/wiki/rest/api/content/{content_id}/label"))
-                .json(&request),
+        let request = generated_v1_models::AddLabelsToContentRequest::LabelCreateArray(
+            labels
+                .iter()
+                .map(|label| {
+                    generated_v1_models::LabelCreate::new("global".to_owned(), label.clone())
+                })
+                .collect(),
+        );
+        let _labels = generated_v1_apis::content_labels_api::add_labels_to_content(
+            &self.generated_v1,
+            content_id,
+            request,
         )
-        .await?;
+        .await
+        .map_err(generated_v1_error)?;
 
         Ok(ConfluenceLabelPage {
             results: labels
@@ -558,12 +560,13 @@ impl ConfluenceClient {
     }
 
     pub async fn remove_page_label(&self, content_id: &str, label: &str) -> Result<(), ApiError> {
-        read_empty(
-            self.raw_client
-                .delete(&format!("/wiki/rest/api/content/{content_id}/label"))
-                .query(&[("name", label)]),
+        generated_v1_apis::content_labels_api::remove_label_from_content_using_query_parameter(
+            &self.generated_v1,
+            content_id,
+            label,
         )
         .await
+        .map_err(generated_v1_error)
     }
 
     pub async fn add_blog_labels(
@@ -1083,23 +1086,20 @@ pub struct ConfluenceSpaceUpdate {
 }
 
 impl ConfluenceSpaceUpdate {
-    fn to_v1_update_json(&self) -> serde_json::Value {
-        let mut payload = serde_json::Map::new();
-        if let Some(name) = &self.name {
-            payload.insert("name".to_owned(), serde_json::Value::String(name.clone()));
-        }
+    fn to_v1_update_request(&self) -> generated_v1_models::SpaceUpdate {
+        let mut payload = generated_v1_models::SpaceUpdate::new();
+        payload.name = self.name.clone().map(Some);
         if let Some(description) = &self.description {
-            payload.insert(
-                "description".to_owned(),
-                serde_json::json!({
-                    "plain": {
-                        "value": description,
-                        "representation": "plain"
-                    }
-                }),
-            );
+            payload.description = Some(Some(Box::new(
+                generated_v1_models::SpaceDescriptionCreate::new(
+                    generated_v1_models::SpaceDescriptionCreatePlain {
+                        value: Some(description.clone()),
+                        representation: Some("plain".to_owned()),
+                    },
+                ),
+            )));
         }
-        serde_json::Value::Object(payload)
+        payload
     }
 }
 
@@ -1849,20 +1849,15 @@ mod tests {
             name: Some("Development".to_owned()),
             description: Some("Team docs".to_owned()),
         }
-        .to_v1_update_json();
+        .to_v1_update_request();
 
-        assert_eq!(
-            request,
-            serde_json::json!({
-                "name": "Development",
-                "description": {
-                    "plain": {
-                        "value": "Team docs",
-                        "representation": "plain"
-                    }
-                }
-            })
-        );
+        assert_eq!(request.name, Some(Some("Development".to_owned())));
+        let description = request
+            .description
+            .expect("description")
+            .expect("description payload");
+        assert_eq!(description.plain.value.as_deref(), Some("Team docs"));
+        assert_eq!(description.plain.representation.as_deref(), Some("plain"));
     }
 
     #[test]

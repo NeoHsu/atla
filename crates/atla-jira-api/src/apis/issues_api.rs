@@ -20,6 +20,13 @@ pub enum CreateIssueError {
     UnknownValue(serde_json::Value),
 }
 
+/// struct for typed errors of method [`delete_issue`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DeleteIssueError {
+    UnknownValue(serde_json::Value),
+}
+
 /// struct for typed errors of method [`do_transition`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -93,6 +100,56 @@ pub async fn create_issue(
     } else {
         let content = resp.text().await?;
         let entity: Option<CreateIssueError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}
+
+/// Deletes an issue.  An issue cannot be deleted if it has one or more subtasks. To delete an issue with subtasks, set `deleteSubtasks`. This causes the issue's subtasks to be deleted with the issue.  This operation can be accessed anonymously.  **[Permissions](#permissions) required:**   *  *Browse projects* and *Delete issues* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project containing the issue.  *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.
+pub async fn delete_issue(
+    configuration: &configuration::Configuration,
+    issue_id_or_key: &str,
+    delete_subtasks: Option<bool>,
+) -> Result<(), Error<DeleteIssueError>> {
+    // add a prefix to parameters to efficiently prevent name collisions
+    let p_path_issue_id_or_key = issue_id_or_key;
+    let p_query_delete_subtasks = delete_subtasks;
+
+    let uri_str = format!(
+        "{}/rest/api/3/issue/{issueIdOrKey}",
+        configuration.base_path,
+        issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
+    );
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::DELETE, &uri_str);
+
+    if let Some(ref param_value) = p_query_delete_subtasks {
+        req_builder = req_builder.query(&[("deleteSubtasks", &param_value.to_string())]);
+    }
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.oauth_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+    if let Some(ref auth_conf) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(auth_conf.0.to_owned(), auth_conf.1.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<DeleteIssueError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,
@@ -274,9 +331,11 @@ pub async fn get_issue(
 pub async fn get_transitions(
     configuration: &configuration::Configuration,
     issue_id_or_key: &str,
+    expand: Option<&str>,
 ) -> Result<models::Transitions, Error<GetTransitionsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
     let p_path_issue_id_or_key = issue_id_or_key;
+    let p_query_expand = expand;
 
     let uri_str = format!(
         "{}/rest/api/3/issue/{issueIdOrKey}/transitions",
@@ -285,6 +344,9 @@ pub async fn get_transitions(
     );
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
+    if let Some(ref param_value) = p_query_expand {
+        req_builder = req_builder.query(&[("expand", &param_value.to_string())]);
+    }
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
     }
