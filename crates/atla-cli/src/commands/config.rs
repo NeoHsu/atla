@@ -34,11 +34,19 @@ pub async fn run(command: ConfigCommand, global: &GlobalArgs) -> anyhow::Result<
             println!("{value}");
         }
         ConfigAction::List => {
-            if matches!(global.output, Some(crate::cli::OutputFormat::Json)) {
-                output::print_json(&atla_config)?;
-            } else {
+            let Some(format) = global.output else {
                 print_config(&atla_config);
-            }
+                return Ok(());
+            };
+
+            let entries = config_entries(&atla_config);
+            let keys = entries.iter().map(|(key, _)| key.clone()).collect();
+            let rows = entries
+                .into_iter()
+                .map(|(key, value)| vec![key, value])
+                .collect();
+
+            output::print_records(format, &atla_config, keys, &["key", "value"], rows, None)?;
         }
     }
 
@@ -72,4 +80,40 @@ fn print_config(config: &atla_core::AtlaConfig) {
             println!("{name} = {expansion}");
         }
     }
+}
+
+fn config_entries(config: &atla_core::AtlaConfig) -> Vec<(String, String)> {
+    let mut entries = Vec::new();
+    entries.push((
+        "default.profile".to_owned(),
+        config
+            .default
+            .profile
+            .clone()
+            .unwrap_or_else(|| "<none>".to_owned()),
+    ));
+
+    for (name, profile) in &config.profiles {
+        let prefix = format!("profiles.{name}");
+        entries.push((format!("{prefix}.instance"), profile.instance.clone()));
+        entries.push((format!("{prefix}.email"), profile.email.clone()));
+        entries.push((
+            format!("{prefix}.credential_store"),
+            profile.credential_store.to_string(),
+        ));
+
+        if let Some(default_project) = &profile.default_project {
+            entries.push((format!("{prefix}.default_project"), default_project.clone()));
+        }
+
+        if let Some(default_space) = &profile.default_space {
+            entries.push((format!("{prefix}.default_space"), default_space.clone()));
+        }
+    }
+
+    for (name, expansion) in &config.aliases {
+        entries.push((format!("aliases.{name}"), expansion.clone()));
+    }
+
+    entries
 }

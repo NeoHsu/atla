@@ -51,6 +51,8 @@ pub enum ProjectTypeKey {
     ServiceDesk,
     #[serde(rename = "business")]
     Business,
+    #[serde(rename = "product_discovery")]
+    ProductDiscovery,
 }
 
 impl Default for ProjectTypeKey {
