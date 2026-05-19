@@ -120,8 +120,7 @@ pub async fn find_assignable_users_for_issue(
         }
     } else {
         let content = resp.text().await?;
-        let entity: Option<FindAssignableUsersForIssueError> =
-            serde_json::from_str(&content).ok();
+        let entity: Option<FindAssignableUsersForIssueError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,

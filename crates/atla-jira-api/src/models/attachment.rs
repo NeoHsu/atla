@@ -11,9 +11,30 @@
 use crate::models;
 use serde::{Deserialize, Serialize};
 
+// The Jira Cloud REST API inconsistently returns `id` as an integer in
+// `GET /rest/api/3/attachment/{id}` but as a string in issue field responses.
+// This deserializer accepts both.
+fn deserialize_id_as_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde_json::Value;
+    let v = Option::<Value>::deserialize(deserializer)?;
+    Ok(v.map(|v| match v {
+        Value::String(s) => s,
+        Value::Number(n) => n.to_string(),
+        other => other.to_string(),
+    }))
+}
+
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Attachment {
-    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "id",
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_id_as_string",
+        default
+    )]
     pub id: Option<String>,
     #[serde(rename = "filename", skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,

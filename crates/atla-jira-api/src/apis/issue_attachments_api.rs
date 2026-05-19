@@ -92,7 +92,9 @@ pub async fn remove_attachment(
         configuration.base_path,
         id = crate::apis::urlencode(p_path_id)
     );
-    let mut req_builder = configuration.client.request(reqwest::Method::DELETE, &uri_str);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::DELETE, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());

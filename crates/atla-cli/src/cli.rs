@@ -233,8 +233,10 @@ pub enum IssueAction {
 pub enum IssueCommentAction {
     Add {
         key: String,
-        #[arg(conflicts_with = "body_file")]
+        #[arg(conflicts_with = "body_file", conflicts_with = "body_flag")]
         body: Option<String>,
+        #[arg(long = "body", conflicts_with = "body_file", conflicts_with = "body")]
+        body_flag: Option<String>,
         #[arg(long)]
         body_file: Option<PathBuf>,
     },
@@ -273,12 +275,10 @@ pub enum IssueAttachmentAction {
         target: String,
         #[arg(long)]
         all: bool,
-        #[arg(short, long)]
-        output: Option<PathBuf>,
+        #[arg(long = "dest")]
+        dest: Option<PathBuf>,
     },
     Delete {
-        key: String,
-        #[arg(long)]
         attachment_id: String,
         #[arg(long)]
         yes: bool,

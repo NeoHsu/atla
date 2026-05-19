@@ -2196,7 +2196,7 @@ mod tests {
             attachment
                 .version
                 .as_ref()
-            .and_then(|version| version.number),
+                .and_then(|version| version.number),
             Some(2)
         );
     }
@@ -2532,7 +2532,10 @@ mod tests {
         let version = page.version.expect("page version");
         assert_eq!(version.number, Some(7));
         assert_eq!(version.message.as_deref(), Some("Promoted"));
-        assert_eq!(version.created_at.as_deref(), Some("2026-05-17T01:00:00.000Z"));
+        assert_eq!(
+            version.created_at.as_deref(),
+            Some("2026-05-17T01:00:00.000Z")
+        );
     }
 
     #[test]
@@ -2552,7 +2555,10 @@ mod tests {
         let version = post.version.expect("blog post version");
         assert_eq!(version.number, Some(2));
         assert_eq!(version.message.as_deref(), Some("Published"));
-        assert_eq!(version.created_at.as_deref(), Some("2026-05-17T03:00:00.000Z"));
+        assert_eq!(
+            version.created_at.as_deref(),
+            Some("2026-05-17T03:00:00.000Z")
+        );
     }
 
     #[test]
@@ -2672,18 +2678,19 @@ mod tests {
         let mut body = generated_models::BodyBulk::new();
         body.storage = Some(Box::new(storage));
 
-        let page = ConfluenceCommentPage::from(generated_models::MultiEntityResultPageCommentModel {
-            results: Some(vec![generated_models::PageCommentModel {
-                id: Some("c1".to_owned()),
-                status: Some(generated_models::ContentStatus::Current),
-                title: Some("First comment".to_owned()),
-                page_id: Some("111".to_owned()),
-                version: Some(Box::new(version)),
-                body: Some(Box::new(body)),
-                ..generated_models::PageCommentModel::new()
-            }]),
-            ..generated_models::MultiEntityResultPageCommentModel::new()
-        });
+        let page =
+            ConfluenceCommentPage::from(generated_models::MultiEntityResultPageCommentModel {
+                results: Some(vec![generated_models::PageCommentModel {
+                    id: Some("c1".to_owned()),
+                    status: Some(generated_models::ContentStatus::Current),
+                    title: Some("First comment".to_owned()),
+                    page_id: Some("111".to_owned()),
+                    version: Some(Box::new(version)),
+                    body: Some(Box::new(body)),
+                    ..generated_models::PageCommentModel::new()
+                }]),
+                ..generated_models::MultiEntityResultPageCommentModel::new()
+            });
 
         assert_eq!(page.results.len(), 1);
         let comment = &page.results[0];

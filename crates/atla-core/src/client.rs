@@ -139,6 +139,8 @@ pub enum ApiError {
         status: reqwest::StatusCode,
         body: String,
     },
+    #[error("{0}")]
+    Io(String),
 }
 
 pub(crate) fn extract_api_error_body(body: &str) -> String {
@@ -153,7 +155,9 @@ pub(crate) fn extract_api_error_body(body: &str) -> String {
         if let Some(errors) = json["errors"].as_object() {
             let msgs: Vec<String> = errors
                 .iter()
-                .map(|(key, value)| format!("{}: {}", key, value.as_str().unwrap_or(&value.to_string())))
+                .map(|(key, value)| {
+                    format!("{}: {}", key, value.as_str().unwrap_or(&value.to_string()))
+                })
                 .collect();
             if !msgs.is_empty() {
                 return msgs.join("; ");

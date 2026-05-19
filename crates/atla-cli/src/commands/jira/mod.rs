@@ -1,11 +1,11 @@
 use anyhow::Context;
 use atla_core::{
-    default_issue_fields, JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard,
-    JiraBoardPage, JiraBoardSearch, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue,
-    JiraIssueAssign, JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate,
-    JiraIssueList, JiraIssueSearch, JiraIssueType, JiraIssueUpdate, JiraProject,
-    JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage, JiraSprintSearch,
-    JiraSprintUpdate, JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
+    JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage,
+    JiraBoardSearch, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign,
+    JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList,
+    JiraIssueSearch, JiraIssueType, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint,
+    JiraSprintCreate, JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser,
+    JiraWorklog, JiraWorklogCreate, JiraWorklogPage, default_issue_fields,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -378,15 +378,6 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                             )
                         })?;
                     print_transition_update(&key, &transition, global)?;
-                } else if !can_prompt(global) {
-                    let names = transitions
-                        .iter()
-                        .filter_map(|t| t.name.as_deref())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    anyhow::bail!(
-                        "--to is required in non-interactive mode; available transitions: {names}"
-                    );
                 } else {
                     print_transitions(&transitions, global)?;
                 }
@@ -396,12 +387,14 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             IssueCommentAction::Add {
                 key,
                 body,
+                body_flag,
                 body_file,
             } => {
                 let ctx = AppContext::load(global)?;
                 let profile_name = ctx.profile_name();
                 let profile = ctx.profile();
-                let body = read_required_text(body, body_file.as_deref(), "comment body")?;
+                let body =
+                    read_required_text(body.or(body_flag), body_file.as_deref(), "comment body")?;
 
                 if global.dry_run {
                     let url = format!(
@@ -616,23 +609,16 @@ async fn run_issue_attachment(
             }
 
             let client = ctx.jira_client()?;
-            let attachments = client
-                .list_issue_attachments(&key)
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to list attachments for Jira issue `{key}` from {}",
-                        client.instance_url()
-                    )
-                })?;
+            let attachments = client.list_issue_attachments(&key).await.with_context(|| {
+                format!(
+                    "failed to list attachments for Jira issue `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
 
             print_attachments(&attachments, global)?;
         }
-        IssueAttachmentAction::Download {
-            target,
-            all,
-            output,
-        } => {
+        IssueAttachmentAction::Download { target, all, dest } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -657,7 +643,7 @@ async fn run_issue_attachment(
             let client = ctx.jira_client()?;
             let downloads = if all {
                 client
-                    .download_issue_attachments(&target, output.as_deref())
+                    .download_issue_attachments(&target, dest.as_deref())
                     .await
                     .with_context(|| {
                         format!(
@@ -668,7 +654,7 @@ async fn run_issue_attachment(
             } else {
                 vec![
                     client
-                        .download_attachment(&target, output.as_deref())
+                        .download_attachment(&target, dest.as_deref())
                         .await
                         .with_context(|| {
                             format!(
@@ -681,11 +667,7 @@ async fn run_issue_attachment(
 
             print_attachment_downloads(&downloads, global)?;
         }
-        IssueAttachmentAction::Delete {
-            key: _,
-            attachment_id,
-            yes,
-        } => {
+        IssueAttachmentAction::Delete { attachment_id, yes } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -1341,7 +1323,10 @@ fn print_projects(
                         .to_owned(),
                     project.style.as_deref().unwrap_or("-").to_owned(),
                     project.name.as_deref().unwrap_or("-").to_owned(),
-                    project.archived.unwrap_or(false).to_string(),
+                    project
+                        .archived
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|| "-".to_owned()),
                 ]
             })
             .collect(),
@@ -1354,23 +1339,35 @@ fn print_issues(
     global: &GlobalArgs,
     requested_fields: Option<&[String]>,
 ) -> anyhow::Result<()> {
-    let extra_fields = display_extra_issue_fields(requested_fields);
-    let mut headers = vec![
-        "key", "summary", "status", "assignee", "type", "priority", "id",
-    ];
-    headers.extend(extra_fields.iter().map(String::as_str));
-    output::print_records(
-        global.output.unwrap_or(OutputFormat::Table),
-        issues,
-        issues
-            .iter()
-            .filter_map(|issue| issue.key.clone())
-            .collect(),
-        &headers,
-        issues
+    // When explicit --fields are given, show exactly those (key is always included for
+    // identification). When no --fields, show the default set.
+    let (headers, rows): (Vec<String>, Vec<Vec<String>>) = if let Some(fields) = requested_fields {
+        // Ensure "key" is always first if not already requested.
+        let mut cols: Vec<String> = Vec::new();
+        if !fields.iter().any(|f| f == "key") {
+            cols.push("key".to_owned());
+        }
+        cols.extend(fields.iter().cloned());
+        let rows = issues
             .iter()
             .map(|issue| {
-                let mut row = vec![
+                cols.iter()
+                    .map(|col| issue_column_cell(issue, col))
+                    .collect()
+            })
+            .collect();
+        (cols, rows)
+    } else {
+        let default_headers: Vec<String> = [
+            "key", "summary", "status", "assignee", "type", "priority", "id",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let rows = issues
+            .iter()
+            .map(|issue| {
+                vec![
                     issue.key.as_deref().unwrap_or("-").to_owned(),
                     issue.summary().unwrap_or("-").to_owned(),
                     issue.status_name().unwrap_or("-").to_owned(),
@@ -1378,17 +1375,38 @@ fn print_issues(
                     issue.issue_type_name().unwrap_or("-").to_owned(),
                     issue.priority_name().unwrap_or("-").to_owned(),
                     issue.id.as_deref().unwrap_or("-").to_owned(),
-                ];
-                row.extend(
-                    extra_fields
-                        .iter()
-                        .map(|field| issue_field_cell(issue, field)),
-                );
-                row
+                ]
             })
+            .collect();
+        (default_headers, rows)
+    };
+
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        issues,
+        issues
+            .iter()
+            .filter_map(|issue| issue.key.clone())
             .collect(),
+        &header_refs,
+        rows,
         None,
     )
+}
+
+/// Map a column name to a display cell value for an issue.
+fn issue_column_cell(issue: &JiraIssue, col: &str) -> String {
+    match col {
+        "key" => issue.key.as_deref().unwrap_or("-").to_owned(),
+        "summary" => issue.summary().unwrap_or("-").to_owned(),
+        "status" => issue.status_name().unwrap_or("-").to_owned(),
+        "assignee" => issue.assignee_display_name().unwrap_or("-").to_owned(),
+        "type" | "issuetype" => issue.issue_type_name().unwrap_or("-").to_owned(),
+        "priority" => issue.priority_name().unwrap_or("-").to_owned(),
+        "id" => issue.id.as_deref().unwrap_or("-").to_owned(),
+        _ => issue_field_cell(issue, col),
+    }
 }
 
 fn print_issue(
@@ -1438,8 +1456,47 @@ fn print_issue(
             if let Some(id) = &issue.id {
                 println!("ID: {id}");
             }
-            // Show description when no explicit --fields were requested.
+            // When no --fields are requested, show standard metadata fields.
             if requested_fields.is_none() {
+                if let Some(reporter) = issue.fields.get("reporter") {
+                    let text = value_cell(reporter);
+                    if text != "-" {
+                        println!("Reporter: {text}");
+                    }
+                }
+                if let Some(labels) = issue.fields.get("labels") {
+                    if let Some(arr) = labels.as_array() {
+                        if !arr.is_empty() {
+                            let text = arr
+                                .iter()
+                                .filter_map(|v| v.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            println!("Labels: {text}");
+                        }
+                    }
+                }
+                if let Some(created) = issue.fields.get("created").and_then(|v| v.as_str()) {
+                    println!("Created: {created}");
+                }
+                if let Some(updated) = issue.fields.get("updated").and_then(|v| v.as_str()) {
+                    println!("Updated: {updated}");
+                }
+                if let Some(parent) = issue.fields.get("parent") {
+                    if let Some(key) = parent.get("key").and_then(|v| v.as_str()) {
+                        println!("Parent: {key}");
+                    }
+                }
+                if let Some(subtasks) = issue.fields.get("subtasks").and_then(|v| v.as_array()) {
+                    if !subtasks.is_empty() {
+                        let keys = subtasks
+                            .iter()
+                            .filter_map(|s| s.get("key").and_then(|v| v.as_str()))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        println!("Subtasks: {keys}");
+                    }
+                }
                 if let Some(desc) = issue.fields.get("description") {
                     let text = adf_to_text(desc);
                     if !text.is_empty() {
@@ -2115,7 +2172,12 @@ fn print_project(project: &JiraProject, global: &GlobalArgs) -> anyhow::Result<(
                 output::csv_cell(project.name.as_deref().unwrap_or_default()),
                 output::csv_cell(project.project_type_key.as_deref().unwrap_or_default()),
                 output::csv_cell(project.style.as_deref().unwrap_or_default()),
-                output::csv_cell(&project.archived.unwrap_or(false).to_string()),
+                output::csv_cell(
+                    &project
+                        .archived
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|| "-".to_owned())
+                ),
                 output::csv_cell(project.id.as_deref().unwrap_or_default())
             );
             Ok(())
@@ -2128,7 +2190,13 @@ fn print_project(project: &JiraProject, global: &GlobalArgs) -> anyhow::Result<(
                 project.project_type_key.as_deref().unwrap_or("-")
             );
             println!("Style: {}", project.style.as_deref().unwrap_or("-"));
-            println!("Archived: {}", project.archived.unwrap_or(false));
+            println!(
+                "Archived: {}",
+                project
+                    .archived
+                    .map(|a| a.to_string())
+                    .unwrap_or_else(|| "-".to_owned())
+            );
             if let Some(id) = &project.id {
                 println!("ID: {id}");
             }
@@ -2171,21 +2239,35 @@ fn parse_label_update(
         return Ok(update);
     };
 
-    for operation in labels
+    let parts: Vec<&str> = labels
         .split(',')
         .map(str::trim)
         .filter(|part| !part.is_empty())
-    {
-        let (action, label) = operation.split_once(':').ok_or_else(|| {
-            anyhow::anyhow!("expected --labels add:name,remove:name, got `{operation}`")
-        })?;
-        if label.is_empty() {
-            anyhow::bail!("label cannot be empty in `{operation}`");
-        }
-        match action {
-            "add" => update.add.push(label.to_owned()),
-            "remove" => update.remove.push(label.to_owned()),
-            _ => anyhow::bail!("unsupported label operation `{action}`; use add or remove"),
+        .collect();
+
+    // Detect whether the user is using add:/remove: prefix syntax.
+    let uses_prefix = parts
+        .iter()
+        .any(|p| p.starts_with("add:") || p.starts_with("remove:"));
+
+    for part in parts {
+        if uses_prefix {
+            let (action, label) = part.split_once(':').ok_or_else(|| {
+                anyhow::anyhow!(
+                    "mixed label syntax: when using add:/remove: prefixes all parts must use them, got `{part}`"
+                )
+            })?;
+            if label.is_empty() {
+                anyhow::bail!("label cannot be empty in `{part}`");
+            }
+            match action {
+                "add" => update.add.push(label.to_owned()),
+                "remove" => update.remove.push(label.to_owned()),
+                _ => anyhow::bail!("unsupported label operation `{action}`; use add or remove"),
+            }
+        } else {
+            // Plain name style: all parts are additions.
+            update.add.push(part.to_owned());
         }
     }
 
@@ -2195,18 +2277,42 @@ fn parse_label_update(
 fn parse_fields(fields: &[String]) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
     let mut parsed = serde_json::Map::new();
     for field in fields {
-        let (name, value) = field
+        let (name, raw) = field
             .split_once('=')
-            .ok_or_else(|| anyhow::anyhow!("expected --field name=json, got `{field}`"))?;
+            .ok_or_else(|| anyhow::anyhow!("expected --field name=value, got `{field}`"))?;
         if name.is_empty() {
             anyhow::bail!("field name cannot be empty in `{field}`");
         }
-        let value = serde_json::from_str(value)
-            .with_context(|| format!("failed to parse JSON value for field `{name}`"))?;
+        let value = parse_field_value(name, raw)?;
         parsed.insert(name.to_owned(), value);
     }
 
     Ok(parsed)
+}
+
+/// Parse a field value: try JSON first; if that fails and the value is a plain
+/// identifier (no JSON structural chars), auto-wrap it as `{"name": value}`.
+fn parse_field_value(name: &str, raw: &str) -> anyhow::Result<serde_json::Value> {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
+        return Ok(v);
+    }
+    // Plain identifier (no braces, brackets, colons, or quotes): wrap as {"name": raw}
+    let looks_like_plain = !raw.starts_with('{')
+        && !raw.starts_with('[')
+        && !raw.starts_with('"')
+        && !raw.contains(':');
+    if looks_like_plain {
+        return Ok(match name {
+            "assignee" => serde_json::json!({ "accountId": raw }),
+            "parent" => serde_json::json!({ "key": raw }),
+            _ => serde_json::json!({ "name": raw }),
+        });
+    }
+    anyhow::bail!(
+        "invalid value for field `{name}`: `{raw}`\n  \
+         Tip: use JSON (e.g. --field '{name}={{\"name\":\"High\"}}') \
+         or a plain name (e.g. --field '{name}=High')"
+    )
 }
 
 fn parse_issue_fields(fields: Option<&str>) -> anyhow::Result<Option<Vec<String>>> {
@@ -2269,16 +2375,26 @@ fn adf_to_text(value: &serde_json::Value) -> String {
                     .unwrap_or_default();
                 // Add a newline after block-level nodes to preserve paragraph breaks.
                 let node_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if matches!(node_type, "paragraph" | "heading" | "listItem" | "bulletList" | "orderedList" | "blockquote" | "codeBlock" | "rule" | "panel") && !content.is_empty() {
+                if matches!(
+                    node_type,
+                    "paragraph"
+                        | "heading"
+                        | "listItem"
+                        | "bulletList"
+                        | "orderedList"
+                        | "blockquote"
+                        | "codeBlock"
+                        | "rule"
+                        | "panel"
+                ) && !content.is_empty()
+                {
                     format!("{content}\n")
                 } else {
                     content
                 }
             }
         }
-        serde_json::Value::Array(arr) => {
-            arr.iter().map(adf_to_text).collect::<Vec<_>>().join("")
-        }
+        serde_json::Value::Array(arr) => arr.iter().map(adf_to_text).collect::<Vec<_>>().join(""),
         _ => String::new(),
     }
 }
@@ -2334,10 +2450,9 @@ fn transition_display(transition: &JiraTransition) -> String {
         .to_status
         .as_ref()
         .and_then(|status| status.name.as_deref());
-    if let Some(to_status) = to_status {
-        format!("{name} -> {to_status}")
-    } else {
-        name.to_owned()
+    match to_status {
+        Some(status) if status != name => format!("{name} → {status}"),
+        _ => name.to_owned(),
     }
 }
 

@@ -1,4 +1,5 @@
 use atla_jira_api::{apis as generated_apis, models as generated_models};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -363,7 +364,7 @@ impl JiraClient {
             .unwrap_or("attachment")
             .to_owned();
         let content = std::fs::read(file_path).map_err(|error| {
-            ApiError::Decode(format!(
+            ApiError::Io(format!(
                 "failed to read file `{}`: {error}",
                 file_path.display()
             ))
@@ -404,10 +405,15 @@ impl JiraClient {
     ) -> Result<Vec<JiraAttachmentDownload>, ApiError> {
         let attachments = self.list_issue_attachments(issue_id_or_key).await?;
         let mut downloads = Vec::new();
+        let mut used_paths: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
         for attachment in attachments {
-            let output = output_dir.map(|dir| dir.join(attachment_filename(&attachment)));
+            let base_path = output_dir
+                .map(|dir| dir.join(attachment_filename(&attachment)))
+                .unwrap_or_else(|| PathBuf::from(attachment_filename(&attachment)));
+            let final_path = deduplicate_path(&base_path, &used_paths);
+            used_paths.insert(final_path.clone());
             downloads.push(
-                self.download_attachment_metadata(attachment, output.as_deref())
+                self.download_attachment_metadata(attachment, Some(&final_path))
                     .await?,
             );
         }
@@ -514,8 +520,7 @@ impl JiraClient {
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn get_board(&self, board_id: u64) -> Result<JiraBoard, ApiError> {
@@ -523,8 +528,7 @@ impl JiraClient {
             .await
             .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn list_sprints(
@@ -541,8 +545,7 @@ impl JiraClient {
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn get_sprint(&self, sprint_id: u64) -> Result<JiraSprint, ApiError> {
@@ -551,8 +554,7 @@ impl JiraClient {
                 .await
                 .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn get_sprint_issues(
@@ -571,8 +573,7 @@ impl JiraClient {
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn create_sprint(&self, sprint: &JiraSprintCreate) -> Result<JiraSprint, ApiError> {
@@ -581,21 +582,65 @@ impl JiraClient {
                 .await
                 .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn update_sprint(&self, update: &JiraSprintUpdate) -> Result<JiraSprint, ApiError> {
+        // The Jira Agile PUT /sprint/{id} requires `name` in every update body.
+        // When activating or closing, it also requires `startDate`. Fetch the existing sprint
+        // to carry over fields the caller didn't explicitly supply.
+        let state_change = update.state.is_some();
+        let needs_existing = update.name.is_none() || (state_change && update.start_date.is_none());
+
+        let existing = if needs_existing {
+            Some(self.get_sprint(update.id).await?)
+        } else {
+            None
+        };
+
+        let mut body = update.to_json();
+        let obj = body.as_object_mut().expect("sprint update body is object");
+
+        // Always include name (required by Jira API)
+        let effective_name = update
+            .name
+            .clone()
+            .or_else(|| existing.as_ref().and_then(|s| s.name.clone()))
+            .unwrap_or_default();
+        obj.entry("name").or_insert_with(|| effective_name.into());
+
+        // On any state transition, Jira requires startDate (and endDate) in the body.
+        if state_change && !obj.contains_key("startDate") {
+            let start = update
+                .start_date
+                .clone()
+                .or_else(|| existing.as_ref().and_then(|s| s.start_date.clone()))
+                .unwrap_or_else(|| Utc::now().format("%Y-%m-%dT%H:%M:%S%.3f+0000").to_string());
+            obj.insert("startDate".to_owned(), start.into());
+        }
+        // Include endDate on any state transition (required by Jira API); preserve or default.
+        if state_change && !obj.contains_key("endDate") {
+            let end = update
+                .end_date
+                .clone()
+                .or_else(|| existing.as_ref().and_then(|s| s.end_date.clone()))
+                .unwrap_or_else(|| {
+                    (Utc::now() + chrono::Duration::weeks(2))
+                        .format("%Y-%m-%dT%H:%M:%S%.3f+0000")
+                        .to_string()
+                });
+            obj.insert("endDate".to_owned(), end.into());
+        }
+
         let value = generated_apis::agile_sprints_api::update_sprint(
             &self.generated,
             update.id as i64,
-            update.to_json(),
+            body,
         )
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn move_issues_to_sprint(
@@ -622,6 +667,16 @@ impl JiraClient {
     }
 
     pub async fn add_worklog(&self, worklog: &JiraWorklogCreate) -> Result<JiraWorklog, ApiError> {
+        // Validate the time format before sending to the API.
+        // Jira accepts patterns like 1w, 2d, 3h, 30m and combinations (e.g. "2h 30m").
+        // An invalid format causes a confusing "Worklog must not be null" from the API.
+        if !is_valid_jira_time_format(&worklog.time_spent) {
+            return Err(ApiError::Io(format!(
+                "invalid time format `{}` — expected Jira duration notation, e.g. 1w, 2d, 3h, 30m or combinations like \"2h 30m\"",
+                worklog.time_spent
+            )));
+        }
+
         let value = generated_apis::issue_worklogs_api::add_worklog(
             &self.generated,
             &worklog.issue_id_or_key,
@@ -630,8 +685,7 @@ impl JiraClient {
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn list_worklogs(
@@ -648,8 +702,7 @@ impl JiraClient {
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     async fn current_user(&self) -> Result<JiraUser, ApiError> {
@@ -657,8 +710,7 @@ impl JiraClient {
             .await
             .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     async fn find_assignable_users(
@@ -675,8 +727,7 @@ impl JiraClient {
         .await
         .map_err(generated_error)?;
 
-        serde_json::from_value(value)
-            .map_err(|e| ApiError::Decode(e.to_string()))
+        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 }
 
@@ -1457,10 +1508,22 @@ impl From<generated_models::Project> for JiraProject {
 }
 
 pub fn default_issue_fields() -> Vec<String> {
-    ["summary", "status", "assignee", "issuetype", "priority"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect()
+    [
+        "summary",
+        "status",
+        "assignee",
+        "issuetype",
+        "priority",
+        "labels",
+        "created",
+        "updated",
+        "reporter",
+        "parent",
+        "subtasks",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }
 
 fn issue_fields(fields: Option<&[String]>) -> Vec<String> {
@@ -1476,6 +1539,31 @@ fn attachment_output_path(output: Option<&Path>, filename: &str) -> PathBuf {
         Some(output) => output.to_path_buf(),
         None => PathBuf::from(filename),
     }
+}
+
+/// Appends `-N` before the extension when `path` is already in `used_paths`.
+fn deduplicate_path(path: &Path, used_paths: &std::collections::HashSet<PathBuf>) -> PathBuf {
+    if !used_paths.contains(path) {
+        return path.to_path_buf();
+    }
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("attachment");
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let parent = path.parent().unwrap_or(Path::new(""));
+    for i in 2u32.. {
+        let new_name = if ext.is_empty() {
+            format!("{stem}-{i}")
+        } else {
+            format!("{stem}-{i}.{ext}")
+        };
+        let candidate = parent.join(&new_name);
+        if !used_paths.contains(&candidate) {
+            return candidate;
+        }
+    }
+    path.to_path_buf()
 }
 
 fn attachment_filename(attachment: &JiraAttachment) -> &str {
@@ -1716,9 +1804,58 @@ fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
     }
 }
 
+/// Validates that a time string matches Jira's duration notation.
+/// Accepts one or more space-separated tokens of the form `<n>w`, `<n>d`, `<n>h`, or `<n>m`
+/// where `<n>` is a non-negative integer and the total duration is greater than zero.
+/// For example: "1h", "30m", "2h 30m", "1d 4h 30m".
+fn is_valid_jira_time_format(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    let valid_units = ['w', 'd', 'h', 'm'];
+    let mut total_minutes: u64 = 0;
+    for token in s.split_whitespace() {
+        let last = token.chars().last();
+        let unit = match last {
+            Some(c) if valid_units.contains(&c) => c,
+            _ => return false,
+        };
+        let digits = &token[..token.len() - unit.len_utf8()];
+        if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+        let n: u64 = match digits.parse() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        let minutes = match unit {
+            'w' => n.saturating_mul(5 * 8 * 60),
+            'd' => n.saturating_mul(8 * 60),
+            'h' => n.saturating_mul(60),
+            'm' => n,
+            _ => return false,
+        };
+        total_minutes = total_minutes.saturating_add(minutes);
+    }
+    total_minutes > 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_zero_time() {
+        assert!(!is_valid_jira_time_format("0h"));
+        assert!(!is_valid_jira_time_format("0m"));
+        assert!(!is_valid_jira_time_format("0d"));
+        assert!(!is_valid_jira_time_format("0w"));
+        assert!(!is_valid_jira_time_format("0d 0h 0m"));
+        assert!(is_valid_jira_time_format("0h 30m"));
+        assert!(is_valid_jira_time_format("1h"));
+        assert!(is_valid_jira_time_format("2h 30m"));
+    }
 
     #[test]
     fn parses_project_search_page() {
@@ -2359,11 +2496,11 @@ mod tests {
         assert_eq!(wl.id.as_deref(), Some("w1"));
         assert_eq!(wl.time_spent.as_deref(), Some("2h"));
         assert_eq!(wl.time_spent_seconds, Some(7200));
-        assert_eq!(wl.author.as_ref().unwrap().display_name.as_deref(), Some("Bob"));
         assert_eq!(
-            wl.started.as_deref(),
-            Some("2026-06-01T09:00:00.000+0000")
+            wl.author.as_ref().unwrap().display_name.as_deref(),
+            Some("Bob")
         );
+        assert_eq!(wl.started.as_deref(), Some("2026-06-01T09:00:00.000+0000"));
     }
 
     #[test]
@@ -2614,10 +2751,7 @@ mod tests {
             sprint.start_date.as_deref(),
             Some("2026-06-01T00:00:00.000Z")
         );
-        assert_eq!(
-            sprint.end_date.as_deref(),
-            Some("2026-06-14T00:00:00.000Z")
-        );
+        assert_eq!(sprint.end_date.as_deref(), Some("2026-06-14T00:00:00.000Z"));
         assert_eq!(sprint.complete_date, None);
         assert_eq!(sprint.origin_board_id, Some(10));
         assert_eq!(sprint.goal.as_deref(), Some("Deliver MVP"));
@@ -2734,9 +2868,12 @@ mod tests {
 
     #[test]
     fn resolve_no_users_fails() {
-        let error =
-            resolve_assignable_user("ghost", vec![]).expect_err("no users should fail");
+        let error = resolve_assignable_user("ghost", vec![]).expect_err("no users should fail");
 
-        assert!(error.to_string().contains("no assignable Jira user matched"));
+        assert!(
+            error
+                .to_string()
+                .contains("no assignable Jira user matched")
+        );
     }
 }

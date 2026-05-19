@@ -407,7 +407,10 @@ mod tests {
         );
 
         assert_eq!(
-            config.get_value("default.profile", None).unwrap().as_deref(),
+            config
+                .get_value("default.profile", None)
+                .unwrap()
+                .as_deref(),
             Some("default")
         );
         assert_eq!(
@@ -738,7 +741,11 @@ mod tests {
             },
         );
         config
-            .set_value("alias.deploy", "jira search 'project = DEP'".to_owned(), None)
+            .set_value(
+                "alias.deploy",
+                "jira search 'project = DEP'".to_owned(),
+                None,
+            )
             .expect("set alias");
 
         store.save(&config).expect("save config");
@@ -812,7 +819,11 @@ mod tests {
     fn get_value_alias_name() {
         let mut config = AtlaConfig::default();
         config
-            .set_value("alias.deploy", "jira search 'project = DEP'".to_owned(), None)
+            .set_value(
+                "alias.deploy",
+                "jira search 'project = DEP'".to_owned(),
+                None,
+            )
             .expect("set alias");
 
         assert_eq!(
@@ -853,7 +864,10 @@ mod tests {
         store.save(&config).expect("save config");
         let loaded = store.load().expect("load config");
 
-        assert_eq!(loaded.profiles["work"].instance, "https://work.atlassian.net");
+        assert_eq!(
+            loaded.profiles["work"].instance,
+            "https://work.atlassian.net"
+        );
         assert_eq!(loaded.profiles["work"].email, "work@example.com");
         assert_eq!(
             loaded.profiles["personal"].instance,

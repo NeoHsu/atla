@@ -120,6 +120,7 @@ dependencies = [
  "atla-confluence-api",
  "atla-confluence-v1-api",
  "atla-jira-api",
+ "chrono",
  "directories",
  "keyring",
  "reqwest",

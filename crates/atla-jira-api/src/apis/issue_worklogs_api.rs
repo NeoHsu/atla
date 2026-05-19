@@ -39,7 +39,9 @@ pub async fn add_worklog(
         configuration.base_path,
         issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
     );
-    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+    let mut req_builder = configuration
+        .client
+        .request(reqwest::Method::POST, &uri_str);
 
     req_builder = req_builder.json(body);
 
