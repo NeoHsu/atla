@@ -44,7 +44,11 @@ pub(super) async fn run_search(
         )
     })?;
 
-    if page.issues.is_empty() && matches!(global.output.unwrap_or(OutputFormat::Table), OutputFormat::Table)
+    if page.issues.is_empty()
+        && matches!(
+            global.output.unwrap_or(OutputFormat::Table),
+            OutputFormat::Table
+        )
     {
         println!("No issues found.");
         return Ok(());

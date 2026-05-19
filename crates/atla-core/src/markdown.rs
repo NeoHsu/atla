@@ -613,11 +613,11 @@ fn render_inlines(items: &[Value]) -> String {
     // Higher frequency means the mark spans more text → it is likely the outer mark.
     let mut freq: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for item in items {
-        if let Value::Object(obj) = item {
-            if node_type(obj) == "text" {
-                for mt in stateful_marks_of(obj) {
-                    *freq.entry(mt).or_default() += 1;
-                }
+        if let Value::Object(obj) = item
+            && node_type(obj) == "text"
+        {
+            for mt in stateful_marks_of(obj) {
+                *freq.entry(mt).or_default() += 1;
             }
         }
     }
@@ -1077,22 +1077,21 @@ mod tests {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
             {
-                "taskList" => {
-                    if !object
+                "taskList"
+                    if object
                         .get("attrs")
                         .and_then(|attrs| attrs.get("localId"))
                         .and_then(Value::as_str)
-                        .is_some()
-                    {
-                        errors.push(format!("{path}: taskList missing attrs.localId"));
-                    }
+                        .is_none() =>
+                {
+                    errors.push(format!("{path}: taskList missing attrs.localId"));
                 }
                 "taskItem" => {
                     let attrs = object.get("attrs");
-                    if !attrs
+                    if attrs
                         .and_then(|attrs| attrs.get("localId"))
                         .and_then(Value::as_str)
-                        .is_some()
+                        .is_none()
                     {
                         errors.push(format!("{path}: taskItem missing attrs.localId"));
                     }
@@ -1150,10 +1149,10 @@ mod tests {
                                 "{path}.content[{index}]: codeBlock text must not have marks"
                             ));
                         }
-                        if !child_object
+                        if child_object
                             .get("text")
                             .and_then(Value::as_str)
-                            .is_some_and(|text| !text.is_empty())
+                            .is_none_or(|text| text.is_empty())
                         {
                             errors.push(format!(
                                 "{path}.content[{index}]: text node must be non-empty"
@@ -1161,21 +1160,20 @@ mod tests {
                         }
                     }
                 }
-                "text" => {
-                    if !object
+                "text"
+                    if object
                         .get("text")
                         .and_then(Value::as_str)
-                        .is_some_and(|text| !text.is_empty())
-                    {
-                        errors.push(format!("{path}: text node must be non-empty"));
-                    }
+                        .is_none_or(|text| text.is_empty()) =>
+                {
+                    errors.push(format!("{path}: text node must be non-empty"));
                 }
                 "inlineCard" => {
-                    if !object
+                    if object
                         .get("attrs")
                         .and_then(|attrs| attrs.get("url"))
                         .and_then(Value::as_str)
-                        .is_some()
+                        .is_none()
                     {
                         errors.push(format!("{path}: inlineCard missing attrs.url"));
                     }
@@ -1183,15 +1181,14 @@ mod tests {
                         errors.push(format!("{path}: inlineCard must not have content"));
                     }
                 }
-                "orderedList" => {
+                "orderedList"
                     if object
                         .get("attrs")
                         .and_then(|attrs| attrs.get("order"))
                         .and_then(Value::as_f64)
-                        .is_some_and(|order| order < 0.0)
-                    {
-                        errors.push(format!("{path}: orderedList order must be >= 0"));
-                    }
+                        .is_some_and(|order| order < 0.0) =>
+                {
+                    errors.push(format!("{path}: orderedList order must be >= 0"));
                 }
                 _ => {}
             }

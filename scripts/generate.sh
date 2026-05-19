@@ -111,9 +111,12 @@ fix_generated_lints() {
 
   # The Confluence spec produces a handful of model modules with double
   # underscores. They compile correctly but violate Rust's non_snake_case lint.
+  # Suppress all warnings so that `cargo clippy -- -D warnings` on dependents
+  # does not treat generated-code lint warnings as errors.
   prepend_line_if_missing "${lib_rs}" '#![allow(clippy::too_many_arguments)]'
   prepend_line_if_missing "${lib_rs}" '#![allow(unused_imports)]'
   prepend_line_if_missing "${lib_rs}" '#![allow(non_snake_case)]'
+  prepend_line_if_missing "${lib_rs}" '#![allow(warnings)]'
 }
 
 update_specs_manifest_generated_at() {

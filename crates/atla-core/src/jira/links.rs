@@ -76,9 +76,11 @@ impl JiraClient {
         }
 
         let response: JiraIssueLinkTypesResponse = read_json(request).await?;
-        Ok(canonical_link_type_name(user_input, &response.issue_link_types)
-            .unwrap_or(user_input)
-            .to_owned())
+        Ok(
+            canonical_link_type_name(user_input, &response.issue_link_types)
+                .unwrap_or(user_input)
+                .to_owned(),
+        )
     }
 }
 
@@ -226,12 +228,18 @@ mod tests {
             },
         ];
 
-        assert_eq!(canonical_link_type_name("blocks", &link_types), Some("Blocks"));
+        assert_eq!(
+            canonical_link_type_name("blocks", &link_types),
+            Some("Blocks")
+        );
         assert_eq!(
             canonical_link_type_name("IS BLOCKED BY", &link_types),
             Some("Blocks")
         );
-        assert_eq!(canonical_link_type_name("relates", &link_types), Some("Relates"));
+        assert_eq!(
+            canonical_link_type_name("relates", &link_types),
+            Some("Relates")
+        );
         assert_eq!(canonical_link_type_name("duplicates", &link_types), None);
     }
 }

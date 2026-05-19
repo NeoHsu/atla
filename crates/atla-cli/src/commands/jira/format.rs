@@ -359,7 +359,11 @@ pub(super) fn print_issue_assign(
             println!(
                 "{},{},{},{}",
                 output::csv_cell(key),
-                if user.account_id.is_none() && user.display_name.is_none() { "false" } else { "true" },
+                if user.account_id.is_none() && user.display_name.is_none() {
+                    "false"
+                } else {
+                    "true"
+                },
                 output::csv_cell(user.account_id.as_deref().unwrap_or_default()),
                 output::csv_cell(user.display_name.as_deref().unwrap_or_default())
             );
@@ -996,11 +1000,25 @@ fn unescape_text(s: &str) -> String {
     while let Some(c) = chars.next() {
         if c == '\\' {
             match chars.peek().copied() {
-                Some('n') => { chars.next(); result.push('\n'); }
-                Some('t') => { chars.next(); result.push('\t'); }
-                Some('r') => { chars.next(); result.push('\r'); }
-                Some('\\') => { chars.next(); result.push('\\'); }
-                _ => { result.push(c); }
+                Some('n') => {
+                    chars.next();
+                    result.push('\n');
+                }
+                Some('t') => {
+                    chars.next();
+                    result.push('\t');
+                }
+                Some('r') => {
+                    chars.next();
+                    result.push('\r');
+                }
+                Some('\\') => {
+                    chars.next();
+                    result.push('\\');
+                }
+                _ => {
+                    result.push(c);
+                }
             }
         } else {
             result.push(c);

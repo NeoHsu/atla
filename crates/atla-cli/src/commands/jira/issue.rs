@@ -12,8 +12,8 @@ use super::format::{
     can_prompt, issue_fields_for_url, open_web_url, parse_fields, parse_issue_fields,
     parse_label_update, print_comment, print_comments, print_created_issue, print_deleted,
     print_issue, print_issue_assign, print_issue_comments_section, print_issue_delete,
-    print_issue_update, print_issues, print_transition_update,
-    read_optional_text, read_required_text, select_transition,
+    print_issue_update, print_issues, print_transition_update, read_optional_text,
+    read_required_text, select_transition,
 };
 use super::link::run_issue_link;
 use super::worklog::run_issue_worklog;
@@ -228,13 +228,17 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             print_issue(&issue, global, requested_fields.as_deref())?;
 
             // In table mode with no custom --fields, also show comments
-            if global.output.is_none() || global.output == Some(crate::cli::OutputFormat::Table) {
-                if requested_fields.is_none() {
-                    let comment_page = client.list_comments(&key, 50).await
-                        .with_context(|| format!("failed to load comments for Jira issue `{key}` from {}", client.instance_url()))?;
-                    if !comment_page.comments.is_empty() {
-                        print_issue_comments_section(&comment_page, global)?;
-                    }
+            if (global.output.is_none() || global.output == Some(crate::cli::OutputFormat::Table))
+                && requested_fields.is_none()
+            {
+                let comment_page = client.list_comments(&key, 50).await.with_context(|| {
+                    format!(
+                        "failed to load comments for Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+                if !comment_page.comments.is_empty() {
+                    print_issue_comments_section(&comment_page, global)?;
                 }
             }
         }
