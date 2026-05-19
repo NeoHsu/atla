@@ -6,6 +6,7 @@ use atla_core::{
     JiraIssueSearch, JiraIssueType, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint,
     JiraSprintCreate, JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser,
     JiraWorklog, JiraWorklogCreate, JiraWorklogPage, default_issue_fields,
+    markdown::adf_to_markdown,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -1498,9 +1499,9 @@ fn print_issue(
                     }
                 }
                 if let Some(desc) = issue.fields.get("description") {
-                    let text = adf_to_text(desc);
+                    let text = adf_to_markdown(desc);
                     if !text.is_empty() {
-                        println!("Description: {text}");
+                        println!("Description:\n{text}");
                     }
                 }
             }
@@ -2356,47 +2357,6 @@ fn display_extra_issue_fields(fields: Option<&[String]>) -> Vec<String> {
         })
         .cloned()
         .collect()
-}
-
-/// Recursively extract plain text from an Atlassian Document Format (ADF) JSON node.
-fn adf_to_text(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::Object(obj) => {
-            if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
-                obj.get("text")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_owned()
-            } else {
-                let content = obj
-                    .get("content")
-                    .and_then(|v| v.as_array())
-                    .map(|nodes| nodes.iter().map(adf_to_text).collect::<Vec<_>>().join(""))
-                    .unwrap_or_default();
-                // Add a newline after block-level nodes to preserve paragraph breaks.
-                let node_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if matches!(
-                    node_type,
-                    "paragraph"
-                        | "heading"
-                        | "listItem"
-                        | "bulletList"
-                        | "orderedList"
-                        | "blockquote"
-                        | "codeBlock"
-                        | "rule"
-                        | "panel"
-                ) && !content.is_empty()
-                {
-                    format!("{content}\n")
-                } else {
-                    content
-                }
-            }
-        }
-        serde_json::Value::Array(arr) => arr.iter().map(adf_to_text).collect::<Vec<_>>().join(""),
-        _ => String::new(),
-    }
 }
 
 fn issue_field_cell(issue: &JiraIssue, field: &str) -> String {

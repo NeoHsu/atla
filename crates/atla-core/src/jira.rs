@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::client::{ApiError, AtlassianClient, read_json};
+use crate::markdown::markdown_to_adf;
 
 #[derive(Debug, Clone)]
 pub struct JiraClient {
@@ -869,7 +870,7 @@ impl JiraIssueCreate {
         );
         fields.insert("summary".to_owned(), self.summary.clone().into());
         if let Some(description) = &self.description {
-            fields.insert("description".to_owned(), text_adf(description));
+            fields.insert("description".to_owned(), markdown_to_adf(description));
         }
 
         generated_models::IssueUpdateDetails {
@@ -927,7 +928,7 @@ impl JiraIssueUpdate {
             fields.insert("summary".to_owned(), summary.clone().into());
         }
         if let Some(description) = &self.description {
-            fields.insert("description".to_owned(), text_adf(description));
+            fields.insert("description".to_owned(), markdown_to_adf(description));
         }
 
         generated_models::IssueUpdateDetails {
@@ -1385,7 +1386,7 @@ impl JiraWorklogCreate {
             value
                 .as_object_mut()
                 .expect("worklog create is object")
-                .insert("comment".to_owned(), text_adf(comment));
+                .insert("comment".to_owned(), markdown_to_adf(comment));
         }
         value
     }
@@ -1586,37 +1587,8 @@ fn serialized_string<T: Serialize>(value: T) -> Option<String> {
     }
 }
 
-fn text_adf(text: &str) -> serde_json::Value {
-    let content = text
-        .lines()
-        .map(|line| {
-            if line.is_empty() {
-                serde_json::json!({
-                    "type": "paragraph"
-                })
-            } else {
-                serde_json::json!({
-                    "type": "paragraph",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": line
-                        }
-                    ]
-                })
-            }
-        })
-        .collect::<Vec<_>>();
-
-    serde_json::json!({
-        "type": "doc",
-        "version": 1,
-        "content": content,
-    })
-}
-
 fn adf_body(text: &str) -> std::collections::HashMap<String, serde_json::Value> {
-    text_adf(text)
+    markdown_to_adf(text)
         .as_object()
         .expect("ADF root is an object")
         .clone()
@@ -1951,9 +1923,10 @@ mod tests {
         assert_eq!(fields["summary"], serde_json::json!("Fix login"));
         assert_eq!(fields["priority"], serde_json::json!({ "name": "High" }));
         assert_eq!(fields["description"]["type"], serde_json::json!("doc"));
+        // "Line one\nLine two" — consecutive non-blank lines become one paragraph in markdown_to_adf
         assert_eq!(
             fields["description"]["content"].as_array().unwrap().len(),
-            2
+            1
         );
     }
 
@@ -2170,7 +2143,7 @@ mod tests {
         });
 
         assert_eq!(comment.id.as_deref(), Some("10010"));
-        assert_eq!(comment.body_text.as_deref(), Some("Line one\nLine two"));
+        assert_eq!(comment.body_text.as_deref(), Some("Line one Line two"));
         assert_eq!(comment.author_display_name.as_deref(), Some("Neo"));
     }
 
