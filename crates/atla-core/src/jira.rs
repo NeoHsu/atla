@@ -623,8 +623,14 @@ pub struct JiraIssueList {
 impl JiraIssueList {
     pub fn to_search(&self, default_project: Option<&str>) -> Result<JiraIssueSearch, ApiError> {
         if let Some(jql) = &self.jql {
+            let final_jql = if let Some(project) = self.project_key.as_deref().or(default_project)
+            {
+                format!("project = {} AND ({jql})", quote_jql_value(project))
+            } else {
+                jql.clone()
+            };
             return Ok(JiraIssueSearch {
-                jql: jql.clone(),
+                jql: final_jql,
                 max_results: self.max_results,
                 fields: self.fields.clone(),
             });
@@ -1718,7 +1724,10 @@ mod tests {
 
         let search = list.to_search(None).expect("search");
 
-        assert_eq!(search.jql, "status = Open");
+        assert_eq!(
+            search.jql,
+            "project = \"PROJ\" AND (status = Open)"
+        );
         assert_eq!(search.max_results, 10);
     }
 

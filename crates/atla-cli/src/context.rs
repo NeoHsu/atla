@@ -12,6 +12,7 @@ use crate::config;
 pub struct AppContext {
     profile_name: String,
     profile: Profile,
+    verbose: bool,
 }
 
 impl AppContext {
@@ -25,6 +26,7 @@ impl AppContext {
         Ok(Self {
             profile_name: profile_name.to_owned(),
             profile: profile.clone(),
+            verbose: global.verbose,
         })
     }
 
@@ -62,7 +64,7 @@ impl AppContext {
     }
 
     pub fn atlassian_client(&self) -> anyhow::Result<AtlassianClient> {
-        Ok(AtlassianClient::from_profile(&self.profile, self.token()?))
+        Ok(AtlassianClient::from_profile(&self.profile, self.token()?).with_verbose(self.verbose))
     }
 
     pub fn jira_client(&self) -> anyhow::Result<JiraClient> {

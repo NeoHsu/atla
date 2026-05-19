@@ -21,6 +21,7 @@ pub struct AtlassianClient {
     instance: AtlassianInstance,
     email: String,
     token: String,
+    verbose: bool,
 }
 
 impl AtlassianClient {
@@ -34,7 +35,13 @@ impl AtlassianClient {
             instance,
             email: email.into(),
             token: token.into(),
+            verbose: false,
         }
+    }
+
+    pub fn with_verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
     }
 
     pub fn from_profile(profile: &Profile, token: impl Into<String>) -> Self {
@@ -57,30 +64,44 @@ impl AtlassianClient {
         &self.token
     }
 
+    fn log_request(&self, method: &str, url: &str) {
+        if self.verbose {
+            eprintln!("[verbose] {} {}", method, url);
+        }
+    }
+
     pub fn get(&self, path: &str) -> reqwest::RequestBuilder {
+        let url = self.url(path);
+        self.log_request("GET", &url);
         self.http
-            .get(self.url(path))
+            .get(url)
             .basic_auth(&self.email, Some(&self.token))
             .header(reqwest::header::ACCEPT, "application/json")
     }
 
     pub fn post(&self, path: &str) -> reqwest::RequestBuilder {
+        let url = self.url(path);
+        self.log_request("POST", &url);
         self.http
-            .post(self.url(path))
+            .post(url)
             .basic_auth(&self.email, Some(&self.token))
             .header(reqwest::header::ACCEPT, "application/json")
     }
 
     pub fn put(&self, path: &str) -> reqwest::RequestBuilder {
+        let url = self.url(path);
+        self.log_request("PUT", &url);
         self.http
-            .put(self.url(path))
+            .put(url)
             .basic_auth(&self.email, Some(&self.token))
             .header(reqwest::header::ACCEPT, "application/json")
     }
 
     pub fn delete(&self, path: &str) -> reqwest::RequestBuilder {
+        let url = self.url(path);
+        self.log_request("DELETE", &url);
         self.http
-            .delete(self.url(path))
+            .delete(url)
             .basic_auth(&self.email, Some(&self.token))
             .header(reqwest::header::ACCEPT, "application/json")
     }

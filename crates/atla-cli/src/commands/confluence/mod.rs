@@ -76,7 +76,7 @@ async fn run_attachment(command: AttachmentCommand, global: &GlobalArgs) -> anyh
             let profile = ctx.profile();
             let search = ConfluenceAttachmentSearch {
                 page_id,
-                filename,
+                filename: filename.filter(|s| !s.is_empty()),
                 limit: limit.clamp(1, 250),
             };
 

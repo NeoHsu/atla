@@ -8,8 +8,18 @@ use atla_core::{
 };
 use dialoguer::{Input, Password};
 
-use crate::cli::{AuthAction, AuthCommand, AuthStorage, GlobalArgs};
+use crate::cli::{AuthAction, AuthCommand, AuthStorage, GlobalArgs, OutputFormat};
 use crate::config;
+use crate::output;
+
+#[derive(serde::Serialize)]
+struct AuthStatusOutput<'a> {
+    profile: &'a str,
+    instance: &'a str,
+    email: &'a str,
+    credential_store: String,
+    token: String,
+}
 
 pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     let store = ConfigStore::default_store().context("failed to find config location")?;
@@ -101,12 +111,40 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
             };
             let credential = profile.credential_ref(profile_name);
             let token_status = token_status(profile.credential_store, &credential);
+            let status = AuthStatusOutput {
+                profile: profile_name,
+                instance: &profile.instance,
+                email: &profile.email,
+                credential_store: profile.credential_store.to_string(),
+                token: token_status,
+            };
 
-            println!("Profile: {profile_name}");
-            println!("Instance: {}", profile.instance);
-            println!("Email: {}", profile.email);
-            println!("Credential store: {}", profile.credential_store);
-            println!("Token: {token_status}");
+            match global.output {
+                Some(OutputFormat::Json) => output::print_json(&status)?,
+                Some(format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys)) => {
+                    output::print_records(
+                        format,
+                        &status,
+                        vec![status.profile.to_owned()],
+                        &["profile", "instance", "email", "credential_store", "token"],
+                        vec![vec![
+                            status.profile.to_owned(),
+                            status.instance.to_owned(),
+                            status.email.to_owned(),
+                            status.credential_store.clone(),
+                            status.token.clone(),
+                        ]],
+                        None,
+                    )?
+                }
+                None => {
+                    println!("Profile: {}", status.profile);
+                    println!("Instance: {}", status.instance);
+                    println!("Email: {}", status.email);
+                    println!("Credential store: {}", status.credential_store);
+                    println!("Token: {}", status.token);
+                }
+            }
         }
         AuthAction::Switch { profile } => {
             atla_config
