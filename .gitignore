@@ -3,3 +3,9 @@
 /.vscode/
 *.log
 docs/reports/
+.atla_live/
+oe_test_output/
+*.log
+jira_*_test*.tsv
+jira_*_test*.txt
+test_attachment.txt
