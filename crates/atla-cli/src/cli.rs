@@ -144,6 +144,8 @@ pub enum IssueAction {
         project: Option<String>,
         #[arg(long)]
         status: Option<String>,
+        #[arg(long = "type")]
+        issue_type: Option<String>,
         #[arg(long)]
         assignee: Option<String>,
         #[arg(long)]
@@ -312,6 +314,8 @@ pub enum IssueWorklogAction {
         time: String,
         #[arg(long)]
         comment: Option<String>,
+        #[arg(long)]
+        started: Option<String>,
     },
     List {
         key: String,
@@ -392,12 +396,12 @@ pub enum SprintAction {
     },
     Add {
         id: u64,
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, alias = "issue", value_delimiter = ',')]
         issues: Vec<String>,
     },
     Remove {
         id: u64,
-        #[arg(long, value_delimiter = ',')]
+        #[arg(long, alias = "issue", value_delimiter = ',')]
         issues: Vec<String>,
     },
     Issues {

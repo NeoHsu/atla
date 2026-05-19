@@ -39,6 +39,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
         IssueAction::List {
             project,
             status,
+            issue_type,
             assignee,
             jql,
             limit,
@@ -51,6 +52,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             let list = JiraIssueList {
                 project_key: project,
                 status,
+                issue_type,
                 assignee,
                 jql,
                 max_results: limit.clamp(1, 5000),
@@ -812,7 +814,7 @@ async fn run_issue_link(action: IssueLinkAction, global: &GlobalArgs) -> anyhow:
 
 async fn run_issue_worklog(action: IssueWorklogAction, global: &GlobalArgs) -> anyhow::Result<()> {
     match action {
-        IssueWorklogAction::Add { key, time, comment } => {
+        IssueWorklogAction::Add { key, time, comment, started } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -832,6 +834,7 @@ async fn run_issue_worklog(action: IssueWorklogAction, global: &GlobalArgs) -> a
                     issue_id_or_key: key.clone(),
                     time_spent: time,
                     comment,
+                    started,
                 })
                 .await
                 .with_context(|| {

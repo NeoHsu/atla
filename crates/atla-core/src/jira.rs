@@ -766,6 +766,7 @@ impl JiraIssueSearch {
 pub struct JiraIssueList {
     pub project_key: Option<String>,
     pub status: Option<String>,
+    pub issue_type: Option<String>,
     pub assignee: Option<String>,
     pub jql: Option<String>,
     pub max_results: u32,
@@ -800,6 +801,9 @@ impl JiraIssueList {
 
         if let Some(status) = &self.status {
             clauses.push(format!("status = {}", quote_jql_value(status)));
+        }
+        if let Some(issue_type) = &self.issue_type {
+            clauses.push(format!("issuetype = {}", quote_jql_value(issue_type)));
         }
         if let Some(assignee) = &self.assignee {
             if assignee.eq_ignore_ascii_case("me") {
@@ -1112,6 +1116,8 @@ impl From<generated_models::PageOfComments> for JiraCommentPage {
 pub struct JiraComment {
     pub id: Option<String>,
     pub body_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<serde_json::Value>,
     pub author_display_name: Option<String>,
     pub created: Option<String>,
     pub updated: Option<String>,
@@ -1121,6 +1127,13 @@ impl From<generated_models::Comment> for JiraComment {
     fn from(comment: generated_models::Comment) -> Self {
         Self {
             id: comment.id,
+            body: comment.body.as_ref().map(|b| {
+                serde_json::Value::Object(
+                    b.iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect(),
+                )
+            }),
             body_text: comment
                 .body
                 .as_ref()
@@ -1377,16 +1390,18 @@ pub struct JiraWorklogCreate {
     pub issue_id_or_key: String,
     pub time_spent: String,
     pub comment: Option<String>,
+    pub started: Option<String>,
 }
 
 impl JiraWorklogCreate {
     fn to_json(&self) -> serde_json::Value {
         let mut value = serde_json::json!({ "timeSpent": self.time_spent });
+        let obj = value.as_object_mut().expect("worklog create is object");
         if let Some(comment) = &self.comment {
-            value
-                .as_object_mut()
-                .expect("worklog create is object")
-                .insert("comment".to_owned(), markdown_to_adf(comment));
+            obj.insert("comment".to_owned(), markdown_to_adf(comment));
+        }
+        if let Some(started) = &self.started {
+            obj.insert("started".to_owned(), serde_json::Value::String(started.clone()));
         }
         value
     }
@@ -1608,8 +1623,9 @@ fn jira_comment_from_value(value: serde_json::Value) -> Result<JiraComment, ApiE
     let object = value
         .as_object()
         .ok_or_else(|| ApiError::Decode("Jira comment response was not an object".to_owned()))?;
-    let body_text = object
-        .get("body")
+    let body_value = object.get("body").cloned();
+    let body_text = body_value
+        .as_ref()
         .and_then(serde_json::Value::as_object)
         .map(|body| adf_plain_text(&body.clone().into_iter().collect()))
         .filter(|text| !text.is_empty());
@@ -1619,6 +1635,7 @@ fn jira_comment_from_value(value: serde_json::Value) -> Result<JiraComment, ApiE
             .get("id")
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned),
+        body: body_value.filter(|v| v.is_object()),
         body_text,
         author_display_name: object
             .get("author")
@@ -1973,6 +1990,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: None,
             status: Some("In Progress".to_owned()),
+            issue_type: None,
             assignee: Some("me".to_owned()),
             jql: None,
             max_results: 25,
@@ -1994,6 +2012,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: Some("PROJ".to_owned()),
             status: Some("Done".to_owned()),
+            issue_type: None,
             assignee: None,
             jql: Some("status = Open".to_owned()),
             max_results: 10,
@@ -2607,6 +2626,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: Some("PROJ".to_owned()),
             status: None,
+            issue_type: None,
             assignee: None,
             jql: None,
             max_results: 50,
@@ -2623,6 +2643,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: Some("PROJ".to_owned()),
             status: None,
+            issue_type: None,
             assignee: Some("alice".to_owned()),
             jql: None,
             max_results: 50,
@@ -2642,6 +2663,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: Some("MINE".to_owned()),
             status: None,
+            issue_type: None,
             assignee: None,
             jql: None,
             max_results: 50,
@@ -2658,6 +2680,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: None,
             status: None,
+            issue_type: None,
             assignee: None,
             jql: None,
             max_results: 50,
@@ -2674,6 +2697,7 @@ mod tests {
         let list = JiraIssueList {
             project_key: None,
             status: None,
+            issue_type: None,
             assignee: None,
             jql: Some("status = Open".to_owned()),
             max_results: 50,
