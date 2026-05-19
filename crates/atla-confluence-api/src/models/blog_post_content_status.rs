@@ -27,6 +27,8 @@ pub enum BlogPostContentStatus {
     Deleted,
     #[serde(rename = "any")]
     Any,
+    #[serde(other)]
+    Unknown,
 }
 
 impl std::fmt::Display for BlogPostContentStatus {
@@ -38,6 +40,7 @@ impl std::fmt::Display for BlogPostContentStatus {
             Self::Trashed => write!(f, "trashed"),
             Self::Deleted => write!(f, "deleted"),
             Self::Any => write!(f, "any"),
+            Self::Unknown => write!(f, "unknown"),
         }
     }
 }

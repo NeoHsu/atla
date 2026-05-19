@@ -773,7 +773,10 @@ impl ConfluenceClient {
         let status = response.status();
         if !status.is_success() {
             let body = response.text().await.unwrap_or_default();
-            return Err(ApiError::Http { status, body });
+            return Err(ApiError::Http {
+                status,
+                body: crate::client::extract_api_error_body(&body),
+            });
         }
         let bytes = response.bytes().await.map_err(ApiError::Request)?;
         let filename = output
@@ -1421,7 +1424,7 @@ fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
         generated_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
         generated_apis::Error::ResponseError(response) => ApiError::Http {
             status: response.status,
-            body: response.content,
+            body: crate::client::extract_api_error_body(&response.content),
         },
     }
 }
@@ -1433,7 +1436,7 @@ fn generated_v1_error<T>(error: generated_v1_apis::Error<T>) -> ApiError {
         generated_v1_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
         generated_v1_apis::Error::ResponseError(response) => ApiError::Http {
             status: response.status,
-            body: response.content,
+            body: crate::client::extract_api_error_body(&response.content),
         },
     }
 }

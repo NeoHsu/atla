@@ -131,6 +131,41 @@ pub enum ApiError {
     },
 }
 
+pub(crate) fn extract_api_error_body(body: &str) -> String {
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(msgs) = json["errorMessages"].as_array() {
+            let msgs: Vec<&str> = msgs.iter().filter_map(|message| message.as_str()).collect();
+            if !msgs.is_empty() {
+                return msgs.join("; ");
+            }
+        }
+
+        if let Some(errors) = json["errors"].as_object() {
+            let msgs: Vec<String> = errors
+                .iter()
+                .map(|(key, value)| format!("{}: {}", key, value.as_str().unwrap_or(&value.to_string())))
+                .collect();
+            if !msgs.is_empty() {
+                return msgs.join("; ");
+            }
+        }
+
+        if let Some(msg) = json["message"].as_str() {
+            return msg.to_owned();
+        }
+
+        if let Some(msg) = json["error"].as_str() {
+            return msg.to_owned();
+        }
+    }
+
+    if body.len() > 500 {
+        format!("{}…", &body[..500])
+    } else {
+        body.to_owned()
+    }
+}
+
 pub async fn read_json<T: serde::de::DeserializeOwned>(
     request: reqwest::RequestBuilder,
 ) -> Result<T, ApiError> {
@@ -139,7 +174,10 @@ pub async fn read_json<T: serde::de::DeserializeOwned>(
 
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(ApiError::Http { status, body });
+        return Err(ApiError::Http {
+            status,
+            body: extract_api_error_body(&body),
+        });
     }
 
     response.json::<T>().await.map_err(ApiError::Request)
@@ -151,7 +189,10 @@ pub async fn read_empty(request: reqwest::RequestBuilder) -> Result<(), ApiError
 
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(ApiError::Http { status, body });
+        return Err(ApiError::Http {
+            status,
+            body: extract_api_error_body(&body),
+        });
     }
 
     Ok(())

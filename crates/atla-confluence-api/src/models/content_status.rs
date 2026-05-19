@@ -29,6 +29,8 @@ pub enum ContentStatus {
     Deleted,
     #[serde(rename = "any")]
     Any,
+    #[serde(other)]
+    Unknown,
 }
 
 impl std::fmt::Display for ContentStatus {
@@ -41,6 +43,7 @@ impl std::fmt::Display for ContentStatus {
             Self::Trashed => write!(f, "trashed"),
             Self::Deleted => write!(f, "deleted"),
             Self::Any => write!(f, "any"),
+            Self::Unknown => write!(f, "unknown"),
         }
     }
 }

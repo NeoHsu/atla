@@ -1603,7 +1603,7 @@ fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
         generated_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
         generated_apis::Error::ResponseError(response) => ApiError::Http {
             status: response.status,
-            body: response.content,
+            body: crate::client::extract_api_error_body(&response.content),
         },
     }
 }

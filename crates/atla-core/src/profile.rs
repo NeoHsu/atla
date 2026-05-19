@@ -69,6 +69,37 @@ impl AtlaConfig {
             return Ok(());
         }
 
+        if key == "default.profile" {
+            return self.switch_profile(&value);
+        }
+
+        if let Some(rest) = key.strip_prefix("profiles.") {
+            if let Some(dot_pos) = rest.rfind('.') {
+                let profile_name = &rest[..dot_pos];
+                let field = normalized_key(&rest[dot_pos + 1..]);
+                let profile = self
+                    .profiles
+                    .get_mut(profile_name)
+                    .ok_or_else(|| ProfileError::MissingProfile(profile_name.to_owned()))?;
+                match field.as_str() {
+                    "instance" => profile.instance = value,
+                    "email" => profile.email = value,
+                    "credential-store" => {
+                        profile.credential_store = parse_credential_storage(&value)?;
+                    }
+                    "default-project" => profile.default_project = Some(value),
+                    "default-space" => profile.default_space = Some(value),
+                    _ => {
+                        return Err(ProfileError::UnsupportedConfigKey(format!(
+                            "profiles.{profile_name}.{field}"
+                        )));
+                    }
+                }
+                return Ok(());
+            }
+            return Err(ProfileError::UnsupportedConfigKey(key.to_owned()));
+        }
+
         match key.as_str() {
             "default-profile" => self.switch_profile(&value),
             "default-project" => {
@@ -111,6 +142,35 @@ impl AtlaConfig {
             .or_else(|| key.strip_prefix("aliases."))
         {
             return Ok(self.aliases.get(alias).cloned());
+        }
+
+        if key == "default.profile" {
+            return Ok(self.default.profile.clone());
+        }
+
+        if let Some(rest) = key.strip_prefix("profiles.") {
+            if let Some(dot_pos) = rest.rfind('.') {
+                let profile_name = &rest[..dot_pos];
+                let field = normalized_key(&rest[dot_pos + 1..]);
+                let profile = self
+                    .profiles
+                    .get(profile_name)
+                    .ok_or_else(|| ProfileError::MissingProfile(profile_name.to_owned()))?;
+                let value = match field.as_str() {
+                    "instance" => Some(profile.instance.clone()),
+                    "email" => Some(profile.email.clone()),
+                    "credential-store" => Some(profile.credential_store.to_string()),
+                    "default-project" => profile.default_project.clone(),
+                    "default-space" => profile.default_space.clone(),
+                    _ => {
+                        return Err(ProfileError::UnsupportedConfigKey(format!(
+                            "profiles.{profile_name}.{field}"
+                        )));
+                    }
+                };
+                return Ok(value);
+            }
+            return Err(ProfileError::UnsupportedConfigKey(key.to_owned()));
         }
 
         let value = match key.as_str() {
@@ -329,6 +389,79 @@ mod tests {
         assert!(matches!(
             config.switch_profile("missing"),
             Err(ProfileError::MissingProfile(name)) if name == "missing"
+        ));
+    }
+
+    #[test]
+    fn get_value_with_dotted_keys() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "default",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: Some("PROJ".to_owned()),
+                default_space: None,
+            },
+        );
+
+        assert_eq!(
+            config.get_value("default.profile", None).unwrap().as_deref(),
+            Some("default")
+        );
+        assert_eq!(
+            config
+                .get_value("profiles.default.instance", None)
+                .unwrap()
+                .as_deref(),
+            Some("https://example.atlassian.net")
+        );
+        assert_eq!(
+            config
+                .get_value("profiles.default.email", None)
+                .unwrap()
+                .as_deref(),
+            Some("neo@example.com")
+        );
+    }
+
+    #[test]
+    fn set_value_with_dotted_keys() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "default",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        config
+            .set_value(
+                "profiles.default.instance",
+                "https://new.atlassian.net".to_owned(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            config
+                .get_value("profiles.default.instance", None)
+                .unwrap()
+                .as_deref(),
+            Some("https://new.atlassian.net")
+        );
+    }
+
+    #[test]
+    fn get_value_unsupported_key_errors() {
+        let config = AtlaConfig::default();
+        assert!(matches!(
+            config.get_value("nonexistent.key", None),
+            Err(ProfileError::UnsupportedConfigKey(_))
         ));
     }
 

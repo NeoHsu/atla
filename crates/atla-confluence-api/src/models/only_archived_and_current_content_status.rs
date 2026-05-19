@@ -19,6 +19,10 @@ pub enum OnlyArchivedAndCurrentContentStatus {
     Current,
     #[serde(rename = "archived")]
     Archived,
+    #[serde(rename = "draft")]
+    Draft,
+    #[serde(other)]
+    Unknown,
 }
 
 impl std::fmt::Display for OnlyArchivedAndCurrentContentStatus {
@@ -26,6 +30,8 @@ impl std::fmt::Display for OnlyArchivedAndCurrentContentStatus {
         match self {
             Self::Current => write!(f, "current"),
             Self::Archived => write!(f, "archived"),
+            Self::Draft => write!(f, "draft"),
+            Self::Unknown => write!(f, "unknown"),
         }
     }
 }

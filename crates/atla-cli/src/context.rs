@@ -19,9 +19,22 @@ impl AppContext {
     pub fn load(global: &GlobalArgs) -> anyhow::Result<Self> {
         let store = ConfigStore::default_store().context("failed to find config location")?;
         let atla_config = store.load().context("failed to load config")?;
+        let active_profile_name = config::active_profile(global);
         let (profile_name, profile) = atla_config
-            .active_profile(config::active_profile(global))
-            .ok_or_else(|| anyhow::anyhow!("no active profile; run `atla auth login` first"))?;
+            .active_profile(active_profile_name)
+            .ok_or_else(|| {
+                if let Some(name) = active_profile_name {
+                    anyhow::anyhow!(
+                        "profile `{name}` does not exist; run `atla auth login --profile {name}` to create it"
+                    )
+                } else if let Some(name) = atla_config.default.profile.as_deref() {
+                    anyhow::anyhow!(
+                        "default profile `{name}` does not exist; run `atla auth login --profile {name}` to recreate it"
+                    )
+                } else {
+                    anyhow::anyhow!("no active profile; run `atla auth login` first")
+                }
+            })?;
 
         Ok(Self {
             profile_name: profile_name.to_owned(),

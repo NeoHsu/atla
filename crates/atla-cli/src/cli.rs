@@ -124,7 +124,7 @@ pub enum JiraResource {
     Board(BoardCommand),
     Search {
         jql: String,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         #[arg(long)]
         fields: Option<String>,
@@ -148,7 +148,7 @@ pub enum IssueAction {
         assignee: Option<String>,
         #[arg(long)]
         jql: Option<String>,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         #[arg(long)]
         fields: Option<String>,
@@ -238,7 +238,7 @@ pub enum IssueCommentAction {
     },
     List {
         key: String,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Update {
@@ -298,7 +298,7 @@ pub enum IssueWorklogAction {
     },
     List {
         key: String,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
 }
@@ -318,7 +318,7 @@ pub enum BoardAction {
         board_type: Option<String>,
         #[arg(long)]
         name: Option<String>,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
 }
@@ -336,13 +336,13 @@ pub enum SprintAction {
         board: u64,
         #[arg(long)]
         state: Option<String>,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Active {
         #[arg(long)]
         board: u64,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     View {
@@ -393,7 +393,7 @@ pub enum ProjectAction {
     List {
         #[arg(long)]
         query: Option<String>,
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     View {
@@ -417,7 +417,7 @@ pub enum ConfluenceResource {
     Blog(BlogCommand),
     Search {
         cql: String,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Attachment(AttachmentCommand),
@@ -460,7 +460,7 @@ pub enum PageAction {
         space_id: Option<String>,
         #[arg(long)]
         title: Option<String>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     View {
@@ -474,7 +474,7 @@ pub enum PageAction {
         id: String,
         #[arg(long)]
         depth: Option<u32>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Copy {
@@ -539,7 +539,7 @@ pub enum PageLabelAction {
         page_id: String,
         #[arg(long)]
         prefix: Option<String>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Add {
@@ -556,7 +556,7 @@ pub enum PageLabelAction {
 pub enum PageCommentAction {
     List {
         page_id: String,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Add {
@@ -611,7 +611,7 @@ pub enum BlogAction {
         space_id: Option<String>,
         #[arg(long)]
         title: Option<String>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     View {
@@ -659,7 +659,7 @@ pub enum BlogLabelAction {
         blog_id: String,
         #[arg(long)]
         prefix: Option<String>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Add {
@@ -676,7 +676,7 @@ pub enum BlogLabelAction {
 pub enum BlogCommentAction {
     List {
         blog_id: String,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     Add {
@@ -703,7 +703,7 @@ pub enum SpaceAction {
     List {
         #[arg(long)]
         key: Option<String>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     View {
@@ -750,7 +750,7 @@ pub enum AttachmentAction {
         page_id: String,
         #[arg(long)]
         filename: Option<String>,
-        #[arg(long, default_value_t = 25)]
+        #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
     },
     View {
