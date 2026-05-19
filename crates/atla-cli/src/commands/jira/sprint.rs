@@ -96,6 +96,15 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             }
 
             let client = ctx.jira_client()?;
+            let existing = client.get_sprint(id).await.with_context(|| {
+                format!(
+                    "failed to load Jira sprint `{id}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            if existing.state.as_deref() == Some("active") {
+                anyhow::bail!("sprint `{id}` is already active");
+            }
             let sprint = client
                 .update_sprint(&JiraSprintUpdate {
                     id,

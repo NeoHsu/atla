@@ -192,7 +192,7 @@ fn collect_prefixed_block(lines: &[&str], start: usize, prefix: char) -> (String
         collected.push(trimmed[1..].trim_start());
         index += 1;
     }
-    (collected.join("\n"), index)
+    (collected.join("\n\n"), index)
 }
 
 fn collect_task_items(lines: &[&str], start: usize) -> (Vec<Value>, usize) {
@@ -1486,6 +1486,27 @@ cargo test
         assert_eq!(adf["content"][0]["type"], json!("blockquote"));
         assert_eq!(adf["content"][0]["content"][0]["type"], json!("paragraph"));
         assert!(targeted_schema_errors(&adf).is_empty());
+    }
+
+    #[test]
+    fn multiline_blockquote_preserves_both_lines() {
+        // Each `> ` line must survive the MD→ADF→MD roundtrip as a visible separate line.
+        let markdown = "> First line.\n> Second line.";
+        let adf = markdown_to_adf(markdown);
+
+        // Two separate paragraphs inside the blockquote
+        assert_eq!(adf["content"][0]["type"], json!("blockquote"));
+        assert_eq!(adf["content"][0]["content"].as_array().unwrap().len(), 2);
+
+        let rendered = adf_to_markdown(&adf);
+        assert!(
+            rendered.contains("> First line."),
+            "First line missing: {rendered}"
+        );
+        assert!(
+            rendered.contains("> Second line."),
+            "Second line missing: {rendered}"
+        );
     }
 
     #[test]
