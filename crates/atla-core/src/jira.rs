@@ -1371,7 +1371,7 @@ impl From<generated_models::Project> for JiraProject {
             id: project.id,
             key: project.key,
             name: project.name,
-            project_type_key: project.project_type_key.and_then(serialized_string),
+            project_type_key: project.project_type_key,
             style: project.style.and_then(serialized_string),
             simplified: project.simplified,
             archived: project.archived,
@@ -1670,7 +1670,7 @@ mod tests {
                 id: Some("10000".to_owned()),
                 key: Some("PROJ".to_owned()),
                 name: Some("Project".to_owned()),
-                project_type_key: Some(generated_models::project::ProjectTypeKey::Software),
+                project_type_key: Some("software".to_owned()),
                 style: Some(generated_models::project::Style::Classic),
                 simplified: Some(false),
                 archived: Some(false),
@@ -2115,5 +2115,482 @@ mod tests {
         assert_eq!(issue.assignee_display_name(), None);
         assert_eq!(issue.issue_type_name(), Some("Task"));
         assert_eq!(issue.priority_name(), Some("Medium"));
+    }
+
+    #[test]
+    fn parses_comment_page() {
+        let page: JiraCommentPage = serde_json::from_str(
+            r#"{
+                "startAt": 0,
+                "maxResults": 25,
+                "total": 1,
+                "comments": [
+                    {
+                        "id": "c1",
+                        "bodyText": "Hello world",
+                        "authorDisplayName": "Alice",
+                        "created": "2026-05-01T00:00:00.000Z",
+                        "updated": null
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse comment page");
+
+        assert_eq!(page.start_at, 0);
+        assert_eq!(page.max_results, 25);
+        assert_eq!(page.total, Some(1));
+        assert_eq!(page.comments.len(), 1);
+        assert_eq!(page.comments[0].id.as_deref(), Some("c1"));
+        assert_eq!(
+            page.comments[0].author_display_name.as_deref(),
+            Some("Alice")
+        );
+    }
+
+    #[test]
+    fn converts_generated_comment_page() {
+        let page = generated_models::PageOfComments {
+            start_at: Some(0),
+            max_results: Some(25),
+            total: Some(1),
+            comments: Some(vec![generated_models::Comment {
+                id: Some("c1".to_owned()),
+                body: Some(adf_body("Hello")),
+                author: Some(Box::new(generated_models::User {
+                    account_id: Some("a1".to_owned()),
+                    display_name: Some("Alice".to_owned()),
+                    active: Some(true),
+                })),
+                created: Some("2026-05-01T00:00:00.000Z".to_owned()),
+                updated: None,
+                param_self: None,
+            }]),
+        };
+
+        let page = JiraCommentPage::from(page);
+
+        assert_eq!(page.start_at, 0);
+        assert_eq!(page.max_results, 25);
+        assert_eq!(page.total, Some(1));
+        assert_eq!(page.comments.len(), 1);
+        assert_eq!(page.comments[0].id.as_deref(), Some("c1"));
+        assert_eq!(page.comments[0].body_text.as_deref(), Some("Hello"));
+        assert_eq!(
+            page.comments[0].author_display_name.as_deref(),
+            Some("Alice")
+        );
+    }
+
+    #[test]
+    fn parses_worklog_page() {
+        let page: JiraWorklogPage = serde_json::from_str(
+            r#"{
+                "startAt": 0,
+                "maxResults": 20,
+                "total": 1,
+                "worklogs": [
+                    {
+                        "id": "w1",
+                        "timeSpent": "2h",
+                        "timeSpentSeconds": 7200,
+                        "author": {
+                            "displayName": "Bob",
+                            "accountId": "b1"
+                        },
+                        "started": "2026-06-01T09:00:00.000+0000"
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse worklog page");
+
+        assert_eq!(page.start_at, 0);
+        assert_eq!(page.max_results, 20);
+        assert_eq!(page.total, Some(1));
+        assert_eq!(page.worklogs.len(), 1);
+        let wl = &page.worklogs[0];
+        assert_eq!(wl.id.as_deref(), Some("w1"));
+        assert_eq!(wl.time_spent.as_deref(), Some("2h"));
+        assert_eq!(wl.time_spent_seconds, Some(7200));
+        assert_eq!(wl.author.as_ref().unwrap().display_name.as_deref(), Some("Bob"));
+        assert_eq!(
+            wl.started.as_deref(),
+            Some("2026-06-01T09:00:00.000+0000")
+        );
+    }
+
+    #[test]
+    fn worklog_comment_text_extraction() {
+        let wl = JiraWorklog {
+            id: Some("w1".to_owned()),
+            time_spent: Some("1h".to_owned()),
+            time_spent_seconds: Some(3600),
+            author: None,
+            comment: Some(serde_json::json!({
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            { "type": "text", "text": "Reviewed PR" }
+                        ]
+                    }
+                ]
+            })),
+            started: None,
+        };
+
+        assert_eq!(wl.comment_text().as_deref(), Some("Reviewed PR"));
+    }
+
+    #[test]
+    fn worklog_no_comment_returns_none() {
+        let wl = JiraWorklog {
+            id: Some("w2".to_owned()),
+            time_spent: Some("30m".to_owned()),
+            time_spent_seconds: Some(1800),
+            author: None,
+            comment: None,
+            started: None,
+        };
+
+        assert_eq!(wl.comment_text(), None);
+    }
+
+    #[test]
+    fn parses_issue_link_from_value() {
+        let value = serde_json::json!({
+            "id": "link-1",
+            "type": { "name": "Blocks" },
+            "inwardIssue": {
+                "id": "10001",
+                "key": "PROJ-2",
+                "fields": {
+                    "summary": "Blocked task",
+                    "status": { "name": "Open" }
+                }
+            },
+            "outwardIssue": {
+                "id": "10002",
+                "key": "PROJ-3",
+                "fields": {
+                    "summary": "Downstream",
+                    "status": { "name": "Done" }
+                }
+            }
+        });
+
+        let link = jira_issue_link_from_value(&value);
+
+        assert_eq!(link.id.as_deref(), Some("link-1"));
+        assert_eq!(link.link_type.as_deref(), Some("Blocks"));
+        let inward = link.inward_issue.unwrap();
+        assert_eq!(inward.key.as_deref(), Some("PROJ-2"));
+        assert_eq!(inward.summary.as_deref(), Some("Blocked task"));
+        assert_eq!(inward.status.as_deref(), Some("Open"));
+        let outward = link.outward_issue.unwrap();
+        assert_eq!(outward.key.as_deref(), Some("PROJ-3"));
+        assert_eq!(outward.status.as_deref(), Some("Done"));
+    }
+
+    #[test]
+    fn parses_linked_issue_summary_and_status() {
+        let value = serde_json::json!({
+            "id": "10010",
+            "key": "ABC-5",
+            "fields": {
+                "summary": "Some task",
+                "status": { "name": "In Progress" }
+            }
+        });
+
+        let linked = jira_linked_issue_from_value(&value);
+
+        assert_eq!(linked.id.as_deref(), Some("10010"));
+        assert_eq!(linked.key.as_deref(), Some("ABC-5"));
+        assert_eq!(linked.summary.as_deref(), Some("Some task"));
+        assert_eq!(linked.status.as_deref(), Some("In Progress"));
+    }
+
+    #[test]
+    fn converts_generated_issue_type() {
+        let issue_type = JiraIssueType::from(generated_models::IssueType {
+            id: Some("1".to_owned()),
+            name: Some("Task".to_owned()),
+            description: Some("A task".to_owned()),
+            subtask: Some(false),
+            ..Default::default()
+        });
+
+        assert_eq!(issue_type.id.as_deref(), Some("1"));
+        assert_eq!(issue_type.name.as_deref(), Some("Task"));
+        assert_eq!(issue_type.description.as_deref(), Some("A task"));
+        assert_eq!(issue_type.subtask, Some(false));
+    }
+
+    #[test]
+    fn parses_issue_type_from_json() {
+        let issue_type: JiraIssueType = serde_json::from_value(serde_json::json!({
+            "id": "2",
+            "name": "Bug",
+            "description": "A bug report",
+            "subtask": true
+        }))
+        .expect("parse issue type");
+
+        assert_eq!(issue_type.id.as_deref(), Some("2"));
+        assert_eq!(issue_type.name.as_deref(), Some("Bug"));
+        assert_eq!(issue_type.description.as_deref(), Some("A bug report"));
+        assert_eq!(issue_type.subtask, Some(true));
+    }
+
+    #[test]
+    fn issue_list_no_other_filters() {
+        let list = JiraIssueList {
+            project_key: Some("PROJ".to_owned()),
+            status: None,
+            assignee: None,
+            jql: None,
+            max_results: 50,
+            fields: None,
+        };
+
+        let search = list.to_search(None).expect("search");
+
+        assert_eq!(search.jql, "project = \"PROJ\" ORDER BY updated DESC");
+    }
+
+    #[test]
+    fn issue_list_assignee_literal() {
+        let list = JiraIssueList {
+            project_key: Some("PROJ".to_owned()),
+            status: None,
+            assignee: Some("alice".to_owned()),
+            jql: None,
+            max_results: 50,
+            fields: None,
+        };
+
+        let search = list.to_search(None).expect("search");
+
+        assert_eq!(
+            search.jql,
+            "project = \"PROJ\" AND assignee = \"alice\" ORDER BY updated DESC"
+        );
+    }
+
+    #[test]
+    fn issue_list_project_key_overrides_default() {
+        let list = JiraIssueList {
+            project_key: Some("MINE".to_owned()),
+            status: None,
+            assignee: None,
+            jql: None,
+            max_results: 50,
+            fields: None,
+        };
+
+        let search = list.to_search(Some("OTHER")).expect("search");
+
+        assert_eq!(search.jql, "project = \"MINE\" ORDER BY updated DESC");
+    }
+
+    #[test]
+    fn issue_list_requires_project() {
+        let list = JiraIssueList {
+            project_key: None,
+            status: None,
+            assignee: None,
+            jql: None,
+            max_results: 50,
+            fields: None,
+        };
+
+        let error = list.to_search(None).expect_err("should require project");
+
+        assert!(error.to_string().contains("provide --project or --jql"));
+    }
+
+    #[test]
+    fn issue_list_jql_without_project() {
+        let list = JiraIssueList {
+            project_key: None,
+            status: None,
+            assignee: None,
+            jql: Some("status = Open".to_owned()),
+            max_results: 50,
+            fields: None,
+        };
+
+        let search = list.to_search(None).expect("search");
+
+        assert_eq!(search.jql, "status = Open");
+    }
+
+    #[test]
+    fn quote_jql_value_simple() {
+        assert_eq!(quote_jql_value("PROJ"), "\"PROJ\"");
+    }
+
+    #[test]
+    fn quote_jql_value_escapes_double_quote() {
+        assert_eq!(quote_jql_value("say \"hello\""), "\"say \\\"hello\\\"\"");
+    }
+
+    #[test]
+    fn quote_jql_value_escapes_backslash() {
+        assert_eq!(quote_jql_value("path\\file"), "\"path\\\\file\"");
+    }
+
+    #[test]
+    fn parses_single_sprint_detail() {
+        let sprint: JiraSprint = serde_json::from_str(
+            r#"{
+                "id": 42,
+                "self": "https://example.atlassian.net/rest/agile/1.0/sprint/42",
+                "state": "active",
+                "name": "Sprint 5",
+                "startDate": "2026-06-01T00:00:00.000Z",
+                "endDate": "2026-06-14T00:00:00.000Z",
+                "completeDate": null,
+                "originBoardId": 10,
+                "goal": "Deliver MVP"
+            }"#,
+        )
+        .expect("parse sprint");
+
+        assert_eq!(sprint.id, Some(42));
+        assert_eq!(sprint.state.as_deref(), Some("active"));
+        assert_eq!(sprint.name.as_deref(), Some("Sprint 5"));
+        assert_eq!(
+            sprint.start_date.as_deref(),
+            Some("2026-06-01T00:00:00.000Z")
+        );
+        assert_eq!(
+            sprint.end_date.as_deref(),
+            Some("2026-06-14T00:00:00.000Z")
+        );
+        assert_eq!(sprint.complete_date, None);
+        assert_eq!(sprint.origin_board_id, Some(10));
+        assert_eq!(sprint.goal.as_deref(), Some("Deliver MVP"));
+    }
+
+    #[test]
+    fn parses_sprint_with_missing_optional_fields() {
+        let sprint: JiraSprint = serde_json::from_value(serde_json::json!({
+            "id": 99,
+            "name": "Backlog Sprint"
+        }))
+        .expect("parse sprint with minimal fields");
+
+        assert_eq!(sprint.id, Some(99));
+        assert_eq!(sprint.name.as_deref(), Some("Backlog Sprint"));
+        assert_eq!(sprint.state, None);
+        assert_eq!(sprint.start_date, None);
+        assert_eq!(sprint.end_date, None);
+        assert_eq!(sprint.origin_board_id, None);
+        assert_eq!(sprint.goal, None);
+    }
+
+    #[test]
+    fn parses_user_from_json() {
+        let user: JiraUser = serde_json::from_value(serde_json::json!({
+            "accountId": "abc-123",
+            "displayName": "Charlie",
+            "active": true
+        }))
+        .expect("parse user");
+
+        assert_eq!(user.account_id.as_deref(), Some("abc-123"));
+        assert_eq!(user.display_name.as_deref(), Some("Charlie"));
+        assert_eq!(user.active, Some(true));
+    }
+
+    #[test]
+    fn parses_empty_issue_search_page() {
+        let page: JiraIssueSearchPage = serde_json::from_value(serde_json::json!({
+            "isLast": true,
+            "issues": []
+        }))
+        .expect("parse empty issue search page");
+
+        assert_eq!(page.is_last, Some(true));
+        assert!(page.issues.is_empty());
+    }
+
+    #[test]
+    fn parses_empty_sprint_page() {
+        let page: JiraSprintPage = serde_json::from_value(serde_json::json!({
+            "startAt": 0,
+            "maxResults": 50,
+            "total": 0,
+            "isLast": true,
+            "values": []
+        }))
+        .expect("parse empty sprint page");
+
+        assert_eq!(page.total, Some(0));
+        assert!(page.values.is_empty());
+    }
+
+    #[test]
+    fn parses_empty_comment_page() {
+        let page: JiraCommentPage = serde_json::from_value(serde_json::json!({
+            "startAt": 0,
+            "maxResults": 25,
+            "total": 0,
+            "comments": []
+        }))
+        .expect("parse empty comment page");
+
+        assert_eq!(page.total, Some(0));
+        assert!(page.comments.is_empty());
+    }
+
+    #[test]
+    fn resolve_single_user_no_exact_match() {
+        let user = resolve_assignable_user(
+            "anything",
+            vec![JiraUser {
+                account_id: Some("account-x".to_owned()),
+                display_name: Some("Xavier".to_owned()),
+                active: Some(true),
+            }],
+        )
+        .expect("single user");
+
+        assert_eq!(user.account_id.as_deref(), Some("account-x"));
+    }
+
+    #[test]
+    fn resolve_user_by_account_id() {
+        let user = resolve_assignable_user(
+            "account-2",
+            vec![
+                JiraUser {
+                    account_id: Some("account-1".to_owned()),
+                    display_name: Some("Alice".to_owned()),
+                    active: Some(true),
+                },
+                JiraUser {
+                    account_id: Some("account-2".to_owned()),
+                    display_name: Some("Bob".to_owned()),
+                    active: Some(true),
+                },
+            ],
+        )
+        .expect("resolved by account id");
+
+        assert_eq!(user.display_name.as_deref(), Some("Bob"));
+    }
+
+    #[test]
+    fn resolve_no_users_fails() {
+        let error =
+            resolve_assignable_user("ghost", vec![]).expect_err("no users should fail");
+
+        assert!(error.to_string().contains("no assignable Jira user matched"));
     }
 }

@@ -1,11 +1,11 @@
 use anyhow::Context;
 use atla_core::{
-    JiraAssigneeTarget, JiraAttachmentDownload, JiraBoardPage, JiraBoardSearch, JiraComment,
-    JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate,
-    JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch,
-    JiraIssueType, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint, JiraSprintCreate,
-    JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser, JiraWorklog,
-    JiraWorklogCreate, JiraWorklogPage,
+    default_issue_fields, JiraAssigneeTarget, JiraAttachmentDownload, JiraBoardPage,
+    JiraBoardSearch, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign,
+    JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList,
+    JiraIssueSearch, JiraIssueType, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint,
+    JiraSprintCreate, JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser,
+    JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -180,6 +180,13 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             let profile = ctx.profile();
             let requested_fields = parse_issue_fields(fields.as_deref())?;
 
+            // When no --fields specified, always fetch description in addition to defaults.
+            let fetch_fields = requested_fields.clone().or_else(|| {
+                let mut f = default_issue_fields();
+                f.push("description".to_owned());
+                Some(f)
+            });
+
             if global.dry_run {
                 if web {
                     println!(
@@ -193,7 +200,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                     "{}/rest/api/3/issue/{}?fields={}",
                     profile.instance.trim_end_matches('/'),
                     key,
-                    issue_fields_for_url(requested_fields.as_deref())
+                    issue_fields_for_url(fetch_fields.as_deref())
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
                 return Ok(());
@@ -210,7 +217,7 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
 
             let client = ctx.jira_client()?;
             let issue = client
-                .get_issue(&key, requested_fields.clone())
+                .get_issue(&key, fetch_fields)
                 .await
                 .with_context(|| {
                     format!(
@@ -360,6 +367,15 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
                             )
                         })?;
                     print_transition_update(&key, &transition, global)?;
+                } else if !can_prompt(global) {
+                    let names = transitions
+                        .iter()
+                        .filter_map(|t| t.name.as_deref())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    anyhow::bail!(
+                        "--to is required in non-interactive mode; available transitions: {names}"
+                    );
                 } else {
                     print_transitions(&transitions, global)?;
                 }
@@ -1254,6 +1270,15 @@ fn print_issue(
             if let Some(id) = &issue.id {
                 println!("ID: {id}");
             }
+            // Show description when no explicit --fields were requested.
+            if requested_fields.is_none() {
+                if let Some(desc) = issue.fields.get("description") {
+                    let text = adf_to_text(desc);
+                    if !text.is_empty() {
+                        println!("Description: {text}");
+                    }
+                }
+            }
             for field in extra_fields {
                 println!("{field}: {}", issue_field_cell(issue, &field));
             }
@@ -1996,6 +2021,37 @@ fn display_extra_issue_fields(fields: Option<&[String]>) -> Vec<String> {
         })
         .cloned()
         .collect()
+}
+
+/// Recursively extract plain text from an Atlassian Document Format (ADF) JSON node.
+fn adf_to_text(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Object(obj) => {
+            if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
+                obj.get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_owned()
+            } else {
+                let content = obj
+                    .get("content")
+                    .and_then(|v| v.as_array())
+                    .map(|nodes| nodes.iter().map(adf_to_text).collect::<Vec<_>>().join(""))
+                    .unwrap_or_default();
+                // Add a newline after block-level nodes to preserve paragraph breaks.
+                let node_type = obj.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if matches!(node_type, "paragraph" | "heading" | "listItem" | "bulletList" | "orderedList" | "blockquote" | "codeBlock" | "rule" | "panel") && !content.is_empty() {
+                    format!("{content}\n")
+                } else {
+                    content
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            arr.iter().map(adf_to_text).collect::<Vec<_>>().join("")
+        }
+        _ => String::new(),
+    }
 }
 
 fn issue_field_cell(issue: &JiraIssue, field: &str) -> String {

@@ -485,4 +485,380 @@ mod tests {
             Some("jira search 'assignee = currentUser()'")
         );
     }
+
+    #[test]
+    fn active_profile_returns_none_when_empty() {
+        let config = AtlaConfig::default();
+        assert!(config.active_profile(None).is_none());
+    }
+
+    #[test]
+    fn active_profile_returns_default_profile() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        let (name, profile) = config.active_profile(None).expect("active profile");
+        assert_eq!(name, "work");
+        assert_eq!(profile.instance, "https://work.atlassian.net");
+        assert_eq!(profile.email, "work@example.com");
+    }
+
+    #[test]
+    fn active_profile_respects_override_name() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+        config.upsert_profile(
+            "personal",
+            Profile {
+                instance: "https://personal.atlassian.net".to_owned(),
+                email: "personal@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        let (name, profile) = config
+            .active_profile(Some("personal"))
+            .expect("active profile with override");
+        assert_eq!(name, "personal");
+        assert_eq!(profile.instance, "https://personal.atlassian.net");
+    }
+
+    #[test]
+    fn active_profile_override_takes_precedence_over_default() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "default",
+            Profile {
+                instance: "https://default.atlassian.net".to_owned(),
+                email: "default@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        let (name, profile) = config
+            .active_profile(Some("work"))
+            .expect("active profile with override");
+        assert_eq!(name, "work");
+        assert_eq!(profile.instance, "https://work.atlassian.net");
+    }
+
+    #[test]
+    fn active_profile_name_with_no_default_returns_none() {
+        let config = AtlaConfig::default();
+        assert_eq!(config.active_profile_name(None), None);
+    }
+
+    #[test]
+    fn active_profile_name_with_override() {
+        let config = AtlaConfig::default();
+        assert_eq!(config.active_profile_name(Some("work")), Some("work"));
+    }
+
+    #[test]
+    fn get_value_default_project() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "default",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: Some("PROJ".to_owned()),
+                default_space: None,
+            },
+        );
+
+        assert_eq!(
+            config
+                .get_value("profiles.default.default_project", None)
+                .expect("get default project")
+                .as_deref(),
+            Some("PROJ")
+        );
+    }
+
+    #[test]
+    fn get_value_default_space() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "default",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: Some("DEV".to_owned()),
+            },
+        );
+
+        assert_eq!(
+            config
+                .get_value("profiles.default.default_space", None)
+                .expect("get default space")
+                .as_deref(),
+            Some("DEV")
+        );
+    }
+
+    #[test]
+    fn get_value_credential_store() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "default",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        assert_eq!(
+            config
+                .get_value("profiles.default.credential_store", None)
+                .expect("get credential store")
+                .as_deref(),
+            Some("file")
+        );
+    }
+
+    #[test]
+    fn get_value_missing_profile_key_returns_none() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        assert_eq!(
+            config
+                .get_value("profiles.work.default_project", None)
+                .expect("get missing optional key"),
+            None
+        );
+    }
+
+    #[test]
+    fn get_value_nonexistent_profile_key_errors() {
+        let config = AtlaConfig::default();
+        assert!(matches!(
+            config.get_value("profiles.nonexistent.instance", None),
+            Err(ProfileError::MissingProfile(name)) if name == "nonexistent"
+        ));
+    }
+
+    #[test]
+    fn upsert_second_profile_does_not_change_default() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+        config.upsert_profile(
+            "personal",
+            Profile {
+                instance: "https://personal.atlassian.net".to_owned(),
+                email: "personal@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        assert_eq!(config.active_profile_name(None), Some("work"));
+    }
+
+    #[test]
+    fn config_store_loads_empty_file_as_default() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = ConfigStore::new(dir.path().join("config.toml"));
+
+        let loaded = store.load().expect("load missing config as default");
+        assert_eq!(loaded, AtlaConfig::default());
+    }
+
+    #[test]
+    fn config_stores_and_loads_aliases() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = ConfigStore::new(dir.path().join("config.toml"));
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+        config
+            .set_value("alias.deploy", "jira search 'project = DEP'".to_owned(), None)
+            .expect("set alias");
+
+        store.save(&config).expect("save config");
+        let loaded = store.load().expect("load config");
+
+        assert_eq!(
+            loaded.aliases.get("deploy"),
+            Some(&"jira search 'project = DEP'".to_owned())
+        );
+    }
+
+    #[test]
+    fn profile_without_optional_fields_round_trips() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = ConfigStore::new(dir.path().join("config.toml"));
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        store.save(&config).expect("save config");
+        let loaded = store.load().expect("load config");
+
+        assert_eq!(loaded.profiles["work"].default_project, None);
+        assert_eq!(loaded.profiles["work"].default_space, None);
+    }
+
+    #[test]
+    fn set_value_for_specific_profile_with_override() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+        config.upsert_profile(
+            "personal",
+            Profile {
+                instance: "https://personal.atlassian.net".to_owned(),
+                email: "personal@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        config
+            .set_value("profiles.work.default_project", "WORK".to_owned(), None)
+            .expect("set work default project");
+
+        assert_eq!(
+            config.profiles["work"].default_project.as_deref(),
+            Some("WORK")
+        );
+        assert_eq!(config.profiles["personal"].default_project, None);
+    }
+
+    #[test]
+    fn get_value_alias_name() {
+        let mut config = AtlaConfig::default();
+        config
+            .set_value("alias.deploy", "jira search 'project = DEP'".to_owned(), None)
+            .expect("set alias");
+
+        assert_eq!(
+            config
+                .get_value("aliases.deploy", None)
+                .expect("get alias")
+                .as_deref(),
+            Some("jira search 'project = DEP'")
+        );
+    }
+
+    #[test]
+    fn multiple_profiles_coexist() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = ConfigStore::new(dir.path().join("config.toml"));
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://work.atlassian.net".to_owned(),
+                email: "work@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+            },
+        );
+        config.upsert_profile(
+            "personal",
+            Profile {
+                instance: "https://personal.atlassian.net".to_owned(),
+                email: "personal@example.com".to_owned(),
+                credential_store: CredentialStorage::File,
+                default_project: None,
+                default_space: None,
+            },
+        );
+
+        store.save(&config).expect("save config");
+        let loaded = store.load().expect("load config");
+
+        assert_eq!(loaded.profiles["work"].instance, "https://work.atlassian.net");
+        assert_eq!(loaded.profiles["work"].email, "work@example.com");
+        assert_eq!(
+            loaded.profiles["personal"].instance,
+            "https://personal.atlassian.net"
+        );
+        assert_eq!(loaded.profiles["personal"].email, "personal@example.com");
+    }
 }

@@ -2196,8 +2196,503 @@ mod tests {
             attachment
                 .version
                 .as_ref()
-                .and_then(|version| version.number),
+            .and_then(|version| version.number),
             Some(2)
+        );
+    }
+
+    #[test]
+    fn parses_space_with_description() {
+        let space: ConfluenceSpace = serde_json::from_str(
+            r#"{
+                "id": "12345",
+                "key": "DEV",
+                "name": "Development",
+                "type": "global",
+                "status": "current",
+                "homepageId": "67890",
+                "currentActiveAlias": "DEV",
+                "description": {
+                    "plain": {
+                        "value": "Team docs"
+                    }
+                }
+            }"#,
+        )
+        .expect("parse space");
+
+        assert_eq!(space.id.as_deref(), Some("12345"));
+        assert_eq!(space.key.as_deref(), Some("DEV"));
+        assert_eq!(space.name.as_deref(), Some("Development"));
+        assert_eq!(space.space_type.as_deref(), Some("global"));
+        assert_eq!(space.status.as_deref(), Some("current"));
+        assert_eq!(space.homepage_id.as_deref(), Some("67890"));
+        assert_eq!(space.current_active_alias.as_deref(), Some("DEV"));
+    }
+
+    #[test]
+    fn converts_space_from_generated_space() {
+        let space = ConfluenceSpace::from(generated_models::SpaceBulk {
+            id: Some("12345".to_owned()),
+            key: Some("DEV".to_owned()),
+            name: Some("Development".to_owned()),
+            r#type: Some(generated_models::SpaceType::Global),
+            status: Some(generated_models::SpaceStatus::Current),
+            homepage_id: Some("67890".to_owned()),
+            current_active_alias: Some("dev".to_owned()),
+            ..generated_models::SpaceBulk::new()
+        });
+
+        assert_eq!(space.id.as_deref(), Some("12345"));
+        assert_eq!(space.key.as_deref(), Some("DEV"));
+        assert_eq!(space.name.as_deref(), Some("Development"));
+        assert_eq!(space.space_type.as_deref(), Some("global"));
+        assert_eq!(space.status.as_deref(), Some("current"));
+        assert_eq!(space.homepage_id.as_deref(), Some("67890"));
+        assert_eq!(space.current_active_alias.as_deref(), Some("dev"));
+    }
+
+    #[test]
+    fn parses_single_page_with_body() {
+        let page: ConfluencePage = serde_json::from_str(
+            r#"{
+                "id": "111",
+                "status": "current",
+                "title": "Runbook",
+                "spaceId": "12345",
+                "parentId": "100",
+                "authorId": "abc",
+                "createdAt": "2026-05-17T00:00:00.000Z",
+                "body": "<p>Hello</p>",
+                "version": {
+                    "number": 3,
+                    "message": "Update"
+                }
+            }"#,
+        )
+        .expect("parse page");
+
+        assert_eq!(page.id.as_deref(), Some("111"));
+        assert_eq!(page.status.as_deref(), Some("current"));
+        assert_eq!(page.title.as_deref(), Some("Runbook"));
+        assert_eq!(page.space_id.as_deref(), Some("12345"));
+        assert_eq!(page.parent_id.as_deref(), Some("100"));
+        assert_eq!(page.author_id.as_deref(), Some("abc"));
+        assert_eq!(page.created_at.as_deref(), Some("2026-05-17T00:00:00.000Z"));
+        assert_eq!(page.body.as_deref(), Some("<p>Hello</p>"));
+        assert_eq!(
+            page.version.as_ref().and_then(|version| version.number),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn parses_single_blog_post() {
+        let post: ConfluenceBlogPost = serde_json::from_str(
+            r#"{
+                "id": "222",
+                "status": "current",
+                "title": "Release Notes",
+                "spaceId": "12345",
+                "authorId": "abc",
+                "createdAt": "2026-05-17T00:00:00.000Z",
+                "body": "<p>Shipped</p>"
+            }"#,
+        )
+        .expect("parse blog post");
+
+        assert_eq!(post.id.as_deref(), Some("222"));
+        assert_eq!(post.title.as_deref(), Some("Release Notes"));
+        assert_eq!(post.space_id.as_deref(), Some("12345"));
+        assert_eq!(post.author_id.as_deref(), Some("abc"));
+        assert_eq!(post.body.as_deref(), Some("<p>Shipped</p>"));
+    }
+
+    #[test]
+    fn parses_comment_page() {
+        let page: ConfluenceCommentPage = serde_json::from_str(
+            r#"{
+                "results": [
+                    {
+                        "id": "c1",
+                        "status": "current",
+                        "title": "First comment",
+                        "pageId": "111",
+                        "body": "<p>Looks good</p>",
+                        "version": {
+                            "number": 1,
+                            "createdAt": "2026-05-17T02:00:00.000Z"
+                        }
+                    },
+                    {
+                        "id": "c2",
+                        "status": "current",
+                        "title": "Reply",
+                        "blogPostId": "222",
+                        "parentCommentId": "c1",
+                        "body": "<p>Approved</p>"
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse comment page");
+
+        assert_eq!(page.results.len(), 2);
+        assert_eq!(page.results[0].id.as_deref(), Some("c1"));
+        assert_eq!(page.results[0].body.as_deref(), Some("<p>Looks good</p>"));
+        assert_eq!(page.results[1].blog_post_id.as_deref(), Some("222"));
+        assert_eq!(page.results[1].parent_comment_id.as_deref(), Some("c1"));
+    }
+
+    #[test]
+    fn parses_single_comment() {
+        let comment: ConfluenceComment = serde_json::from_str(
+            r#"{
+                "id": "c1",
+                "status": "current",
+                "title": "Looks good",
+                "pageId": "111",
+                "parentCommentId": "c0",
+                "body": "<p>Ship it</p>",
+                "version": {
+                    "number": 4,
+                    "message": "Edited"
+                }
+            }"#,
+        )
+        .expect("parse comment");
+
+        assert_eq!(comment.id.as_deref(), Some("c1"));
+        assert_eq!(comment.page_id.as_deref(), Some("111"));
+        assert_eq!(comment.parent_comment_id.as_deref(), Some("c0"));
+        assert_eq!(comment.body.as_deref(), Some("<p>Ship it</p>"));
+        assert_eq!(
+            comment.version.as_ref().and_then(|version| version.number),
+            Some(4)
+        );
+        assert_eq!(
+            comment
+                .version
+                .as_ref()
+                .and_then(|version| version.message.as_deref()),
+            Some("Edited")
+        );
+    }
+
+    #[test]
+    fn parses_attachment_with_download_link() {
+        let attachment: ConfluenceAttachment = serde_json::from_str(
+            r#"{
+                "id": "att123",
+                "status": "current",
+                "title": "diagram.png",
+                "pageId": "111",
+                "mediaType": "image/png",
+                "downloadLink": "/download/attachments/111/diagram.png"
+            }"#,
+        )
+        .expect("parse attachment");
+
+        assert_eq!(attachment.id.as_deref(), Some("att123"));
+        assert_eq!(attachment.page_id.as_deref(), Some("111"));
+        assert_eq!(attachment.media_type.as_deref(), Some("image/png"));
+        assert_eq!(
+            attachment.download_link.as_deref(),
+            Some("/download/attachments/111/diagram.png")
+        );
+    }
+
+    #[test]
+    fn parses_search_page_empty() {
+        let page: ConfluenceSearchPage = serde_json::from_str(
+            r#"{
+                "results": [],
+                "size": 0,
+                "totalSize": 0
+            }"#,
+        )
+        .expect("parse empty search page");
+
+        assert!(page.results.is_empty());
+        assert_eq!(page.size, Some(0));
+        assert_eq!(page.total_size, Some(0));
+    }
+
+    #[test]
+    fn parses_search_page_with_excerpt() {
+        let page: ConfluenceSearchPage = serde_json::from_str(
+            r#"{
+                "results": [
+                    {
+                        "title": "Runbook",
+                        "url": "/wiki/spaces/DEV/pages/111/Runbook",
+                        "excerpt": "Useful page",
+                        "content": {
+                            "id": "111",
+                            "type": "page",
+                            "status": "current",
+                            "title": "Runbook"
+                        }
+                    }
+                ],
+                "size": 1,
+                "totalSize": 1
+            }"#,
+        )
+        .expect("parse search page with excerpt");
+
+        assert_eq!(page.results.len(), 1);
+        assert_eq!(page.results[0].excerpt.as_deref(), Some("Useful page"));
+        assert_eq!(
+            page.results[0]
+                .content
+                .as_ref()
+                .and_then(|content| content.id.as_deref()),
+            Some("111")
+        );
+    }
+
+    #[test]
+    fn parses_label_page_multiple() {
+        let page: ConfluenceLabelPage = serde_json::from_str(
+            r#"{
+                "results": [
+                    { "id": "1", "name": "runbook", "prefix": "global" },
+                    { "id": "2", "name": "docs", "prefix": "my" }
+                ]
+            }"#,
+        )
+        .expect("parse labels");
+
+        assert_eq!(page.results.len(), 2);
+        assert_eq!(page.results[0].name.as_deref(), Some("runbook"));
+        assert_eq!(page.results[0].prefix.as_deref(), Some("global"));
+        assert_eq!(page.results[1].name.as_deref(), Some("docs"));
+        assert_eq!(page.results[1].prefix.as_deref(), Some("my"));
+    }
+
+    #[test]
+    fn parses_attachment_page_empty() {
+        let page: ConfluenceAttachmentPage = serde_json::from_str(
+            r#"{
+                "results": []
+            }"#,
+        )
+        .expect("parse empty attachment page");
+
+        assert!(page.results.is_empty());
+    }
+
+    #[test]
+    fn parses_content_tree_page() {
+        let page: ConfluenceContentTreePage = serde_json::from_str(
+            r#"{
+                "results": [
+                    {
+                        "id": "111",
+                        "status": "current",
+                        "title": "Runbook",
+                        "type": "page",
+                        "spaceId": "12345",
+                        "childPosition": 1
+                    },
+                    {
+                        "id": "112",
+                        "status": "current",
+                        "title": "Team Folder",
+                        "type": "folder",
+                        "spaceId": "12345",
+                        "childPosition": 2
+                    }
+                ]
+            }"#,
+        )
+        .expect("parse content tree page");
+
+        assert_eq!(page.results.len(), 2);
+        assert_eq!(page.results[0].content_type.as_deref(), Some("page"));
+        assert_eq!(page.results[1].content_type.as_deref(), Some("folder"));
+        assert_eq!(page.results[1].child_position, Some(2));
+    }
+
+    #[test]
+    fn parses_page_version() {
+        let page: ConfluencePage = serde_json::from_str(
+            r#"{
+                "id": "111",
+                "version": {
+                    "number": 7,
+                    "message": "Promoted",
+                    "createdAt": "2026-05-17T01:00:00.000Z"
+                }
+            }"#,
+        )
+        .expect("parse page version");
+
+        let version = page.version.expect("page version");
+        assert_eq!(version.number, Some(7));
+        assert_eq!(version.message.as_deref(), Some("Promoted"));
+        assert_eq!(version.created_at.as_deref(), Some("2026-05-17T01:00:00.000Z"));
+    }
+
+    #[test]
+    fn parses_blog_post_with_version() {
+        let post: ConfluenceBlogPost = serde_json::from_str(
+            r#"{
+                "id": "222",
+                "version": {
+                    "number": 2,
+                    "message": "Published",
+                    "createdAt": "2026-05-17T03:00:00.000Z"
+                }
+            }"#,
+        )
+        .expect("parse blog post version");
+
+        let version = post.version.expect("blog post version");
+        assert_eq!(version.number, Some(2));
+        assert_eq!(version.message.as_deref(), Some("Published"));
+        assert_eq!(version.created_at.as_deref(), Some("2026-05-17T03:00:00.000Z"));
+    }
+
+    #[test]
+    fn space_search_defaults() {
+        let search = ConfluenceSpaceSearch::default();
+
+        assert_eq!(search.key, None);
+        assert_eq!(search.limit, 25);
+    }
+
+    #[test]
+    fn confluence_search_clamps_limit() {
+        let search = ConfluenceSearch {
+            cql: "type = page".to_owned(),
+            limit: u32::MAX,
+        };
+
+        assert_eq!(search.limit, u32::MAX);
+        assert_eq!(limit_i32(search.limit), i32::MAX);
+    }
+
+    #[test]
+    fn converts_page_from_generated() {
+        let mut version = generated_models::Version::new();
+        version.number = Some(3);
+        version.message = Some("Updated".to_owned());
+        version.created_at = Some("2026-05-17T01:00:00Z".parse().expect("parse created_at"));
+
+        let mut storage = generated_models::BodyType::new();
+        storage.value = Some("<p>Hello</p>".to_owned());
+
+        let mut body = generated_models::BodySingle::new();
+        body.storage = Some(Box::new(storage));
+
+        let page = ConfluencePage::from(generated_models::CreatePage200Response {
+            id: Some("111".to_owned()),
+            status: Some(generated_models::ContentStatus::Current),
+            title: Some("My Page".to_owned()),
+            space_id: Some("12345".to_owned()),
+            parent_id: Some("100".to_owned()),
+            author_id: Some("abc".to_owned()),
+            created_at: Some("2026-05-17T00:00:00Z".parse().expect("parse created_at")),
+            version: Some(Box::new(version)),
+            body: Some(Box::new(body)),
+            ..generated_models::CreatePage200Response::new()
+        });
+
+        assert_eq!(page.id.as_deref(), Some("111"));
+        assert_eq!(page.status.as_deref(), Some("current"));
+        assert_eq!(page.title.as_deref(), Some("My Page"));
+        assert_eq!(page.space_id.as_deref(), Some("12345"));
+        assert_eq!(page.parent_id.as_deref(), Some("100"));
+        assert_eq!(page.author_id.as_deref(), Some("abc"));
+        assert_eq!(page.body.as_deref(), Some("<p>Hello</p>"));
+        assert_eq!(
+            page.version.as_ref().and_then(|version| version.number),
+            Some(3)
+        );
+        assert_eq!(
+            page.version
+                .as_ref()
+                .and_then(|version| version.message.as_deref()),
+            Some("Updated")
+        );
+    }
+
+    #[test]
+    fn converts_blog_post_from_generated() {
+        let mut version = generated_models::Version::new();
+        version.number = Some(2);
+        version.message = Some("Published".to_owned());
+
+        let mut storage = generated_models::BodyType::new();
+        storage.value = Some("<p>Shipped</p>".to_owned());
+
+        let mut body = generated_models::BodySingle::new();
+        body.storage = Some(Box::new(storage));
+
+        let post = ConfluenceBlogPost::from(generated_models::CreateBlogPost200Response {
+            id: Some("222".to_owned()),
+            status: Some(generated_models::BlogPostContentStatus::Current),
+            title: Some("Release Notes".to_owned()),
+            space_id: Some("12345".to_owned()),
+            author_id: Some("abc".to_owned()),
+            created_at: Some("2026-05-17T00:00:00Z".parse().expect("parse created_at")),
+            version: Some(Box::new(version)),
+            body: Some(Box::new(body)),
+            ..generated_models::CreateBlogPost200Response::new()
+        });
+
+        assert_eq!(post.id.as_deref(), Some("222"));
+        assert_eq!(post.status.as_deref(), Some("current"));
+        assert_eq!(post.title.as_deref(), Some("Release Notes"));
+        assert_eq!(post.space_id.as_deref(), Some("12345"));
+        assert_eq!(post.author_id.as_deref(), Some("abc"));
+        assert_eq!(post.body.as_deref(), Some("<p>Shipped</p>"));
+        assert_eq!(
+            post.version.as_ref().and_then(|version| version.number),
+            Some(2)
+        );
+        assert_eq!(
+            post.version
+                .as_ref()
+                .and_then(|version| version.message.as_deref()),
+            Some("Published")
+        );
+    }
+
+    #[test]
+    fn converts_space_comment_page() {
+        let mut version = generated_models::Version::new();
+        version.number = Some(1);
+
+        let mut storage = generated_models::BodyType::new();
+        storage.value = Some("<p>Looks good</p>".to_owned());
+
+        let mut body = generated_models::BodyBulk::new();
+        body.storage = Some(Box::new(storage));
+
+        let page = ConfluenceCommentPage::from(generated_models::MultiEntityResultPageCommentModel {
+            results: Some(vec![generated_models::PageCommentModel {
+                id: Some("c1".to_owned()),
+                status: Some(generated_models::ContentStatus::Current),
+                title: Some("First comment".to_owned()),
+                page_id: Some("111".to_owned()),
+                version: Some(Box::new(version)),
+                body: Some(Box::new(body)),
+                ..generated_models::PageCommentModel::new()
+            }]),
+            ..generated_models::MultiEntityResultPageCommentModel::new()
+        });
+
+        assert_eq!(page.results.len(), 1);
+        let comment = &page.results[0];
+        assert_eq!(comment.id.as_deref(), Some("c1"));
+        assert_eq!(comment.page_id.as_deref(), Some("111"));
+        assert_eq!(comment.body.as_deref(), Some("<p>Looks good</p>"));
+        assert_eq!(
+            comment.version.as_ref().and_then(|version| version.number),
+            Some(1)
         );
     }
 }

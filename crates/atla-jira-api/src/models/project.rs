@@ -19,8 +19,9 @@ pub struct Project {
     pub key: Option<String>,
     #[serde(rename = "name", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// The project type key as a raw string to handle unknown variants (e.g. "product_discovery").
     #[serde(rename = "projectTypeKey", skip_serializing_if = "Option::is_none")]
-    pub project_type_key: Option<ProjectTypeKey>,
+    pub project_type_key: Option<String>,
     #[serde(rename = "style", skip_serializing_if = "Option::is_none")]
     pub style: Option<Style>,
     #[serde(rename = "simplified", skip_serializing_if = "Option::is_none")]
