@@ -258,7 +258,9 @@ fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value
                     } else {
                         json!({"type": "bulletList", "content": sub_items})
                     };
-                    if let Some(content) = last_item.get_mut("content").and_then(Value::as_array_mut) {
+                    if let Some(content) =
+                        last_item.get_mut("content").and_then(Value::as_array_mut)
+                    {
                         content.push(nested);
                     }
                 }
@@ -463,7 +465,11 @@ fn marked_text(text: &str, mark_type: &str) -> Value {
     })
 }
 
-fn parse_delimited_mark(text: &str, delimiter: &str, mark_type: &str) -> Option<(Vec<Value>, usize)> {
+fn parse_delimited_mark(
+    text: &str,
+    delimiter: &str,
+    mark_type: &str,
+) -> Option<(Vec<Value>, usize)> {
     let rest = text.strip_prefix(delimiter)?;
     let end = rest.find(delimiter)?;
     let inner = &rest[..end];
@@ -637,7 +643,11 @@ fn render_inlines(items: &[Value]) -> String {
         }
 
         // Escape the raw text, then apply atomic marks (code, link, subsup).
-        let raw = obj.get("text").and_then(Value::as_str).map(escape_text).unwrap_or_default();
+        let raw = obj
+            .get("text")
+            .and_then(Value::as_str)
+            .map(escape_text)
+            .unwrap_or_default();
         let text = apply_atomic_marks(raw, obj);
 
         // Compute this node's stateful marks sorted outer-first.
@@ -671,15 +681,15 @@ fn stateful_marks_of(obj: &serde_json::Map<String, Value>) -> Vec<&'static str> 
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|m| {
-            match m.get("type").and_then(Value::as_str).unwrap_or_default() {
+        .filter_map(
+            |m| match m.get("type").and_then(Value::as_str).unwrap_or_default() {
                 "strong" => Some("strong"),
                 "em" => Some("em"),
                 "strike" => Some("strike"),
                 "underline" => Some("underline"),
                 _ => None,
-            }
-        })
+            },
+        )
         .collect()
 }
 
@@ -697,15 +707,15 @@ fn canonical_stateful_marks(
         .into_iter()
         .flatten()
         .enumerate()
-        .filter_map(|(pos, m)| {
-            match m.get("type").and_then(Value::as_str).unwrap_or_default() {
+        .filter_map(
+            |(pos, m)| match m.get("type").and_then(Value::as_str).unwrap_or_default() {
                 "strong" => Some(("strong", pos)),
                 "em" => Some(("em", pos)),
                 "strike" => Some(("strike", pos)),
                 "underline" => Some(("underline", pos)),
                 _ => None,
-            }
-        })
+            },
+        )
         .collect();
 
     marks_with_pos.sort_by(|(a, pos_a), (b, pos_b)| {
@@ -745,7 +755,9 @@ fn apply_atomic_marks(text: String, obj: &serde_json::Map<String, Value>) -> Str
         return text;
     };
     marks.iter().fold(text, |current, mark| {
-        let Value::Object(m) = mark else { return current };
+        let Value::Object(m) = mark else {
+            return current;
+        };
         match m.get("type").and_then(Value::as_str).unwrap_or_default() {
             "code" => format!("`{}`", current.replace('`', "\\`")),
             "link" => m
@@ -1060,7 +1072,11 @@ mod tests {
                 return;
             };
 
-            match object.get("type").and_then(Value::as_str).unwrap_or_default() {
+            match object
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+            {
                 "taskList" => {
                     if !object
                         .get("attrs")
@@ -1081,7 +1097,9 @@ mod tests {
                         errors.push(format!("{path}: taskItem missing attrs.localId"));
                     }
                     if !matches!(
-                        attrs.and_then(|attrs| attrs.get("state")).and_then(Value::as_str),
+                        attrs
+                            .and_then(|attrs| attrs.get("state"))
+                            .and_then(Value::as_str),
                         Some("TODO" | "DONE")
                     ) {
                         errors.push(format!("{path}: taskItem missing valid attrs.state"));
@@ -1447,8 +1465,14 @@ cargo test
     fn converts_underscore_and_nested_marks() {
         let adf = markdown_to_adf("_italic_ __bold__ **_both_**");
 
-        assert_eq!(adf["content"][0]["content"][0]["marks"][0]["type"], json!("em"));
-        assert_eq!(adf["content"][0]["content"][2]["marks"][0]["type"], json!("strong"));
+        assert_eq!(
+            adf["content"][0]["content"][0]["marks"][0]["type"],
+            json!("em")
+        );
+        assert_eq!(
+            adf["content"][0]["content"][2]["marks"][0]["type"],
+            json!("strong")
+        );
         assert_eq!(
             adf["content"][0]["content"][4]["marks"],
             json!([{ "type": "em" }, { "type": "strong" }])

@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-05-19T11:11:07Z",
+  "generator": {
+    "tool": "openapi-generator-cli",
+    "version": "7.22.0"
+  },
+  "specs": {
+    "jira": {
+      "source_file": "specs/jira-v3-partial.json",
+      "source_sha256": "24e122554edd0fc9af7bf5c10dc90aba72ca04b35e33811c35828315c0878136",
+      "upstream_source_file": "specs/jira-v3.json",
+      "upstream_url": "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
+      "upstream_sha256": "c069e1898dc44e2a6901da04e4e726225e7c3c72190ae67cedbc812415ada0fd",
+      "partial_spec_script": "scripts/jira-v3-partial-spec.js",
+      "description": "Jira REST API v3 (partial, filtered to used endpoints)"
+    },
+    "confluence": {
+      "source_file": "specs/confluence-v2.json",
+      "source_sha256": "8e876d99e1aec835a68f2baaadc3b7dd7b3881b28405c5cf49a6f6dcdd709a73",
+      "upstream_source_file": "specs/confluence-v2.json",
+      "upstream_url": "https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json",
+      "upstream_sha256": "8e876d99e1aec835a68f2baaadc3b7dd7b3881b28405c5cf49a6f6dcdd709a73",
+      "description": "Confluence REST API v2"
+    },
+    "confluence-v1": {
+      "source_file": "specs/confluence-v1-partial.json",
+      "source_sha256": "a76bf5ec508fb5ccabcc9ccf0bd1e38904b34676931b3fb6a60ed323593bdcd5",
+      "upstream_source_file": "specs/confluence-v1.json",
+      "upstream_url": "https://dac-static.atlassian.com/cloud/confluence/swagger.v3.json",
+      "upstream_sha256": "0ef9a093216cbde86dab37a9b38bb319a938cd7341061cfc11a4914970484c30",
+      "partial_spec_script": "scripts/confluence-v1-partial-spec.js",
+      "description": "Confluence REST API v1 (partial, filtered and patched)"
+    }
+  }
+}

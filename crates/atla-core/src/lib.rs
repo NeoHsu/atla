@@ -18,9 +18,9 @@ pub use confluence::{
     ConfluenceContentStatus, ConfluenceContentTreePage, ConfluenceContentTreeSearch,
     ConfluenceLabel, ConfluenceLabelPage, ConfluenceLabelSearch, ConfluencePage,
     ConfluencePageCopy, ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch,
-    ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchPage, ConfluenceSearchResult,
-    ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpacePage, ConfluenceSpaceSearch,
-    ConfluenceSpaceUpdate,
+    ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchContent, ConfluenceSearchPage,
+    ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpacePage,
+    ConfluenceSpaceSearch, ConfluenceSpaceUpdate, ConfluenceVersion,
 };
 pub use jira::{
     JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage,

@@ -15,6 +15,23 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
       - run: cargo test --workspace
 
+  check-generated:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check Java available (for openapi-generator)
+        run: java -version || echo "Java not available, skipping"
+      - name: Verify generated code is up to date
+        run: |
+          if command -v java >/dev/null 2>&1; then
+            scripts/generate.sh --product all --in-place
+            git --no-pager diff --exit-code crates/atla-jira-api crates/atla-confluence-api crates/atla-confluence-v1-api || \
+              (echo "Generated code is out of date. Please run scripts/generate.sh --product all --in-place" && exit 1)
+          else
+            echo "Skipping: Java not available"
+          fi

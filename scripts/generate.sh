@@ -3,6 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 generator="${repo_root}/scripts/openapi-generator.sh"
+generator_version="${OPENAPI_GENERATOR_VERSION:-7.22.0}"
+manifest_path="${repo_root}/specs/manifest.json"
 out_root="${ATLA_GENERATED_OUT:-${repo_root}/target/openapi}"
 product="all"
 in_place=0
@@ -109,24 +111,115 @@ fix_generated_lints() {
 
   # The Confluence spec produces a handful of model modules with double
   # underscores. They compile correctly but violate Rust's non_snake_case lint.
+  prepend_line_if_missing "${lib_rs}" '#![allow(clippy::too_many_arguments)]'
+  prepend_line_if_missing "${lib_rs}" '#![allow(unused_imports)]'
   prepend_line_if_missing "${lib_rs}" '#![allow(non_snake_case)]'
-  prepend_line_if_missing "${lib_rs}" '#![allow(clippy::all)]'
+}
+
+update_specs_manifest_generated_at() {
+  python - "${manifest_path}" "${generator_version}" <<'PY'
+from datetime import datetime, timezone
+from pathlib import Path
+import json
+import sys
+
+path = Path(sys.argv[1])
+generator_version = sys.argv[2]
+timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+base = {
+    "generated_at": timestamp,
+    "generator": {
+        "tool": "openapi-generator-cli",
+        "version": generator_version,
+    },
+    "specs": {
+        "jira": {
+            "source_file": "specs/jira-v3-partial.json",
+            "partial_spec_script": "scripts/jira-v3-partial-spec.js",
+            "description": "Jira REST API v3 (partial, filtered to used endpoints)",
+        },
+        "confluence": {
+            "source_file": "specs/confluence-v2.json",
+            "description": "Confluence REST API v2",
+        },
+        "confluence-v1": {
+            "source_file": "specs/confluence-v1-partial.json",
+            "partial_spec_script": "scripts/confluence-v1-partial-spec.js",
+            "description": "Confluence REST API v1 (partial, filtered and patched)",
+        },
+    },
+}
+
+if path.exists():
+    data = json.loads(path.read_text())
+else:
+    data = {}
+
+data["generated_at"] = timestamp
+data["generator"] = {**data.get("generator", {}), **base["generator"]}
+
+specs = data.setdefault("specs", {})
+for name, metadata in base["specs"].items():
+    specs[name] = {**specs.get(name, {}), **metadata}
+
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
 }
 
 format_generated_crate() {
   local manifest="$1"
+  local crate_dir
+  local edition
+  local rust_files=()
+  local file
+
+  crate_dir="$(dirname "${manifest}")"
+
+  if [[ "${crate_dir}" == "${repo_root}/crates/"* ]]; then
+    if [[ -x "${HOME}/.local/bin/mise" ]]; then
+      "${HOME}/.local/bin/mise" exec -- cargo fmt --manifest-path "${manifest}"
+      return
+    fi
+
+    if command -v mise >/dev/null 2>&1; then
+      "$(command -v mise)" exec -- cargo fmt --manifest-path "${manifest}"
+      return
+    fi
+
+    cargo fmt --manifest-path "${manifest}"
+    return
+  fi
+
+  edition="$(python - "${manifest}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text()
+match = re.search(r'^edition = "([^"]+)"$', text, re.MULTILINE)
+print(match.group(1) if match else "2021")
+PY
+)"
+
+  while IFS= read -r -d '' file; do
+    rust_files+=("${file}")
+  done < <(find "${crate_dir}/src" -name '*.rs' -print0)
+
+  if [[ "${#rust_files[@]}" -eq 0 ]]; then
+    return
+  fi
 
   if [[ -x "${HOME}/.local/bin/mise" ]]; then
-    "${HOME}/.local/bin/mise" exec -- cargo fmt --manifest-path "${manifest}"
+    "${HOME}/.local/bin/mise" exec -- rustfmt --edition "${edition}" "${rust_files[@]}"
     return
   fi
 
   if command -v mise >/dev/null 2>&1; then
-    "$(command -v mise)" exec -- cargo fmt --manifest-path "${manifest}"
+    "$(command -v mise)" exec -- rustfmt --edition "${edition}" "${rust_files[@]}"
     return
   fi
 
-  cargo fmt --manifest-path "${manifest}"
+  rustfmt --edition "${edition}" "${rust_files[@]}"
 }
 
 remove_standalone_scaffold() {
@@ -175,6 +268,7 @@ generate_client() {
   format_generated_crate "${out_dir}/Cargo.toml"
   remove_standalone_scaffold "${out_dir}"
   fix_generated_docs "${out_dir}"
+  update_specs_manifest_generated_at
   echo "generated ${name}: ${out_dir}"
 }
 
@@ -189,3 +283,5 @@ fi
 if [[ "${product}" == "confluence-v1" || "${product}" == "all" ]]; then
   generate_client "confluence-v1" "${repo_root}/specs/confluence-v1-partial.json" "atla-confluence-v1-api"
 fi
+
+update_specs_manifest_generated_at

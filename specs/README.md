@@ -8,6 +8,9 @@ Generated API clients should be produced from official Atlassian specs:
 The Jira and Confluence v1 generated clients use checked-in partial specs for
 the endpoint subsets currently wired into the CLI.
 
+`specs/manifest.json` records the generator version, current spec sources, and
+SHA256 checksums for downloaded and partial specs.
+
 Run:
 
 ```bash
