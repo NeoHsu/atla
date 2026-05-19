@@ -1,6 +1,9 @@
 use anyhow::Context;
-use atla_core::auth::{CredentialStore, KeyringCredentialStore};
-use atla_core::{AtlassianClient, ConfigStore, ConfluenceClient, JiraClient, Profile};
+use atla_core::auth::{CredentialStore, env_token};
+use atla_core::{
+    AtlassianClient, ConfigStore, ConfluenceClient, CredentialStorage, FileCredentialStore,
+    JiraClient, KeyringCredentialStore, Profile,
+};
 
 use crate::cli::GlobalArgs;
 use crate::config;
@@ -34,15 +37,26 @@ impl AppContext {
     }
 
     pub fn token(&self) -> anyhow::Result<String> {
+        if let Some(token) = env_token() {
+            return Ok(token);
+        }
+
         let credential = self.profile.credential_ref(&self.profile_name);
-        let token = KeyringCredentialStore::default()
-            .get_token(&credential)
-            .context("failed to read API token from keyring")?;
+        let token = match self.profile.credential_store {
+            CredentialStorage::Keyring => KeyringCredentialStore::default()
+                .get_token(&credential)
+                .context("failed to read API token from keyring")?,
+            CredentialStorage::File => FileCredentialStore::default_store()
+                .context("failed to open file credential store")?
+                .get_token(&credential)
+                .context("failed to read API token from file credential store")?,
+        };
 
         token.ok_or_else(|| {
             anyhow::anyhow!(
-                "missing API token; run `atla auth login --profile {}`",
-                self.profile_name
+                "missing API token; run `atla auth login --profile {} --storage {}` or set ATLA_TOKEN",
+                self.profile_name,
+                self.profile.credential_store
             )
         })
     }

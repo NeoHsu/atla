@@ -5,7 +5,9 @@ pub mod jira;
 pub mod markdown;
 pub mod profile;
 
-pub use auth::{AuthState, CredentialRef, KeyringCredentialStore};
+pub use auth::{
+    AuthState, CredentialRef, CredentialStorage, FileCredentialStore, KeyringCredentialStore,
+};
 pub use client::{AtlassianClient, AtlassianInstance};
 pub use confluence::{
     ConfluenceAttachment, ConfluenceAttachmentDownload, ConfluenceAttachmentPage,

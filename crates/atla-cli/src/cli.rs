@@ -40,6 +40,12 @@ pub enum OutputFormat {
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum AuthStorage {
+    Keyring,
+    File,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum BodyRepresentation {
     Storage,
     Wiki,
@@ -81,6 +87,8 @@ pub enum AuthAction {
         email: Option<String>,
         #[arg(long)]
         token: Option<String>,
+        #[arg(long, value_enum)]
+        storage: Option<AuthStorage>,
     },
     Logout,
     Status,

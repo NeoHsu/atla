@@ -54,6 +54,7 @@ fn print_config(config: &atla_core::AtlaConfig) {
         println!("[profiles.{name}]");
         println!("instance = {}", profile.instance);
         println!("email = {}", profile.email);
+        println!("credential_store = {}", profile.credential_store);
 
         if let Some(default_project) = &profile.default_project {
             println!("default_project = {default_project}");

@@ -122,6 +122,19 @@ atla config set alias.mine "jira search 'assignee = currentUser() order by updat
 atla config list --output json
 ```
 
+`atla` stores API tokens in the OS keyring by default. In headless or container
+environments where keyring access is unavailable, use an explicit file-backed
+credential store or provide a token through the environment:
+
+```bash
+atla auth login --storage file --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+ATLA_TOKEN="$ATLASSIAN_TOKEN" atla jira project list
+```
+
+File-backed credentials are stored separately from the main config in
+`~/.config/atla/credentials.toml` by default. Override paths with `ATLA_CONFIG`
+and `ATLA_CREDENTIALS` for isolated runs.
+
 Aliases expand before command parsing, so the alias above can be used as:
 
 ```bash

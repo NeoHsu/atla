@@ -1,23 +1,25 @@
 use std::io::{IsTerminal, stdin, stdout};
 
 use anyhow::{Context, bail};
-use atla_core::auth::{CredentialStore, KeyringCredentialStore};
-use atla_core::{AtlaConfig, AtlassianInstance, ConfigStore, Profile};
+use atla_core::auth::{CredentialStore, env_token};
+use atla_core::{
+    AtlaConfig, AtlassianInstance, ConfigStore, CredentialStorage, FileCredentialStore,
+    KeyringCredentialStore, Profile,
+};
 use dialoguer::{Input, Password};
 
-use crate::cli::{AuthAction, AuthCommand, GlobalArgs};
+use crate::cli::{AuthAction, AuthCommand, AuthStorage, GlobalArgs};
 use crate::config;
 
 pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     let store = ConfigStore::default_store().context("failed to find config location")?;
     let mut atla_config = store.load().context("failed to load config")?;
-    let credential_store = KeyringCredentialStore::default();
-
     match command.action {
         AuthAction::Login {
             instance,
             email,
             token,
+            storage,
         } => {
             let profile_name = config::active_profile(global).unwrap_or("default");
             let instance = normalize_instance(&required_text(
@@ -28,10 +30,20 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
             )?);
             let email = required_text("Email", "--email", email, global)?;
             let token = required_secret("API token", "--token", token, global)?;
+            let credential_store = storage
+                .map(Into::into)
+                .or_else(|| {
+                    atla_config
+                        .profiles
+                        .get(profile_name)
+                        .map(|profile| profile.credential_store)
+                })
+                .unwrap_or(CredentialStorage::Keyring);
 
             let profile = Profile {
                 instance,
                 email,
+                credential_store,
                 default_project: None,
                 default_space: None,
             };
@@ -42,16 +54,23 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 return Ok(());
             }
 
-            credential_store
-                .save_token(&credential, &token)
-                .context("failed to save API token to keyring")?;
+            save_token(credential_store, &credential, &token)
+                .with_context(|| format!("failed to save API token to {credential_store}"))?;
             atla_config.upsert_profile(profile_name, profile);
             store.save(&atla_config).context("failed to save config")?;
 
             println!(
-                "Logged in to {} as {} using profile `{}`",
+                "Logged in to {} as {} using profile `{}` ({credential_store})",
                 credential.instance, credential.email, credential.profile
             );
+            if matches!(credential_store, CredentialStorage::File) {
+                println!(
+                    "Stored token in {}. Keep this file private.",
+                    FileCredentialStore::default_path()
+                        .map(|path| path.display().to_string())
+                        .unwrap_or_else(|_| "credentials.toml".to_owned())
+                );
+            }
         }
         AuthAction::Logout => {
             let (profile_name, profile) = active_profile(&atla_config, global)?;
@@ -62,10 +81,16 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 return Ok(());
             }
 
-            credential_store
-                .delete_token(&credential)
-                .context("failed to remove API token from keyring")?;
-            println!("Logged out profile `{profile_name}`");
+            delete_token(profile.credential_store, &credential).with_context(|| {
+                format!(
+                    "failed to remove API token from {}",
+                    profile.credential_store
+                )
+            })?;
+            println!(
+                "Logged out profile `{profile_name}` ({})",
+                profile.credential_store
+            );
         }
         AuthAction::Status => {
             let Some((profile_name, profile)) =
@@ -75,14 +100,13 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 return Ok(());
             };
             let credential = profile.credential_ref(profile_name);
-            let has_token = credential_store
-                .has_token(&credential)
-                .context("failed to read API token from keyring")?;
+            let token_status = token_status(profile.credential_store, &credential);
 
             println!("Profile: {profile_name}");
             println!("Instance: {}", profile.instance);
             println!("Email: {}", profile.email);
-            println!("Token: {}", if has_token { "stored" } else { "missing" });
+            println!("Credential store: {}", profile.credential_store);
+            println!("Token: {token_status}");
         }
         AuthAction::Switch { profile } => {
             atla_config
@@ -100,6 +124,63 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
     }
 
     Ok(())
+}
+
+impl From<AuthStorage> for CredentialStorage {
+    fn from(storage: AuthStorage) -> Self {
+        match storage {
+            AuthStorage::Keyring => Self::Keyring,
+            AuthStorage::File => Self::File,
+        }
+    }
+}
+
+fn save_token(
+    storage: CredentialStorage,
+    credential: &atla_core::CredentialRef,
+    token: &str,
+) -> anyhow::Result<()> {
+    match storage {
+        CredentialStorage::Keyring => {
+            Ok(KeyringCredentialStore::default().save_token(credential, token)?)
+        }
+        CredentialStorage::File => {
+            Ok(FileCredentialStore::default_store()?.save_token(credential, token)?)
+        }
+    }
+}
+
+fn delete_token(
+    storage: CredentialStorage,
+    credential: &atla_core::CredentialRef,
+) -> anyhow::Result<()> {
+    match storage {
+        CredentialStorage::Keyring => {
+            Ok(KeyringCredentialStore::default().delete_token(credential)?)
+        }
+        CredentialStorage::File => {
+            Ok(FileCredentialStore::default_store()?.delete_token(credential)?)
+        }
+    }
+}
+
+fn token_status(storage: CredentialStorage, credential: &atla_core::CredentialRef) -> String {
+    if env_token().is_some() {
+        return "provided by environment".to_owned();
+    }
+
+    let result = match storage {
+        CredentialStorage::Keyring => KeyringCredentialStore::default().has_token(credential),
+        CredentialStorage::File => {
+            FileCredentialStore::default_store().and_then(|store| store.has_token(credential))
+        }
+    };
+
+    match result {
+        Ok(true) => format!("stored in {storage}"),
+        Ok(false) => "missing".to_owned(),
+        Err(error) => format!("{storage} unavailable: {error}"),
+    }
 }
 
 fn active_profile<'a>(

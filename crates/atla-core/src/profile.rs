@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::CredentialRef;
+use crate::{CredentialRef, CredentialStorage};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AtlaConfig {
@@ -91,6 +91,11 @@ impl AtlaConfig {
                 profile.email = value;
                 Ok(())
             }
+            "credential-store" => {
+                let profile = self.active_profile_mut(profile_name)?;
+                profile.credential_store = parse_credential_storage(&value)?;
+                Ok(())
+            }
             _ => Err(ProfileError::UnsupportedConfigKey(key.to_owned())),
         }
     }
@@ -134,6 +139,12 @@ impl AtlaConfig {
                     .ok_or(ProfileError::MissingActiveProfile)?;
                 Some(profile.email.clone())
             }
+            "credential-store" => {
+                let (_, profile) = self
+                    .active_profile(profile_name)
+                    .ok_or(ProfileError::MissingActiveProfile)?;
+                Some(profile.credential_store.to_string())
+            }
             _ => return Err(ProfileError::UnsupportedConfigKey(key.to_owned())),
         };
 
@@ -164,6 +175,8 @@ pub struct DefaultSection {
 pub struct Profile {
     pub instance: String,
     pub email: String,
+    #[serde(default)]
+    pub credential_store: CredentialStorage,
     pub default_project: Option<String>,
     pub default_space: Option<String>,
 }
@@ -236,6 +249,8 @@ pub enum ProfileError {
     MissingActiveProfile,
     #[error("unsupported config key `{0}`")]
     UnsupportedConfigKey(String),
+    #[error("unsupported credential store `{0}`; expected `keyring` or `file`")]
+    UnsupportedCredentialStore(String),
     #[error("could not parse config: {0}")]
     Decode(String),
     #[error("could not encode config: {0}")]
@@ -246,6 +261,23 @@ pub enum ProfileError {
 
 fn normalized_key(key: &str) -> String {
     key.replace('_', "-").to_ascii_lowercase()
+}
+
+fn parse_credential_storage(value: &str) -> Result<CredentialStorage, ProfileError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "keyring" => Ok(CredentialStorage::Keyring),
+        "file" => Ok(CredentialStorage::File),
+        _ => Err(ProfileError::UnsupportedCredentialStore(value.to_owned())),
+    }
+}
+
+impl std::fmt::Display for CredentialStorage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Keyring => formatter.write_str("keyring"),
+            Self::File => formatter.write_str("file"),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -263,6 +295,7 @@ mod tests {
             Profile {
                 instance: "https://example.atlassian.net".to_owned(),
                 email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
                 default_project: Some("PROJ".to_owned()),
                 default_space: None,
             },
@@ -286,6 +319,7 @@ mod tests {
             Profile {
                 instance: "https://example.atlassian.net".to_owned(),
                 email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
             },
