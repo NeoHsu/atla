@@ -669,19 +669,26 @@ impl JiraClient {
 
     pub async fn add_worklog(&self, worklog: &JiraWorklogCreate) -> Result<JiraWorklog, ApiError> {
         // Validate the time format before sending to the API.
+        // Normalize compact forms like "1h30m" to "1h 30m" first.
         // Jira accepts patterns like 1w, 2d, 3h, 30m and combinations (e.g. "2h 30m").
         // An invalid format causes a confusing "Worklog must not be null" from the API.
-        if !is_valid_jira_time_format(&worklog.time_spent) {
+        let normalized_time = normalize_jira_time(&worklog.time_spent);
+        if !is_valid_jira_time_format(&normalized_time) {
             return Err(ApiError::Io(format!(
                 "invalid time format `{}` — expected Jira duration notation, e.g. 1w, 2d, 3h, 30m or combinations like \"2h 30m\"",
                 worklog.time_spent
             )));
         }
 
+        let mut json = worklog.to_json();
+        if let Some(obj) = json.as_object_mut() {
+            obj.insert("timeSpent".to_owned(), serde_json::Value::String(normalized_time));
+        }
+
         let value = generated_apis::issue_worklogs_api::add_worklog(
             &self.generated,
             &worklog.issue_id_or_key,
-            &worklog.to_json(),
+            &json,
         )
         .await
         .map_err(generated_error)?;
@@ -776,7 +783,10 @@ pub struct JiraIssueList {
 impl JiraIssueList {
     pub fn to_search(&self, default_project: Option<&str>) -> Result<JiraIssueSearch, ApiError> {
         if let Some(jql) = &self.jql {
-            let final_jql = if let Some(project) = self.project_key.as_deref().or(default_project) {
+            // When an explicit --project is supplied alongside --jql, scope to that project.
+            // If the project comes only from config defaults, use the JQL verbatim so that
+            // ORDER BY and other clauses are not accidentally wrapped inside parentheses.
+            let final_jql = if let Some(project) = self.project_key.as_deref() {
                 format!("project = {} AND ({jql})", quote_jql_value(project))
             } else {
                 jql.clone()
@@ -1793,6 +1803,25 @@ fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
     }
 }
 
+/// Normalizes compact Jira duration strings by inserting spaces between unit boundaries.
+/// For example: "1h30m" → "1h 30m", "2d4h30m" → "2d 4h 30m".
+/// Already-spaced strings like "2h 30m" are returned unchanged.
+fn normalize_jira_time(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() + 4);
+    let mut chars = s.trim().chars().peekable();
+    while let Some(ch) = chars.next() {
+        result.push(ch);
+        if matches!(ch, 'w' | 'd' | 'h' | 'm') {
+            if let Some(&next) = chars.peek() {
+                if next.is_ascii_digit() {
+                    result.push(' ');
+                }
+            }
+        }
+    }
+    result
+}
+
 /// Validates that a time string matches Jira's duration notation.
 /// Accepts one or more space-separated tokens of the form `<n>w`, `<n>d`, `<n>h`, or `<n>m`
 /// where `<n>` is a non-negative integer and the total duration is greater than zero.
@@ -2707,6 +2736,25 @@ mod tests {
         let search = list.to_search(None).expect("search");
 
         assert_eq!(search.jql, "status = Open");
+    }
+
+    #[test]
+    fn jql_with_order_by_is_used_verbatim_when_no_explicit_project() {
+        // --jql with ORDER BY must NOT be wrapped in parens from a default project,
+        // otherwise `project = X AND (... ORDER BY ...)` is invalid JQL.
+        let list = JiraIssueList {
+            project_key: None,
+            status: None,
+            issue_type: None,
+            assignee: None,
+            jql: Some("project = DEMO ORDER BY updated DESC".to_owned()),
+            max_results: 10,
+            fields: None,
+        };
+
+        let search = list.to_search(Some("DEMO")).expect("search");
+
+        assert_eq!(search.jql, "project = DEMO ORDER BY updated DESC");
     }
 
     #[test]

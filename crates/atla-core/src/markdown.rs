@@ -215,26 +215,75 @@ fn collect_task_items(lines: &[&str], start: usize) -> (Vec<Value>, usize) {
     (items, index)
 }
 
+fn list_indent(line: &str) -> usize {
+    line.chars().take_while(|c| *c == ' ').count()
+}
+
+fn is_ordered_list_line(line: &str) -> bool {
+    ordered_list_text(line).is_some()
+}
+
 fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value>, usize) {
-    let mut items = Vec::new();
+    if start >= lines.len() {
+        return (Vec::new(), start);
+    }
+    let base_indent = list_indent(lines[start]);
+    let mut items: Vec<Value> = Vec::new();
     let mut index = start;
+
     while index < lines.len() {
-        let text = if ordered {
-            ordered_list_text(lines[index])
-        } else {
-            unordered_list_text(lines[index])
-        };
-        let Some(text) = text else {
+        let line = lines[index];
+
+        // Blank lines always end the list at this level.
+        if line.trim().is_empty() {
             break;
+        }
+
+        let indent = list_indent(line);
+
+        // Dedented past our base — we're done.
+        if indent < base_indent {
+            break;
+        }
+
+        // More indented than base by ≥2 spaces → nested list belonging to the last item.
+        if indent >= base_indent + 2 {
+            if let Some(last_item) = items.last_mut() {
+                let nested_ordered = is_ordered_list_line(line);
+                let (sub_items, consumed) = collect_list_items(lines, index, nested_ordered);
+                if !sub_items.is_empty() {
+                    let order = ordered_list_order(lines[index]).unwrap_or(1);
+                    let nested = if nested_ordered {
+                        json!({"type": "orderedList", "attrs": {"order": order}, "content": sub_items})
+                    } else {
+                        json!({"type": "bulletList", "content": sub_items})
+                    };
+                    if let Some(content) = last_item.get_mut("content").and_then(Value::as_array_mut) {
+                        content.push(nested);
+                    }
+                }
+                index = consumed;
+            } else {
+                break; // nested without a parent — malformed input
+            }
+            continue;
+        }
+
+        // Same indent level: must match the expected list type.
+        let text = if ordered {
+            ordered_list_text(line)
+        } else {
+            unordered_list_text(line)
         };
+        let Some(text) = text else { break };
+
         items.push(json!({
             "type": "listItem",
-            "content": [
-                adf_paragraph(text)
-            ],
+            "content": [adf_paragraph(text)],
         }));
         index += 1;
     }
+
     (items, index)
 }
 
@@ -546,8 +595,177 @@ fn render_inline(value: &Value) -> String {
     apply_marks(&rendered, object.get("marks").and_then(Value::as_array))
 }
 
+/// Render a sequence of inline nodes with stateful mark tracking so that adjacent text
+/// nodes sharing outer marks (e.g. `**bold _italic_**`) do not produce redundant delimiters
+/// (e.g. `**bold ****_italic_**`).
+///
+/// Stateful marks (strong, em, strike, underline) are tracked across text nodes: they are
+/// opened/closed only at transitions.  Atomic marks (code, link, subsup) are applied on each
+/// individual text node and do not participate in the stateful tracking.
 fn render_inlines(items: &[Value]) -> String {
-    items.iter().map(render_inline).collect::<String>()
+    // Count how many text nodes each stateful mark type appears on.
+    // Higher frequency means the mark spans more text → it is likely the outer mark.
+    let mut freq: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for item in items {
+        if let Value::Object(obj) = item {
+            if node_type(obj) == "text" {
+                for mt in stateful_marks_of(obj) {
+                    *freq.entry(mt).or_default() += 1;
+                }
+            }
+        }
+    }
+
+    let mut result = String::new();
+    let mut open: Vec<&'static str> = vec![];
+
+    for item in items {
+        let Value::Object(obj) = item else { continue };
+
+        if node_type(obj) != "text" {
+            // Non-text inline node: close stateful marks, render with old approach, reopen.
+            for m in open.iter().rev() {
+                result.push_str(stateful_close(m));
+            }
+            let saved = std::mem::take(&mut open);
+            result.push_str(&render_inline(item));
+            for m in &saved {
+                result.push_str(stateful_open(m));
+            }
+            open = saved;
+            continue;
+        }
+
+        // Escape the raw text, then apply atomic marks (code, link, subsup).
+        let raw = obj.get("text").and_then(Value::as_str).map(escape_text).unwrap_or_default();
+        let text = apply_atomic_marks(raw, obj);
+
+        // Compute this node's stateful marks sorted outer-first.
+        let node_marks = canonical_stateful_marks(obj, &freq);
+
+        // Transition: close marks no longer active, open newly active marks.
+        let common = open
+            .iter()
+            .zip(node_marks.iter())
+            .take_while(|(a, b)| **a == **b)
+            .count();
+        for m in open[common..].iter().rev() {
+            result.push_str(stateful_close(m));
+        }
+        for m in &node_marks[common..] {
+            result.push_str(stateful_open(m));
+        }
+        open = node_marks;
+        result.push_str(&text);
+    }
+
+    for m in open.iter().rev() {
+        result.push_str(stateful_close(m));
+    }
+    result
+}
+
+/// Returns the stateful mark types present on a text node (strong, em, strike, underline).
+fn stateful_marks_of(obj: &serde_json::Map<String, Value>) -> Vec<&'static str> {
+    obj.get("marks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            match m.get("type").and_then(Value::as_str).unwrap_or_default() {
+                "strong" => Some("strong"),
+                "em" => Some("em"),
+                "strike" => Some("strike"),
+                "underline" => Some("underline"),
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// Returns stateful marks sorted outermost-first:
+/// 1. Higher frequency across the inline sequence = outer mark.
+/// 2. On a tie: higher position in the ADF marks array = outer (because `apply_marks` folds
+///    left-to-right, so the last mark in the array is the outermost wrapper).
+fn canonical_stateful_marks(
+    obj: &serde_json::Map<String, Value>,
+    freq: &std::collections::HashMap<&str, usize>,
+) -> Vec<&'static str> {
+    let mut marks_with_pos: Vec<(&'static str, usize)> = obj
+        .get("marks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(pos, m)| {
+            match m.get("type").and_then(Value::as_str).unwrap_or_default() {
+                "strong" => Some(("strong", pos)),
+                "em" => Some(("em", pos)),
+                "strike" => Some(("strike", pos)),
+                "underline" => Some(("underline", pos)),
+                _ => None,
+            }
+        })
+        .collect();
+
+    marks_with_pos.sort_by(|(a, pos_a), (b, pos_b)| {
+        let fa = freq.get(*a).copied().unwrap_or(0);
+        let fb = freq.get(*b).copied().unwrap_or(0);
+        // Higher frequency = outer (first).  On tie, higher ADF position = outer (first).
+        fb.cmp(&fa).then_with(|| pos_b.cmp(pos_a))
+    });
+
+    marks_with_pos.into_iter().map(|(m, _)| m).collect()
+}
+
+fn stateful_open(mark_type: &str) -> &'static str {
+    match mark_type {
+        "strong" => "**",
+        "em" => "_",
+        "strike" => "~~",
+        "underline" => "<u>",
+        _ => "",
+    }
+}
+
+fn stateful_close(mark_type: &str) -> &'static str {
+    match mark_type {
+        "strong" => "**",
+        "em" => "_",
+        "strike" => "~~",
+        "underline" => "</u>",
+        _ => "",
+    }
+}
+
+/// Applies only atomic marks (code, link, subsup) to the text, leaving stateful marks
+/// to be handled by the surrounding render_inlines logic.
+fn apply_atomic_marks(text: String, obj: &serde_json::Map<String, Value>) -> String {
+    let Some(marks) = obj.get("marks").and_then(Value::as_array) else {
+        return text;
+    };
+    marks.iter().fold(text, |current, mark| {
+        let Value::Object(m) = mark else { return current };
+        match m.get("type").and_then(Value::as_str).unwrap_or_default() {
+            "code" => format!("`{}`", current.replace('`', "\\`")),
+            "link" => m
+                .get("attrs")
+                .and_then(|a| a.get("href"))
+                .and_then(Value::as_str)
+                .map(|href| format!("[{current}]({href})"))
+                .unwrap_or(current),
+            "subsup" => match m
+                .get("attrs")
+                .and_then(|a| a.get("type"))
+                .and_then(Value::as_str)
+            {
+                Some("sub") => format!("<sub>{current}</sub>"),
+                Some("sup") => format!("<sup>{current}</sup>"),
+                _ => current,
+            },
+            _ => current, // stateful marks handled by render_inlines
+        }
+    })
 }
 
 fn render_list(items: &[Value], depth: usize, ordered: bool, start: u64) -> String {
@@ -1286,5 +1504,94 @@ cargo test
             adf_to_markdown(&adf),
             "```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n> **info:**\n>\n> Heads up\n\n@Neo"
         );
+    }
+
+    #[test]
+    fn stateful_marks_bold_wraps_italic_span() {
+        // bold outer, italic inner for one word only: **bold _italic_ more bold**
+        let adf = json!({
+            "type": "doc", "version": 1,
+            "content": [{
+                "type": "paragraph",
+                "content": [
+                    { "type": "text", "text": "bold ", "marks": [{ "type": "strong" }] },
+                    { "type": "text", "text": "italic", "marks": [{ "type": "strong" }, { "type": "em" }] },
+                    { "type": "text", "text": " more bold", "marks": [{ "type": "strong" }] }
+                ]
+            }]
+        });
+        assert_eq!(adf_to_markdown(&adf), "**bold _italic_ more bold**");
+    }
+
+    #[test]
+    fn stateful_marks_bold_wraps_code_span() {
+        // bold persists around inline code: **bold `code` more bold**
+        let adf = json!({
+            "type": "doc", "version": 1,
+            "content": [{
+                "type": "paragraph",
+                "content": [
+                    { "type": "text", "text": "bold ", "marks": [{ "type": "strong" }] },
+                    { "type": "text", "text": "code", "marks": [{ "type": "strong" }, { "type": "code" }] },
+                    { "type": "text", "text": " more bold", "marks": [{ "type": "strong" }] }
+                ]
+            }]
+        });
+        assert_eq!(adf_to_markdown(&adf), "**bold `code` more bold**");
+    }
+
+    #[test]
+    fn stateful_marks_italic_wraps_bold() {
+        // italic outer, bold inner: _italic **bold** italic_
+        let adf = json!({
+            "type": "doc", "version": 1,
+            "content": [{
+                "type": "paragraph",
+                "content": [
+                    { "type": "text", "text": "italic ", "marks": [{ "type": "em" }] },
+                    { "type": "text", "text": "bold", "marks": [{ "type": "em" }, { "type": "strong" }] },
+                    { "type": "text", "text": " italic", "marks": [{ "type": "em" }] }
+                ]
+            }]
+        });
+        assert_eq!(adf_to_markdown(&adf), "_italic **bold** italic_");
+    }
+
+    #[test]
+    fn nested_bullet_list_markdown_to_adf() {
+        let md = "- parent\n  - child1\n  - child2\n- sibling";
+        let adf = markdown_to_adf(md);
+        let content = adf["content"].as_array().unwrap();
+        assert_eq!(content.len(), 1);
+        let list = &content[0];
+        assert_eq!(list["type"], "bulletList");
+        let items = list["content"].as_array().unwrap();
+        // Two top-level items: "parent" (with nested list) and "sibling"
+        assert_eq!(items.len(), 2);
+        // First item content: paragraph + nested bulletList
+        let first_item_content = items[0]["content"].as_array().unwrap();
+        assert_eq!(first_item_content.len(), 2);
+        assert_eq!(first_item_content[0]["type"], "paragraph");
+        assert_eq!(first_item_content[1]["type"], "bulletList");
+        let nested = first_item_content[1]["content"].as_array().unwrap();
+        assert_eq!(nested.len(), 2);
+        assert_eq!(nested[0]["content"][0]["content"][0]["text"], "child1");
+        assert_eq!(nested[1]["content"][0]["content"][0]["text"], "child2");
+        // Second item
+        assert_eq!(items[1]["content"][0]["content"][0]["text"], "sibling");
+    }
+
+    #[test]
+    fn nested_ordered_in_bullet_markdown_to_adf() {
+        let md = "- parent\n  1. first\n  2. second";
+        let adf = markdown_to_adf(md);
+        let list = &adf["content"][0];
+        assert_eq!(list["type"], "bulletList");
+        let first_item_content = list["content"][0]["content"].as_array().unwrap();
+        // paragraph + nested orderedList
+        assert_eq!(first_item_content.len(), 2);
+        assert_eq!(first_item_content[1]["type"], "orderedList");
+        let nested = first_item_content[1]["content"].as_array().unwrap();
+        assert_eq!(nested.len(), 2);
     }
 }

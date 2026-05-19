@@ -194,10 +194,11 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             let profile = ctx.profile();
             let requested_fields = parse_issue_fields(fields.as_deref())?;
 
-            // When no --fields specified, always fetch description in addition to defaults.
+            // When no --fields specified, always fetch description + issuelinks in addition to defaults.
             let fetch_fields = requested_fields.clone().or_else(|| {
                 let mut f = default_issue_fields();
                 f.push("description".to_owned());
+                f.push("issuelinks".to_owned());
                 Some(f)
             });
 
@@ -1499,6 +1500,33 @@ fn print_issue(
                             .collect::<Vec<_>>()
                             .join(", ");
                         println!("Subtasks: {keys}");
+                    }
+                }
+                if let Some(links) = issue.fields.get("issuelinks").and_then(|v| v.as_array()) {
+                    for link in links {
+                        let link_type = link
+                            .get("type")
+                            .and_then(|t| t.get("outward").or_else(|| t.get("inward")))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("relates to");
+                        let linked_key = link
+                            .get("outwardIssue")
+                            .or_else(|| link.get("inwardIssue"))
+                            .and_then(|i| i.get("key"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("-");
+                        let summary = link
+                            .get("outwardIssue")
+                            .or_else(|| link.get("inwardIssue"))
+                            .and_then(|i| i.get("fields"))
+                            .and_then(|f| f.get("summary"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        if summary.is_empty() {
+                            println!("Link: {link_type} {linked_key}");
+                        } else {
+                            println!("Link: {link_type} {linked_key} — {summary}");
+                        }
                     }
                 }
                 if let Some(desc) = issue.fields.get("description") {

@@ -162,7 +162,7 @@ pub enum IssueAction {
         issue_type: String,
         #[arg(long)]
         summary: String,
-        #[arg(long, conflicts_with = "description_file")]
+        #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]
         description: Option<String>,
         #[arg(long)]
         description_file: Option<PathBuf>,
@@ -176,7 +176,7 @@ pub enum IssueAction {
         key: String,
         #[arg(long)]
         summary: Option<String>,
-        #[arg(long, conflicts_with = "description_file")]
+        #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]
         description: Option<String>,
         #[arg(long)]
         description_file: Option<PathBuf>,
@@ -746,7 +746,7 @@ pub enum SpaceAction {
         key: Option<String>,
         #[arg(long)]
         alias: Option<String>,
-        #[arg(long, conflicts_with = "description_file")]
+        #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]
         description: Option<String>,
         #[arg(long, conflicts_with = "description")]
         description_file: Option<PathBuf>,
@@ -757,7 +757,7 @@ pub enum SpaceAction {
         key: String,
         #[arg(long)]
         name: Option<String>,
-        #[arg(long, conflicts_with = "description_file")]
+        #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]
         description: Option<String>,
         #[arg(long, conflicts_with = "description")]
         description_file: Option<PathBuf>,
