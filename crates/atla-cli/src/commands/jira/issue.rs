@@ -11,9 +11,9 @@ use super::attachment::run_issue_attachment;
 use super::format::{
     can_prompt, issue_fields_for_url, open_web_url, parse_fields, parse_issue_fields,
     parse_label_update, print_comment, print_comments, print_created_issue, print_deleted,
-    print_issue, print_issue_assign, print_issue_delete, print_issue_update, print_issues,
-    print_transition_update, print_transitions, read_optional_text, read_required_text,
-    select_transition,
+    print_issue, print_issue_assign, print_issue_comments_section, print_issue_delete,
+    print_issue_update, print_issues, print_transition_update,
+    read_optional_text, read_required_text, select_transition,
 };
 use super::link::run_issue_link;
 use super::worklog::run_issue_worklog;
@@ -226,6 +226,17 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 })?;
 
             print_issue(&issue, global, requested_fields.as_deref())?;
+
+            // In table mode with no custom --fields, also show comments
+            if global.output.is_none() || global.output == Some(crate::cli::OutputFormat::Table) {
+                if requested_fields.is_none() {
+                    let comment_page = client.list_comments(&key, 50).await
+                        .with_context(|| format!("failed to load comments for Jira issue `{key}` from {}", client.instance_url()))?;
+                    if !comment_page.comments.is_empty() {
+                        print_issue_comments_section(&comment_page, global)?;
+                    }
+                }
+            }
         }
         IssueAction::Delete {
             key,
@@ -267,16 +278,23 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             key,
             to,
             account_id,
+            unassign,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let target = if to.eq_ignore_ascii_case("me") {
-                JiraAssigneeTarget::Me
-            } else if account_id {
-                JiraAssigneeTarget::AccountId(to)
+            let target = if unassign {
+                JiraAssigneeTarget::Unassign
+            } else if let Some(to) = to {
+                if to.eq_ignore_ascii_case("me") {
+                    JiraAssigneeTarget::Me
+                } else if account_id {
+                    JiraAssigneeTarget::AccountId(to)
+                } else {
+                    JiraAssigneeTarget::Query(to)
+                }
             } else {
-                JiraAssigneeTarget::Query(to)
+                anyhow::bail!("provide --to <user> or --unassign");
             };
             let assign = JiraIssueAssign {
                 issue_id_or_key: key,
@@ -289,7 +307,11 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                     profile.instance.trim_end_matches('/'),
                     assign.issue_id_or_key
                 );
-                println!("Would PUT {url} using profile `{profile_name}`");
+                if unassign {
+                    println!("Would PUT {url} (unassign) using profile `{profile_name}`");
+                } else {
+                    println!("Would PUT {url} using profile `{profile_name}`");
+                }
                 return Ok(());
             }
 
@@ -366,8 +388,17 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                             )
                         })?;
                     print_transition_update(&key, &transition, global)?;
+                } else if can_prompt(global) {
+                    anyhow::bail!("no transitions available for issue `{key}`");
                 } else {
-                    print_transitions(&transitions, global)?;
+                    let names: Vec<_> = transitions
+                        .iter()
+                        .filter_map(|t| t.name.as_deref())
+                        .collect();
+                    anyhow::bail!(
+                        "--to is required in non-interactive mode; available transitions: {}",
+                        names.join(", ")
+                    );
                 }
             }
         }

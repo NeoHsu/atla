@@ -1,7 +1,7 @@
 use anyhow::Context;
 use atla_core::JiraIssueSearch;
 
-use crate::cli::GlobalArgs;
+use crate::cli::{GlobalArgs, OutputFormat};
 use crate::context::AppContext;
 
 use super::format::{issue_fields_for_url, parse_issue_fields, print_issues};
@@ -43,6 +43,12 @@ pub(super) async fn run_search(
             client.instance_url()
         )
     })?;
+
+    if page.issues.is_empty() && matches!(global.output.unwrap_or(OutputFormat::Table), OutputFormat::Table)
+    {
+        println!("No issues found.");
+        return Ok(());
+    }
 
     print_issues(&page.issues, global, requested_fields.as_deref())?;
     Ok(())

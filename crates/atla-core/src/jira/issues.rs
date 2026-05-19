@@ -183,6 +183,22 @@ impl JiraClient {
     }
 
     pub async fn assign_issue(&self, assign: &JiraIssueAssign) -> Result<JiraUser, ApiError> {
+        if matches!(&assign.target, JiraAssigneeTarget::Unassign) {
+            generated_apis::issues_api::set_assignee(
+                &self.generated,
+                &assign.issue_id_or_key,
+                None,
+            )
+            .await
+            .map_err(generated_error)?;
+
+            return Ok(JiraUser {
+                account_id: None,
+                display_name: None,
+                active: None,
+            });
+        }
+
         let user = match &assign.target {
             JiraAssigneeTarget::Me => self.current_user().await?,
             JiraAssigneeTarget::AccountId(account_id) => JiraUser {
@@ -196,6 +212,7 @@ impl JiraClient {
                     .await?;
                 resolve_assignable_user(query, users)?
             }
+            JiraAssigneeTarget::Unassign => unreachable!(),
         };
         let account_id = user.account_id.clone().ok_or_else(|| {
             ApiError::Decode("selected Jira user did not include an accountId".to_owned())

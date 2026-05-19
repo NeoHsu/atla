@@ -31,7 +31,7 @@ pub struct GlobalArgs {
     pub no_input: bool,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
     Json,
     Table,
@@ -202,9 +202,11 @@ pub enum IssueAction {
     Assign {
         key: String,
         #[arg(long)]
-        to: String,
+        to: Option<String>,
         #[arg(long)]
         account_id: bool,
+        #[arg(long)]
+        unassign: bool,
     },
     Transition {
         key: String,

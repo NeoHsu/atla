@@ -106,6 +106,7 @@ pub enum JiraAssigneeTarget {
     Me,
     AccountId(String),
     Query(String),
+    Unassign,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

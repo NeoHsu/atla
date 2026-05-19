@@ -342,11 +342,14 @@ pub(super) fn print_issue_assign(
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
-            "key": key,
-            "assigned": true,
-            "assignee": user
-        })),
+        OutputFormat::Json => {
+            let is_unassigned = user.account_id.is_none() && user.display_name.is_none();
+            output::print_json(&serde_json::json!({
+                "key": key,
+                "assigned": !is_unassigned,
+                "assignee": if is_unassigned { serde_json::Value::Null } else { serde_json::to_value(user).unwrap_or(serde_json::Value::Null) }
+            }))
+        }
         OutputFormat::Keys => {
             println!("{key}");
             Ok(())
@@ -354,57 +357,31 @@ pub(super) fn print_issue_assign(
         OutputFormat::Csv => {
             println!("key,assigned,accountId,displayName");
             println!(
-                "{},true,{},{}",
+                "{},{},{},{}",
                 output::csv_cell(key),
+                if user.account_id.is_none() && user.display_name.is_none() { "false" } else { "true" },
                 output::csv_cell(user.account_id.as_deref().unwrap_or_default()),
                 output::csv_cell(user.display_name.as_deref().unwrap_or_default())
             );
             Ok(())
         }
         OutputFormat::Table => {
-            println!("Assigned: {key}");
-            println!(
-                "Assignee: {}",
-                user.display_name
-                    .as_deref()
-                    .or(user.account_id.as_deref())
-                    .unwrap_or("-")
-            );
+            let is_unassigned = user.account_id.is_none() && user.display_name.is_none();
+            if is_unassigned {
+                println!("Unassigned: {key}");
+            } else {
+                println!("Assigned: {key}");
+                println!(
+                    "Assignee: {}",
+                    user.display_name
+                        .as_deref()
+                        .or(user.account_id.as_deref())
+                        .unwrap_or("-")
+                );
+            }
             Ok(())
         }
     }
-}
-
-pub(super) fn print_transitions(
-    transitions: &[JiraTransition],
-    global: &GlobalArgs,
-) -> anyhow::Result<()> {
-    output::print_records(
-        global.output.unwrap_or(OutputFormat::Table),
-        transitions,
-        transitions
-            .iter()
-            .filter_map(|transition| transition.id.clone())
-            .collect(),
-        &["id", "name", "toStatus", "requiredFields"],
-        transitions
-            .iter()
-            .map(|transition| {
-                vec![
-                    transition.id.as_deref().unwrap_or("-").to_owned(),
-                    transition.name.as_deref().unwrap_or("-").to_owned(),
-                    transition
-                        .to_status
-                        .as_ref()
-                        .and_then(|status| status.name.as_deref())
-                        .unwrap_or("-")
-                        .to_owned(),
-                    transition.required_fields().join(", "),
-                ]
-            })
-            .collect(),
-        None,
-    )
 }
 
 pub(super) fn print_transition_update(
@@ -486,6 +463,34 @@ pub(super) fn print_comments(page: &JiraCommentPage, global: &GlobalArgs) -> any
         page.total
             .map(|total| format!("Showing {} of {total} comments.", page.comments.len())),
     )
+}
+
+pub(super) fn print_issue_comments_section(
+    page: &JiraCommentPage,
+    _global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    let total = page.total.unwrap_or(page.comments.len() as u32);
+    println!();
+    if total > page.comments.len() as u32 {
+        println!("Comments ({} of {total}):", page.comments.len());
+    } else {
+        println!("Comments ({total}):");
+    }
+    for comment in &page.comments {
+        let author = comment.author_display_name.as_deref().unwrap_or("-");
+        let created = comment.created.as_deref().unwrap_or("-");
+        let id = comment.id.as_deref().unwrap_or("-");
+        println!("  [{id}] {author} — {created}");
+        if let Some(body) = &comment.body_text {
+            for line in body.lines().take(5) {
+                println!("    {line}");
+            }
+            if body.lines().count() > 5 {
+                println!("    ...");
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn print_comment(comment: &JiraComment, global: &GlobalArgs) -> anyhow::Result<()> {
@@ -982,7 +987,26 @@ pub(super) fn read_optional_text(
             .map(Some);
     }
 
-    Ok(value)
+    Ok(value.map(|s| unescape_text(&s)))
+}
+
+fn unescape_text(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.peek().copied() {
+                Some('n') => { chars.next(); result.push('\n'); }
+                Some('t') => { chars.next(); result.push('\t'); }
+                Some('r') => { chars.next(); result.push('\r'); }
+                Some('\\') => { chars.next(); result.push('\\'); }
+                _ => { result.push(c); }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 pub(super) fn read_required_text(

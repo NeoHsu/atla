@@ -1,0 +1,357 @@
+{
+  "total": 58,
+  "passed": 53,
+  "failed": 5,
+  "cleanup": "OK",
+  "log": "/Users/neo/Documents/work/github/code/atla/jira_deep_test.log",
+  "tests": [
+    {
+      "id": "A1-a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO ORDER BY created DESC\" --limit 5 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                            STATUS  ASSIGNEE  TYPE     PRIORITY  ID     "
+    },
+    {
+      "id": "A1-b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND issuetype=Bug\" --limit 5 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                            STATUS  ASSIGNEE  TYPE  PRIORITY  ID     "
+    },
+    {
+      "id": "A1-c",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND summary ~ '[CODEX-TEST]'\" --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                         STATUS  ASSIGNEE  TYPE   PRIORITY  ID     "
+    },
+    {
+      "id": "A1-d",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND reporter=currentUser()\" --limit 5 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                     STATUS  ASSIGNEE  TYPE     PRIORITY  ID     "
+    },
+    {
+      "id": "A1-e",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND status='To Do'\" --limit 5 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                     STATUS  ASSIGNEE  TYPE     PRIORITY  ID     "
+    },
+    {
+      "id": "A1-f",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND labels=search-test\" --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                         STATUS  ASSIGNEE  TYPE   PRIORITY  ID     "
+    },
+    {
+      "id": "A1-g",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO ORDER BY priority ASC\" --limit 10 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                            STATUS  ASSIGNEE  TYPE     PRIORITY  ID     "
+    },
+    {
+      "id": "A1-h",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND issuetype=Bug AND status='To Do'\" --limit 5 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                            STATUS  ASSIGNEE  TYPE  PRIORITY  ID     "
+    },
+    {
+      "id": "A1-i",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 5 --fields \"summary,status,priority\" --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                     STATUS  PRIORITY "
+    },
+    {
+      "id": "A1-j",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 3 --output json --no-input",
+      "observation": "exit 0; ["
+    },
+    {
+      "id": "A1-k",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 3 --output csv --no-input",
+      "observation": "exit 0; key,summary,status,assignee,type,priority,id"
+    },
+    {
+      "id": "A1-l",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 5 --output keys --no-input",
+      "observation": "exit 0; DEMO-356"
+    },
+    {
+      "id": "A1-m",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 1 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                        STATUS  ASSIGNEE  TYPE  PRIORITY  ID     "
+    },
+    {
+      "id": "A1-n",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND summary ~ 'ZZZNORESULTSEXPECTED99999'\" --no-input",
+      "observation": "exit 0;  KEY  SUMMARY  STATUS  ASSIGNEE  TYPE  PRIORITY  ID "
+    },
+    {
+      "id": "B1-1a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board list --no-input",
+      "observation": "exit 0;  ID   NAME        TYPE    SELF                                                 "
+    },
+    {
+      "id": "B1-1b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board list --output json --no-input",
+      "observation": "exit 0; {"
+    },
+    {
+      "id": "B1-2a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board view 485 --no-input",
+      "observation": "exit 0; ID: 485"
+    },
+    {
+      "id": "B1-2b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board view 485 --output json --no-input",
+      "observation": "exit 0; {"
+    },
+    {
+      "id": "B1-3a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board list --output csv --no-input",
+      "observation": "exit 0; id,name,type,self"
+    },
+    {
+      "id": "B1-3b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board list --output keys --no-input",
+      "observation": "exit 0; 485"
+    },
+    {
+      "id": "B1-3c",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board list --output table --no-input",
+      "observation": "exit 0;  ID   NAME        TYPE    SELF                                                 "
+    },
+    {
+      "id": "B1-4a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board list --dry-run --no-input",
+      "observation": "exit 0; Would GET https://txone.atlassian.net/rest/agile/1.0/board?startAt=0&maxResults=50 using profile `default`"
+    },
+    {
+      "id": "B1-4b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board view 485 --dry-run --no-input",
+      "observation": "exit 0; Would GET https://txone.atlassian.net/rest/agile/1.0/board/485 using profile `default`"
+    },
+    {
+      "id": "B1-5",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira board view 99999999 --no-input",
+      "observation": "Expected failure observed (exit 1)"
+    },
+    {
+      "id": "SP1-1a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint list --board 485 --no-input",
+      "observation": "exit 0;  ID    NAME                          STATE   ORIGINBOARDID  STARTDATE                 ENDDATE                   COMPLETEDATE              GOAL                  "
+    },
+    {
+      "id": "SP1-1b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint list --board 485 --output json --no-input",
+      "observation": "exit 0; {"
+    },
+    {
+      "id": "SP1-2a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint active --board 485 --no-input",
+      "observation": "exit 0;  ID    NAME                          STATE   ORIGINBOARDID  STARTDATE                 ENDDATE                   COMPLETEDATE  GOAL "
+    },
+    {
+      "id": "SP1-3a",
+      "result": "FAIL",
+      "command": "sprint view <SPRINT_ID>",
+      "observation": "No sprint ID available from active/list"
+    },
+    {
+      "id": "SP1-3b",
+      "result": "FAIL",
+      "command": "sprint view <SPRINT_ID> --output json",
+      "observation": "No sprint ID available"
+    },
+    {
+      "id": "SP1-4a",
+      "result": "FAIL",
+      "command": "sprint issues <SPRINT_ID>",
+      "observation": "No sprint ID available"
+    },
+    {
+      "id": "SP1-4b",
+      "result": "FAIL",
+      "command": "sprint issues <SPRINT_ID> --output json",
+      "observation": "No sprint ID available"
+    },
+    {
+      "id": "SP1-6",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint view 1838 --no-input",
+      "observation": "exit 0; ID: 1838"
+    },
+    {
+      "id": "SP1-7",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint add 1838 --issue DEMO-356 --no-input",
+      "observation": "exit 0; Sprint: 1838"
+    },
+    {
+      "id": "SP1-8",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint issues 1838 --no-input",
+      "observation": "exit 0;  KEY  SUMMARY  STATUS  ASSIGNEE  TYPE  PRIORITY  ID "
+    },
+    {
+      "id": "SP1-9",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint remove 1838 --issue DEMO-356 --no-input",
+      "observation": "exit 0; Sprint: 1838"
+    },
+    {
+      "id": "SP1-10",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint start 1838 --no-input",
+      "observation": "exit 0; ID: 1838"
+    },
+    {
+      "id": "SP1-11",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint close 1838 --no-input",
+      "observation": "exit 0; ID: 1838"
+    },
+    {
+      "id": "SP1-12a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint list --board 485 --output json --no-input",
+      "observation": "exit 0; {"
+    },
+    {
+      "id": "SP1-12b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint list --board 485 --output csv --no-input",
+      "observation": "exit 0; id,name,state,originBoardId,startDate,endDate,completeDate,goal"
+    },
+    {
+      "id": "SP1-12c",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint list --board 485 --output keys --no-input",
+      "observation": "exit 0; 1827"
+    },
+    {
+      "id": "SP1-13a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira sprint create --board 485 --name \"Dry Run Sprint\" --dry-run --no-input",
+      "observation": "exit 0; Would POST https://txone.atlassian.net/rest/agile/1.0/sprint using profile `default`"
+    },
+    {
+      "id": "SP1-13b",
+      "result": "FAIL",
+      "command": "sprint add <SPRINT_ID> --dry-run",
+      "observation": "Required sprint/task missing"
+    },
+    {
+      "id": "P1-1a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira project list --no-input",
+      "observation": "exit 0;  KEY     TYPE               STYLE     NAME                                    ARCHIVED "
+    },
+    {
+      "id": "P1-1b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira project list --output json --no-input",
+      "observation": "exit 0; ["
+    },
+    {
+      "id": "P1-2a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira project view DEMO --no-input",
+      "observation": "exit 0; Key: DEMO"
+    },
+    {
+      "id": "P1-2b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira project view DEMO --output json --no-input",
+      "observation": "exit 0; {"
+    },
+    {
+      "id": "P1-3a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira project list --output csv --no-input",
+      "observation": "exit 0; key,type,style,name,archived"
+    },
+    {
+      "id": "P1-3b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira project list --output keys --no-input",
+      "observation": "exit 0; CCP"
+    },
+    {
+      "id": "E1",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira issue view DEMO-9999999 --no-input",
+      "observation": "Expected failure observed (exit 1)"
+    },
+    {
+      "id": "E2a",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira issue create --project DEMO --type Bug --summary \"[CODEX-TEST] Should not be created\" --dry-run --no-input",
+      "observation": "exit 0; Would POST https://txone.atlassian.net/rest/api/3/issue using profile `default`"
+    },
+    {
+      "id": "E2b",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO AND summary ~ 'Should not be created'\" --output keys --no-input",
+      "observation": "exit 0; "
+    },
+    {
+      "id": "E3",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira issue delete DEMO-354 --yes --dry-run --no-input",
+      "observation": "exit 0; Would DELETE https://txone.atlassian.net/rest/api/3/issue/DEMO-354?deleteSubtasks=false using profile `default`"
+    },
+    {
+      "id": "E5",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira issue view DEMO-354 --profile default --no-input",
+      "observation": "exit 0; Key: DEMO-354"
+    },
+    {
+      "id": "E6",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira issue transition DEMO-354 --to \"INVALID_STATUS\" --no-input",
+      "observation": "Expected failure observed (exit 1)"
+    },
+    {
+      "id": "F1",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira issue view DEMO-354 --verbose --no-input",
+      "observation": "exit 0; Key: DEMO-354"
+    },
+    {
+      "id": "E4",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 2 --verbose --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                            STATUS  ASSIGNEE  TYPE  PRIORITY  ID     "
+    },
+    {
+      "id": "PAG-1",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search \"project=DEMO\" --limit 100 --no-input",
+      "observation": "exit 0;  KEY       SUMMARY                                                                                            STATUS       ASSIGNEE  TYPE     PRIORITY  ID     "
+    },
+    {
+      "id": "PAG-2",
+      "result": "PASS",
+      "command": "/Users/neo/Documents/work/github/code/atla/target/debug/atla jira search ... --limit 5 vs 20",
+      "observation": "count5=5 count20=20"
+    }
+  ]
+}
