@@ -48,7 +48,7 @@ fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
             let (quote, next_index) = collect_prefixed_block(&lines, index, '>');
             blocks.push(json!({
                 "type": "blockquote",
-                "content": parse_markdown_blocks(&quote),
+                "content": sanitize_blockquote_content(parse_markdown_blocks(&quote)),
             }));
             index = next_index;
             continue;
@@ -58,6 +58,7 @@ fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
             let (items, next_index) = collect_task_items(&lines, index);
             blocks.push(json!({
                 "type": "taskList",
+                "attrs": { "localId": format!("tasklist-{}", index + 1) },
                 "content": items,
             }));
             index = next_index;
@@ -308,15 +309,15 @@ fn adf_paragraph(text: &str) -> Value {
 }
 
 fn adf_code_block(language: &str, code: &str) -> Value {
-    let mut block = json!({
-        "type": "codeBlock",
-        "content": [
+    let mut block = json!({ "type": "codeBlock" });
+    if !code.is_empty() {
+        block["content"] = json!([
             {
                 "type": "text",
                 "text": code,
             }
-        ],
-    });
+        ]);
+    }
     if !language.is_empty() {
         block["attrs"] = json!({ "language": language });
     }
@@ -330,9 +331,9 @@ fn parse_inline_markdown(text: &str) -> Vec<Value> {
 
     while index < text.len() {
         let rest = &text[index..];
-        if let Some((node, consumed)) = parse_inline_token(rest) {
+        if let Some((new_nodes, consumed)) = parse_inline_token(rest) {
             push_plain_text(&mut nodes, &mut plain);
-            nodes.push(node);
+            nodes.extend(new_nodes);
             index += consumed;
         } else if let Some(ch) = rest.chars().next() {
             plain.push(ch);
@@ -345,26 +346,29 @@ fn parse_inline_markdown(text: &str) -> Vec<Value> {
     nodes
 }
 
-fn parse_inline_token(text: &str) -> Option<(Value, usize)> {
-    if let Some(rest) = text.strip_prefix("**") {
-        let end = rest.find("**")?;
-        let inner = &rest[..end];
-        return Some((marked_text(inner, "strong"), end + 4));
+fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "**", "strong") {
+        return Some((nodes, consumed));
     }
-    if let Some(rest) = text.strip_prefix('*') {
-        let end = rest.find('*')?;
-        let inner = &rest[..end];
-        return Some((marked_text(inner, "em"), end + 2));
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "__", "strong") {
+        return Some((nodes, consumed));
     }
-    if let Some(rest) = text.strip_prefix("~~") {
-        let end = rest.find("~~")?;
-        let inner = &rest[..end];
-        return Some((marked_text(inner, "strike"), end + 4));
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "*", "em") {
+        return Some((nodes, consumed));
+    }
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "_", "em") {
+        return Some((nodes, consumed));
+    }
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "~~", "strike") {
+        return Some((nodes, consumed));
     }
     if let Some(rest) = text.strip_prefix('`') {
         let end = rest.find('`')?;
         let inner = &rest[..end];
-        return Some((marked_text(inner, "code"), end + 2));
+        if inner.is_empty() {
+            return None;
+        }
+        return Some((vec![marked_text(inner, "code")], end + 2));
     }
     if let Some(rest) = text.strip_prefix('[') {
         let label_end = rest.find(']')?;
@@ -373,7 +377,8 @@ fn parse_inline_token(text: &str) -> Option<(Value, usize)> {
             let url_end = after_open.find(')')?;
             let label = &rest[..label_end];
             let url = &after_open[..url_end];
-            return Some((link_text(label, url), label_end + 1 + 1 + url_end + 1));
+            // 1([) + label_end + 1(]) + 1(() + url_end + 1())
+            return Some((link_text(label, url), label_end + url_end + 4));
         }
     }
     if let Some(rest) = text.strip_prefix("![") {
@@ -383,7 +388,8 @@ fn parse_inline_token(text: &str) -> Option<(Value, usize)> {
             let url_end = after_open.find(')')?;
             let alt = &rest[..alt_end];
             let url = &after_open[..url_end];
-            return Some((inline_card(url, alt), alt_end + 2 + url_end + 2));
+            // 2(![) + alt_end + 1(]) + 1(() + url_end + 1())
+            return Some((vec![inline_card(url, alt)], alt_end + url_end + 5));
         }
     }
     None
@@ -408,17 +414,55 @@ fn marked_text(text: &str, mark_type: &str) -> Value {
     })
 }
 
-fn link_text(text: &str, url: &str) -> Value {
-    json!({
-        "type": "text",
-        "text": text,
-        "marks": [
-            {
-                "type": "link",
-                "attrs": { "href": url }
-            }
-        ],
-    })
+fn parse_delimited_mark(text: &str, delimiter: &str, mark_type: &str) -> Option<(Vec<Value>, usize)> {
+    let rest = text.strip_prefix(delimiter)?;
+    let end = rest.find(delimiter)?;
+    let inner = &rest[..end];
+    let mut nodes = parse_inline_markdown(inner);
+    if nodes.is_empty() {
+        return None;
+    }
+    add_mark_to_nodes(&mut nodes, &json!({ "type": mark_type }));
+    Some((nodes, end + delimiter.len() * 2))
+}
+
+fn add_mark_to_nodes(nodes: &mut [Value], mark: &Value) {
+    for node in nodes {
+        add_mark(node, mark.clone());
+    }
+}
+
+fn add_mark(node: &mut Value, mark: Value) {
+    let Some(object) = node.as_object_mut() else {
+        return;
+    };
+    if object.get("type").and_then(Value::as_str) != Some("text") {
+        return;
+    }
+    match object.get_mut("marks") {
+        Some(Value::Array(marks)) => marks.push(mark),
+        _ => {
+            object.insert("marks".to_owned(), Value::Array(vec![mark]));
+        }
+    }
+}
+
+fn link_text(text: &str, url: &str) -> Vec<Value> {
+    let mut nodes = parse_inline_markdown(text);
+    if nodes.is_empty() {
+        nodes.push(json!({
+            "type": "text",
+            "text": text,
+        }));
+    }
+    add_mark_to_nodes(
+        &mut nodes,
+        &json!({
+            "type": "link",
+            "attrs": { "href": url }
+        }),
+    );
+    nodes
 }
 
 fn inline_card(url: &str, alt: &str) -> Value {
@@ -439,6 +483,23 @@ fn inline_card(url: &str, alt: &str) -> Value {
             ],
         })
     }
+}
+
+fn sanitize_blockquote_content(blocks: Vec<Value>) -> Vec<Value> {
+    blocks.into_iter().map(sanitize_blockquote_block).collect()
+}
+
+fn sanitize_blockquote_block(block: Value) -> Value {
+    let Value::Object(object) = &block else {
+        return block;
+    };
+    if node_type(object) == "heading" {
+        return json!({
+            "type": "paragraph",
+            "content": content_items(object),
+        });
+    }
+    block
 }
 
 fn render_blocks(items: &[Value], depth: usize) -> String {
@@ -770,6 +831,145 @@ fn prefix_lines(text: &str, prefix: &str) -> String {
 mod tests {
     use super::*;
 
+    fn targeted_schema_errors(value: &Value) -> Vec<String> {
+        fn walk(node: &Value, path: &str, errors: &mut Vec<String>) {
+            let Some(object) = node.as_object() else {
+                if let Some(items) = node.as_array() {
+                    for (index, child) in items.iter().enumerate() {
+                        walk(child, &format!("{path}[{index}]"), errors);
+                    }
+                }
+                return;
+            };
+
+            match object.get("type").and_then(Value::as_str).unwrap_or_default() {
+                "taskList" => {
+                    if !object
+                        .get("attrs")
+                        .and_then(|attrs| attrs.get("localId"))
+                        .and_then(Value::as_str)
+                        .is_some()
+                    {
+                        errors.push(format!("{path}: taskList missing attrs.localId"));
+                    }
+                }
+                "taskItem" => {
+                    let attrs = object.get("attrs");
+                    if !attrs
+                        .and_then(|attrs| attrs.get("localId"))
+                        .and_then(Value::as_str)
+                        .is_some()
+                    {
+                        errors.push(format!("{path}: taskItem missing attrs.localId"));
+                    }
+                    if !matches!(
+                        attrs.and_then(|attrs| attrs.get("state")).and_then(Value::as_str),
+                        Some("TODO" | "DONE")
+                    ) {
+                        errors.push(format!("{path}: taskItem missing valid attrs.state"));
+                    }
+                }
+                "blockquote" => {
+                    for (index, child) in content_items(object).iter().enumerate() {
+                        let child_type = child
+                            .as_object()
+                            .and_then(|value| value.get("type"))
+                            .and_then(Value::as_str)
+                            .unwrap_or_default();
+                        if !matches!(
+                            child_type,
+                            "paragraph"
+                                | "orderedList"
+                                | "bulletList"
+                                | "codeBlock"
+                                | "mediaSingle"
+                                | "mediaGroup"
+                                | "extension"
+                        ) {
+                            errors.push(format!(
+                                "{path}.content[{index}]: blockquote child `{child_type}` invalid"
+                            ));
+                        }
+                    }
+                }
+                "codeBlock" => {
+                    for (index, child) in content_items(object).iter().enumerate() {
+                        let Some(child_object) = child.as_object() else {
+                            errors.push(format!(
+                                "{path}.content[{index}]: codeBlock child must be text"
+                            ));
+                            continue;
+                        };
+                        if node_type(child_object) != "text" {
+                            errors.push(format!(
+                                "{path}.content[{index}]: codeBlock child must be text"
+                            ));
+                        }
+                        if child_object
+                            .get("marks")
+                            .and_then(Value::as_array)
+                            .is_some_and(|marks| !marks.is_empty())
+                        {
+                            errors.push(format!(
+                                "{path}.content[{index}]: codeBlock text must not have marks"
+                            ));
+                        }
+                        if !child_object
+                            .get("text")
+                            .and_then(Value::as_str)
+                            .is_some_and(|text| !text.is_empty())
+                        {
+                            errors.push(format!(
+                                "{path}.content[{index}]: text node must be non-empty"
+                            ));
+                        }
+                    }
+                }
+                "text" => {
+                    if !object
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .is_some_and(|text| !text.is_empty())
+                    {
+                        errors.push(format!("{path}: text node must be non-empty"));
+                    }
+                }
+                "inlineCard" => {
+                    if !object
+                        .get("attrs")
+                        .and_then(|attrs| attrs.get("url"))
+                        .and_then(Value::as_str)
+                        .is_some()
+                    {
+                        errors.push(format!("{path}: inlineCard missing attrs.url"));
+                    }
+                    if object.contains_key("content") {
+                        errors.push(format!("{path}: inlineCard must not have content"));
+                    }
+                }
+                "orderedList" => {
+                    if object
+                        .get("attrs")
+                        .and_then(|attrs| attrs.get("order"))
+                        .and_then(Value::as_f64)
+                        .is_some_and(|order| order < 0.0)
+                    {
+                        errors.push(format!("{path}: orderedList order must be >= 0"));
+                    }
+                }
+                _ => {}
+            }
+
+            for (key, child) in object {
+                walk(child, &format!("{path}.{key}"), errors);
+            }
+        }
+
+        let mut errors = Vec::new();
+        walk(value, "$", &mut errors);
+        errors
+    }
+
     #[test]
     fn converts_adf_to_markdown_text() {
         let adf = json!({
@@ -827,11 +1027,13 @@ cargo test
         assert_eq!(content[2]["type"], json!("bulletList"));
         assert_eq!(content[3]["type"], json!("orderedList"));
         assert_eq!(content[4]["type"], json!("taskList"));
+        assert_eq!(content[4]["attrs"]["localId"], json!("tasklist-10"));
         assert_eq!(content[4]["content"][0]["attrs"]["state"], json!("DONE"));
         assert_eq!(content[5]["type"], json!("blockquote"));
         assert_eq!(content[6]["type"], json!("codeBlock"));
         assert_eq!(content[6]["attrs"]["language"], json!("bash"));
         assert_eq!(content[7]["type"], json!("rule"));
+        assert!(targeted_schema_errors(&adf).is_empty());
     }
 
     #[test]
@@ -1020,6 +1222,69 @@ cargo test
         assert_eq!(
             adf_to_markdown(&adf),
             "> Heads up\n\n| Key | Value |\n| --- | --- |\n| Status | Done |\n\nhttps://example.com/card"
+        );
+    }
+
+    #[test]
+    fn converts_underscore_and_nested_marks() {
+        let adf = markdown_to_adf("_italic_ __bold__ **_both_**");
+
+        assert_eq!(adf["content"][0]["content"][0]["marks"][0]["type"], json!("em"));
+        assert_eq!(adf["content"][0]["content"][2]["marks"][0]["type"], json!("strong"));
+        assert_eq!(
+            adf["content"][0]["content"][4]["marks"],
+            json!([{ "type": "em" }, { "type": "strong" }])
+        );
+    }
+
+    #[test]
+    fn blockquote_headings_become_paragraphs() {
+        let adf = markdown_to_adf("> # Quoted heading");
+
+        assert_eq!(adf["content"][0]["type"], json!("blockquote"));
+        assert_eq!(adf["content"][0]["content"][0]["type"], json!("paragraph"));
+        assert!(targeted_schema_errors(&adf).is_empty());
+    }
+
+    #[test]
+    fn empty_code_blocks_omit_empty_text_nodes() {
+        let adf = markdown_to_adf("```\n```");
+
+        assert_eq!(adf["content"][0], json!({ "type": "codeBlock" }));
+        assert!(targeted_schema_errors(&adf).is_empty());
+    }
+
+    #[test]
+    fn renders_multiline_code_blocks_panels_and_mentions() {
+        let adf = json!({
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "codeBlock",
+                    "attrs": { "language": "rust" },
+                    "content": [{ "type": "text", "text": "fn main() {\n    println!(\"hi\");\n}" }]
+                },
+                {
+                    "type": "panel",
+                    "attrs": { "panelType": "info" },
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [{ "type": "text", "text": "Heads up" }]
+                        }
+                    ]
+                },
+                {
+                    "type": "paragraph",
+                    "content": [{ "type": "mention", "attrs": { "text": "Neo" } }]
+                }
+            ]
+        });
+
+        assert_eq!(
+            adf_to_markdown(&adf),
+            "```rust\nfn main() {\n    println!(\"hi\");\n}\n```\n\n> **info:**\n>\n> Heads up\n\n@Neo"
         );
     }
 }
