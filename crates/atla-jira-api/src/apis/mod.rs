@@ -118,7 +118,9 @@ pub mod issue_comments_api;
 pub mod issue_links_api;
 pub mod issue_search_api;
 pub mod issue_types_api;
+pub mod issue_worklogs_api;
 pub mod issues_api;
 pub mod projects_api;
+pub mod users_api;
 
 pub mod configuration;

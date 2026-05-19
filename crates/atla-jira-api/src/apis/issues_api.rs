@@ -385,3 +385,54 @@ pub async fn get_transitions(
         }))
     }
 }
+
+/// struct for typed errors of method [`set_assignee`]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SetAssigneeError {
+    UnknownValue(serde_json::Value),
+}
+
+pub async fn set_assignee(
+    configuration: &configuration::Configuration,
+    issue_id_or_key: &str,
+    account_id: Option<String>,
+) -> Result<(), Error<SetAssigneeError>> {
+    let p_path_issue_id_or_key = issue_id_or_key;
+
+    let uri_str = format!(
+        "{}/rest/api/3/issue/{issueIdOrKey}/assignee",
+        configuration.base_path,
+        issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
+    );
+    let mut req_builder = configuration.client.request(reqwest::Method::PUT, &uri_str);
+
+    req_builder = req_builder.json(&serde_json::json!({ "accountId": account_id }));
+
+    if let Some(ref user_agent) = configuration.user_agent {
+        req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
+    }
+    if let Some(ref token) = configuration.oauth_access_token {
+        req_builder = req_builder.bearer_auth(token.to_owned());
+    };
+    if let Some(ref auth_conf) = configuration.basic_auth {
+        req_builder = req_builder.basic_auth(auth_conf.0.to_owned(), auth_conf.1.to_owned());
+    };
+
+    let req = req_builder.build()?;
+    let resp = configuration.client.execute(req).await?;
+
+    let status = resp.status();
+
+    if !status.is_client_error() && !status.is_server_error() {
+        Ok(())
+    } else {
+        let content = resp.text().await?;
+        let entity: Option<SetAssigneeError> = serde_json::from_str(&content).ok();
+        Err(Error::ResponseError(ResponseContent {
+            status,
+            content,
+            entity,
+        }))
+    }
+}

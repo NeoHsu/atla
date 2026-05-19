@@ -146,14 +146,20 @@ impl JiraClient {
         &self,
         issue_id_or_key: &str,
     ) -> Result<Vec<JiraTransition>, ApiError> {
-        let transitions: JiraTransitionPage = read_json(
-            self.raw_client
-                .get(&format!("/rest/api/3/issue/{issue_id_or_key}/transitions"))
-                .query(&[("expand", "transitions.fields")]),
+        let transitions = generated_apis::issues_api::get_transitions(
+            &self.generated,
+            issue_id_or_key,
+            Some("transitions.fields"),
         )
-        .await?;
+        .await
+        .map_err(generated_error)?;
 
-        Ok(transitions.transitions.into_iter().collect())
+        Ok(transitions
+            .transitions
+            .unwrap_or_default()
+            .into_iter()
+            .map(JiraTransition::from)
+            .collect())
     }
 
     pub async fn transition_issue(
@@ -377,11 +383,9 @@ impl JiraClient {
     }
 
     pub async fn delete_attachment(&self, attachment_id: &str) -> Result<(), ApiError> {
-        read_empty(
-            self.raw_client
-                .delete(&format!("/rest/api/3/attachment/{attachment_id}")),
-        )
-        .await
+        generated_apis::issue_attachments_api::remove_attachment(&self.generated, attachment_id)
+            .await
+            .map_err(generated_error)
     }
 
     pub async fn download_attachment(
@@ -487,15 +491,13 @@ impl JiraClient {
             ApiError::Decode("selected Jira user did not include an accountId".to_owned())
         })?;
 
-        read_empty(
-            self.raw_client
-                .put(&format!(
-                    "/rest/api/3/issue/{}/assignee",
-                    assign.issue_id_or_key
-                ))
-                .json(&JiraAssignIssueRequest { account_id }),
+        generated_apis::issues_api::set_assignee(
+            &self.generated,
+            &assign.issue_id_or_key,
+            Some(account_id),
         )
-        .await?;
+        .await
+        .map_err(generated_error)?;
 
         Ok(user)
     }
@@ -614,15 +616,16 @@ impl JiraClient {
     }
 
     pub async fn add_worklog(&self, worklog: &JiraWorklogCreate) -> Result<JiraWorklog, ApiError> {
-        read_json(
-            self.raw_client
-                .post(&format!(
-                    "/rest/api/3/issue/{}/worklog",
-                    worklog.issue_id_or_key
-                ))
-                .json(&worklog.to_json()),
+        let value = generated_apis::issue_worklogs_api::add_worklog(
+            &self.generated,
+            &worklog.issue_id_or_key,
+            &worklog.to_json(),
         )
         .await
+        .map_err(generated_error)?;
+
+        serde_json::from_value(value)
+            .map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn list_worklogs(
@@ -630,19 +633,26 @@ impl JiraClient {
         issue_id_or_key: &str,
         max_results: u32,
     ) -> Result<JiraWorklogPage, ApiError> {
-        read_json(
-            self.raw_client
-                .get(&format!("/rest/api/3/issue/{issue_id_or_key}/worklog"))
-                .query(&[
-                    ("startAt", "0".to_owned()),
-                    ("maxResults", limit_i32(max_results).to_string()),
-                ]),
+        let value = generated_apis::issue_worklogs_api::get_issue_worklog(
+            &self.generated,
+            issue_id_or_key,
+            Some(0),
+            Some(limit_i32(max_results)),
         )
         .await
+        .map_err(generated_error)?;
+
+        serde_json::from_value(value)
+            .map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     async fn current_user(&self) -> Result<JiraUser, ApiError> {
-        read_json(self.raw_client.get("/rest/api/3/myself")).await
+        let value = generated_apis::users_api::get_myself(&self.generated)
+            .await
+            .map_err(generated_error)?;
+
+        serde_json::from_value(value)
+            .map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     async fn find_assignable_users(
@@ -650,16 +660,17 @@ impl JiraClient {
         issue_id_or_key: &str,
         query_text: &str,
     ) -> Result<Vec<JiraUser>, ApiError> {
-        read_json(
-            self.raw_client
-                .get("/rest/api/3/user/assignable/search")
-                .query(&[
-                    ("issueKey", issue_id_or_key.to_owned()),
-                    ("query", query_text.to_owned()),
-                    ("maxResults", "50".to_owned()),
-                ]),
+        let value = generated_apis::users_api::find_assignable_users_for_issue(
+            &self.generated,
+            issue_id_or_key,
+            query_text,
+            Some(50),
         )
         .await
+        .map_err(generated_error)?;
+
+        serde_json::from_value(value)
+            .map_err(|e| ApiError::Decode(e.to_string()))
     }
 }
 
@@ -985,6 +996,7 @@ impl From<generated_models::Transition> for JiraTransition {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct JiraTransitionPage {
@@ -1154,12 +1166,6 @@ pub struct JiraUser {
     pub account_id: Option<String>,
     pub display_name: Option<String>,
     pub active: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct JiraAssignIssueRequest {
-    account_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

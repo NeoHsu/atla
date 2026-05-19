@@ -9,38 +9,39 @@
  */
 
 use super::{configuration, ContentType, Error};
-use crate::{apis::ResponseContent, models};
+use crate::apis::ResponseContent;
 use reqwest;
 use serde::{de::Error as _, Deserialize, Serialize};
 
-/// struct for typed errors of method [`get_attachment`]
+/// struct for typed errors of method [`add_worklog`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum GetAttachmentError {
+pub enum AddWorklogError {
     UnknownValue(serde_json::Value),
 }
 
-/// struct for typed errors of method [`remove_attachment`]
+/// struct for typed errors of method [`get_issue_worklog`]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum RemoveAttachmentError {
+pub enum GetIssueWorklogError {
     UnknownValue(serde_json::Value),
 }
 
-/// Returns the metadata for an attachment. Note that the attachment itself is not returned.  This operation can be accessed anonymously.  **[Permissions](#permissions) required:**   *  *Browse projects* [project permission](https://confluence.atlassian.com/x/yodKLg) for the project that the issue is in.  *  If [issue-level security](https://confluence.atlassian.com/x/J4lKLg) is configured, issue-level security permission to view the issue.  *  If attachments are added in private comments, the comment-level restriction will be applied.
-pub async fn get_attachment(
+pub async fn add_worklog(
     configuration: &configuration::Configuration,
-    id: &str,
-) -> Result<models::Attachment, Error<GetAttachmentError>> {
-    // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_id = id;
+    issue_id_or_key: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value, Error<AddWorklogError>> {
+    let p_path_issue_id_or_key = issue_id_or_key;
 
     let uri_str = format!(
-        "{}/rest/api/3/attachment/{id}",
+        "{}/rest/api/3/issue/{issueIdOrKey}/worklog",
         configuration.base_path,
-        id = crate::apis::urlencode(p_path_id)
+        issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
     );
-    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+    let mut req_builder = configuration.client.request(reqwest::Method::POST, &uri_str);
+
+    req_builder = req_builder.json(body);
 
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
@@ -67,12 +68,12 @@ pub async fn get_attachment(
         let content = resp.text().await?;
         match content_type {
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::Attachment`"))),
-            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::Attachment`")))),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `serde_json::Value`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`")))),
         }
     } else {
         let content = resp.text().await?;
-        let entity: Option<GetAttachmentError> = serde_json::from_str(&content).ok();
+        let entity: Option<AddWorklogError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,
@@ -81,18 +82,27 @@ pub async fn get_attachment(
     }
 }
 
-pub async fn remove_attachment(
+pub async fn get_issue_worklog(
     configuration: &configuration::Configuration,
-    id: &str,
-) -> Result<(), Error<RemoveAttachmentError>> {
-    let p_path_id = id;
+    issue_id_or_key: &str,
+    start_at: Option<i64>,
+    max_results: Option<i32>,
+) -> Result<serde_json::Value, Error<GetIssueWorklogError>> {
+    let p_path_issue_id_or_key = issue_id_or_key;
 
     let uri_str = format!(
-        "{}/rest/api/3/attachment/{id}",
+        "{}/rest/api/3/issue/{issueIdOrKey}/worklog",
         configuration.base_path,
-        id = crate::apis::urlencode(p_path_id)
+        issueIdOrKey = crate::apis::urlencode(p_path_issue_id_or_key)
     );
-    let mut req_builder = configuration.client.request(reqwest::Method::DELETE, &uri_str);
+    let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
+
+    if let Some(ref param_value) = start_at {
+        req_builder = req_builder.query(&[("startAt", &param_value.to_string())]);
+    }
+    if let Some(ref param_value) = max_results {
+        req_builder = req_builder.query(&[("maxResults", &param_value.to_string())]);
+    }
 
     if let Some(ref user_agent) = configuration.user_agent {
         req_builder = req_builder.header(reqwest::header::USER_AGENT, user_agent.clone());
@@ -108,12 +118,23 @@ pub async fn remove_attachment(
     let resp = configuration.client.execute(req).await?;
 
     let status = resp.status();
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    let content_type = super::ContentType::from(content_type);
 
     if !status.is_client_error() && !status.is_server_error() {
-        Ok(())
+        let content = resp.text().await?;
+        match content_type {
+            ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `serde_json::Value`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `serde_json::Value`")))),
+        }
     } else {
         let content = resp.text().await?;
-        let entity: Option<RemoveAttachmentError> = serde_json::from_str(&content).ok();
+        let entity: Option<GetIssueWorklogError> = serde_json::from_str(&content).ok();
         Err(Error::ResponseError(ResponseContent {
             status,
             content,
