@@ -106,6 +106,16 @@ impl AtlassianClient {
             .header(reqwest::header::ACCEPT, "application/json")
     }
 
+    pub fn post_multipart(&self, path: &str) -> reqwest::RequestBuilder {
+        let url = self.url(path);
+        self.log_request("POST", &url);
+        self.http
+            .post(url)
+            .basic_auth(&self.email, Some(&self.token))
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header("X-Atlassian-Token", "no-check")
+    }
+
     pub fn url(&self, path: &str) -> String {
         if path.starts_with("http://") || path.starts_with("https://") {
             return path.to_owned();
@@ -227,6 +237,35 @@ mod tests {
         assert_eq!(
             client.url("https://api.media.atlassian.com/file/123"),
             "https://api.media.atlassian.com/file/123"
+        );
+    }
+
+    #[test]
+    fn multipart_posts_include_atlassian_token_header() {
+        let client = AtlassianClient::new(
+            AtlassianInstance::new("https://example.atlassian.net/"),
+            "neo@example.com",
+            "token",
+        );
+
+        let request = client
+            .post_multipart("/rest/api/3/issue/DEMO-1/attachments")
+            .build()
+            .expect("request should build");
+
+        assert_eq!(
+            request
+                .headers()
+                .get("X-Atlassian-Token")
+                .and_then(|value| value.to_str().ok()),
+            Some("no-check")
+        );
+        assert_eq!(
+            request
+                .headers()
+                .get(reqwest::header::ACCEPT)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json")
         );
     }
 }
