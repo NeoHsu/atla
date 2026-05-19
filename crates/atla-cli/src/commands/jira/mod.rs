@@ -1,11 +1,11 @@
 use anyhow::Context;
 use atla_core::{
-    default_issue_fields, JiraAssigneeTarget, JiraAttachmentDownload, JiraBoardPage,
-    JiraBoardSearch, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue, JiraIssueAssign,
-    JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate, JiraIssueList,
-    JiraIssueSearch, JiraIssueType, JiraIssueUpdate, JiraProject, JiraProjectSearch, JiraSprint,
-    JiraSprintCreate, JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraTransition, JiraUser,
-    JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
+    default_issue_fields, JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard,
+    JiraBoardPage, JiraBoardSearch, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraIssue,
+    JiraIssueAssign, JiraIssueCreate, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueLinkCreate,
+    JiraIssueList, JiraIssueSearch, JiraIssueType, JiraIssueUpdate, JiraProject,
+    JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage, JiraSprintSearch,
+    JiraSprintUpdate, JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -87,16 +87,27 @@ async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> anyhow::Result
             description,
             description_file,
             fields,
+            labels,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let mut parsed_fields = parse_fields(&fields)?;
+            if let Some(labels) = labels {
+                let values = labels
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|label| !label.is_empty())
+                    .map(|label| serde_json::Value::String(label.to_owned()))
+                    .collect::<Vec<_>>();
+                parsed_fields.insert("labels".to_owned(), serde_json::Value::Array(values));
+            }
             let issue = JiraIssueCreate {
                 project_key: project,
                 issue_type,
                 summary,
                 description: read_optional_text(description, description_file.as_deref())?,
-                fields: parse_fields(&fields)?,
+                fields: parsed_fields,
             };
 
             if global.dry_run {
@@ -563,6 +574,60 @@ async fn run_issue_attachment(
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
     match action {
+        IssueAttachmentAction::Upload { key, file } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{key}/attachments",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would POST {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let attachments = client
+                .upload_attachment(&key, &file)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to upload attachment to Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_attachments(&attachments, global)?;
+        }
+        IssueAttachmentAction::List { key } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/issue/{key}?fields=attachment",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let attachments = client
+                .list_issue_attachments(&key)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to list attachments for Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            print_attachments(&attachments, global)?;
+        }
         IssueAttachmentAction::Download {
             target,
             all,
@@ -615,6 +680,57 @@ async fn run_issue_attachment(
             };
 
             print_attachment_downloads(&downloads, global)?;
+        }
+        IssueAttachmentAction::Delete {
+            key: _,
+            attachment_id,
+            yes,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if !yes && !global.dry_run {
+                anyhow::bail!("refusing to delete attachment `{attachment_id}` without --yes");
+            }
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/api/3/attachment/{attachment_id}",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would DELETE {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            client
+                .delete_attachment(&attachment_id)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to delete attachment `{attachment_id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+            match global.output.unwrap_or(OutputFormat::Table) {
+                OutputFormat::Json => {
+                    output::print_json(&serde_json::json!({ "deleted": attachment_id }))
+                }
+                OutputFormat::Keys => {
+                    println!("{attachment_id}");
+                    Ok(())
+                }
+                OutputFormat::Csv => {
+                    println!("{},true", output::csv_cell(&attachment_id));
+                    Ok(())
+                }
+                OutputFormat::Table => {
+                    println!("Deleted: {attachment_id}");
+                    Ok(())
+                }
+            }?;
         }
     }
 
@@ -900,6 +1016,29 @@ async fn run_board(command: BoardCommand, global: &GlobalArgs) -> anyhow::Result
 
             print_boards(&page, global)?;
         }
+        BoardAction::View { id } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/agile/1.0/board/{id}",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let board = client.get_board(id).await.with_context(|| {
+                format!(
+                    "failed to load Jira board `{id}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_board(&board, global)?;
+        }
     }
 
     Ok(())
@@ -1073,11 +1212,13 @@ async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> anyhow::Resu
                 })?;
             print_sprint_issue_move(id, &issues, global)?;
         }
-        SprintAction::Remove { id, issue } => {
+        SprintAction::Remove { id, issues } => {
+            if issues.is_empty() {
+                anyhow::bail!("provide at least one issue with --issues");
+            }
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let issues = vec![issue];
 
             if global.dry_run {
                 println!(
@@ -1093,11 +1234,38 @@ async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> anyhow::Resu
                 .await
                 .with_context(|| {
                     format!(
-                        "failed to remove issue from Jira sprint `{id}` via backlog move from {}",
+                        "failed to remove issues from Jira sprint `{id}` via backlog move from {}",
                         client.instance_url()
                     )
                 })?;
             print_sprint_issue_move(id, &issues, global)?;
+        }
+        SprintAction::Issues { id, limit, fields } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+            let requested_fields = parse_issue_fields(fields.as_deref())?;
+
+            if global.dry_run {
+                let url = format!(
+                    "{}/rest/agile/1.0/sprint/{id}/issue",
+                    profile.instance.trim_end_matches('/')
+                );
+                println!("Would GET {url} using profile `{profile_name}`");
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let page = client
+                .get_sprint_issues(id, limit, requested_fields.clone())
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to list issues for Jira sprint `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_issues(&page.issues, global, requested_fields.as_deref())?;
         }
     }
 
@@ -1689,6 +1857,32 @@ fn print_attachment_downloads(
     )
 }
 
+fn print_attachments(attachments: &[JiraAttachment], global: &GlobalArgs) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        attachments,
+        attachments
+            .iter()
+            .filter_map(|attachment| attachment.id.clone())
+            .collect(),
+        &["id", "filename", "size"],
+        attachments
+            .iter()
+            .map(|attachment| {
+                vec![
+                    attachment.id.as_deref().unwrap_or("-").to_owned(),
+                    attachment.filename.as_deref().unwrap_or("-").to_owned(),
+                    attachment
+                        .size
+                        .map(|size| size.to_string())
+                        .unwrap_or_else(|| "-".to_owned()),
+                ]
+            })
+            .collect(),
+        Some(format!("Found {} attachment(s).", attachments.len())),
+    )
+}
+
 fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
@@ -1712,6 +1906,41 @@ fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow::Result<()>
         page.total
             .map(|total| format!("Showing {} of {total} boards.", page.values.len())),
     )
+}
+
+fn print_board(board: &JiraBoard, global: &GlobalArgs) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(board),
+        OutputFormat::Keys => {
+            if let Some(id) = board.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Csv => {
+            println!("id,name,type,self");
+            println!(
+                "{},{},{},{}",
+                output::csv_cell(&board.id.map(|id| id.to_string()).unwrap_or_default()),
+                output::csv_cell(board.name.as_deref().unwrap_or_default()),
+                output::csv_cell(board.board_type.as_deref().unwrap_or_default()),
+                output::csv_cell(board.self_url.as_deref().unwrap_or_default())
+            );
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!(
+                "ID: {}",
+                board.id.map(|id| id.to_string()).unwrap_or("-".to_owned())
+            );
+            println!("Name: {}", board.name.as_deref().unwrap_or("-"));
+            println!("Type: {}", board.board_type.as_deref().unwrap_or("-"));
+            if let Some(self_url) = &board.self_url {
+                println!("Self: {self_url}");
+            }
+            Ok(())
+        }
+    }
 }
 
 fn print_sprints(page: &JiraSprintPage, global: &GlobalArgs) -> anyhow::Result<()> {
@@ -2075,6 +2304,7 @@ fn value_cell(value: &serde_json::Value) -> String {
             .get("name")
             .or_else(|| object.get("displayName"))
             .or_else(|| object.get("value"))
+            .or_else(|| object.get("key"))
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned)
             .unwrap_or_else(|| serde_json::to_string(value).unwrap_or_else(|_| "-".to_owned())),

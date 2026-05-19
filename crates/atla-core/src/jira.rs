@@ -346,6 +346,44 @@ impl JiraClient {
             .map_err(|error| ApiError::Decode(format!("failed to decode attachments: {error}")))
     }
 
+    pub async fn upload_attachment(
+        &self,
+        issue_id_or_key: &str,
+        file_path: &Path,
+    ) -> Result<Vec<JiraAttachment>, ApiError> {
+        let filename = file_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("attachment")
+            .to_owned();
+        let content = std::fs::read(file_path).map_err(|error| {
+            ApiError::Decode(format!(
+                "failed to read file `{}`: {error}",
+                file_path.display()
+            ))
+        })?;
+        let part = reqwest::multipart::Part::bytes(content)
+            .file_name(filename)
+            .mime_str("application/octet-stream")
+            .map_err(|error| ApiError::Decode(format!("invalid MIME type: {error}")))?;
+        let form = reqwest::multipart::Form::new().part("file", part);
+
+        read_json(
+            self.raw_client
+                .post_multipart(&format!("/rest/api/3/issue/{issue_id_or_key}/attachments"))
+                .multipart(form),
+        )
+        .await
+    }
+
+    pub async fn delete_attachment(&self, attachment_id: &str) -> Result<(), ApiError> {
+        read_empty(
+            self.raw_client
+                .delete(&format!("/rest/api/3/attachment/{attachment_id}")),
+        )
+        .await
+    }
+
     pub async fn download_attachment(
         &self,
         id: &str,
@@ -480,6 +518,14 @@ impl JiraClient {
         read_json(self.raw_client.get("/rest/agile/1.0/board").query(&query)).await
     }
 
+    pub async fn get_board(&self, board_id: u64) -> Result<JiraBoard, ApiError> {
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/board/{board_id}")),
+        )
+        .await
+    }
+
     pub async fn list_sprints(
         &self,
         search: &JiraSprintSearch,
@@ -504,6 +550,25 @@ impl JiraClient {
         read_json(
             self.raw_client
                 .get(&format!("/rest/agile/1.0/sprint/{sprint_id}")),
+        )
+        .await
+    }
+
+    pub async fn get_sprint_issues(
+        &self,
+        sprint_id: u64,
+        max_results: u32,
+        fields: Option<Vec<String>>,
+    ) -> Result<JiraIssueSearchPage, ApiError> {
+        let fields_str = issue_fields(fields.as_deref());
+        let query = vec![
+            ("maxResults", max_results.to_string()),
+            ("fields", fields_str.join(",")),
+        ];
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/sprint/{sprint_id}/issue"))
+                .query(&query),
         )
         .await
     }
@@ -1463,7 +1528,7 @@ fn adf_plain_text(body: &std::collections::HashMap<String, serde_json::Value>) -
     let value = serde_json::Value::Object(body.clone().into_iter().collect());
     let mut parts = Vec::new();
     collect_adf_text(&value, &mut parts);
-    parts.join("\n")
+    parts.join("").trim().to_owned()
 }
 
 #[allow(dead_code)]
@@ -1542,11 +1607,42 @@ fn jira_linked_issue_from_value(value: &serde_json::Value) -> JiraLinkedIssue {
 fn collect_adf_text(value: &serde_json::Value, parts: &mut Vec<String>) {
     match value {
         serde_json::Value::Object(object) => {
-            if let Some(text) = object.get("text").and_then(serde_json::Value::as_str) {
+            let node_type = object
+                .get("type")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+            if node_type == "hardBreak" {
+                parts.push("\n".to_owned());
+            } else if let Some(text) = object.get("text").and_then(serde_json::Value::as_str) {
                 parts.push(text.to_owned());
+            } else if let Some(attributes) =
+                object.get("attrs").and_then(serde_json::Value::as_object)
+            {
+                if let Some(text) = attributes
+                    .get("text")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| attributes.get("label").and_then(serde_json::Value::as_str))
+                    .or_else(|| attributes.get("url").and_then(serde_json::Value::as_str))
+                {
+                    parts.push(text.to_owned());
+                }
             }
             if let Some(content) = object.get("content") {
                 collect_adf_text(content, parts);
+                if matches!(
+                    node_type,
+                    "paragraph"
+                        | "heading"
+                        | "listItem"
+                        | "bulletList"
+                        | "orderedList"
+                        | "blockquote"
+                        | "codeBlock"
+                        | "rule"
+                        | "panel"
+                ) {
+                    parts.push("\n".to_owned());
+                }
             }
         }
         serde_json::Value::Array(items) => {
@@ -1927,6 +2023,44 @@ mod tests {
         assert_eq!(comment.id.as_deref(), Some("10010"));
         assert_eq!(comment.body_text.as_deref(), Some("Line one\nLine two"));
         assert_eq!(comment.author_display_name.as_deref(), Some("Neo"));
+    }
+
+    #[test]
+    fn converts_adf_nodes_using_attrs_text() {
+        let comment = JiraComment::from(generated_models::Comment {
+            id: Some("10011".to_owned()),
+            param_self: None,
+            body: Some(
+                serde_json::json!({
+                    "type": "doc",
+                    "version": 1,
+                    "content": [
+                        {
+                            "type": "paragraph",
+                            "content": [
+                                {
+                                    "type": "mention",
+                                    "attrs": {
+                                        "id": "abc",
+                                        "text": "@Neo"
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                })
+                .as_object()
+                .expect("ADF root object")
+                .clone()
+                .into_iter()
+                .collect(),
+            ),
+            author: None,
+            created: None,
+            updated: None,
+        });
+
+        assert_eq!(comment.body_text.as_deref(), Some("@Neo"));
     }
 
     #[test]

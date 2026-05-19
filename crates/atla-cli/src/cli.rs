@@ -166,6 +166,8 @@ pub enum IssueAction {
         description_file: Option<PathBuf>,
         #[arg(long = "field")]
         fields: Vec<String>,
+        #[arg(long)]
+        labels: Option<String>,
     },
     #[command(alias = "edit")]
     Update {
@@ -259,12 +261,27 @@ pub enum IssueCommentAction {
 
 #[derive(Debug, Subcommand)]
 pub enum IssueAttachmentAction {
+    Upload {
+        key: String,
+        #[arg(long)]
+        file: PathBuf,
+    },
+    List {
+        key: String,
+    },
     Download {
         target: String,
         #[arg(long)]
         all: bool,
         #[arg(short, long)]
         output: Option<PathBuf>,
+    },
+    Delete {
+        key: String,
+        #[arg(long)]
+        attachment_id: String,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -320,6 +337,9 @@ pub enum BoardAction {
         name: Option<String>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+    },
+    View {
+        id: u64,
     },
 }
 
@@ -377,8 +397,15 @@ pub enum SprintAction {
     },
     Remove {
         id: u64,
+        #[arg(long, value_delimiter = ',')]
+        issues: Vec<String>,
+    },
+    Issues {
+        id: u64,
+        #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
+        limit: u32,
         #[arg(long)]
-        issue: String,
+        fields: Option<String>,
     },
 }
 
