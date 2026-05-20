@@ -56,7 +56,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
             }
 
             let client = ctx.confluence_client()?;
-            let space = client.get_space_by_key(&key).await.with_context(|| {
+            let space = client.get_space(&key).await.with_context(|| {
                 format!(
                     "failed to load Confluence space `{key}` from {}",
                     client.instance_url()

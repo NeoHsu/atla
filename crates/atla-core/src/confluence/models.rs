@@ -759,7 +759,8 @@ fn attachment_from_json(value: &Value) -> ConfluenceAttachment {
         file_id: optional_string(value, &["fileId"]),
         file_size: optional_i64(value, &["fileSize"]),
         webui_link: optional_string(value, &["webuiLink"]),
-        download_link: optional_string(value, &["downloadLink"]),
+        download_link: optional_string(value, &["downloadLink"])
+            .or_else(|| v1_link(value, "download")),
         version: version_from_json(value),
     }
 }

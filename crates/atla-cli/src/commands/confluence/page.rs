@@ -1,15 +1,16 @@
 use anyhow::Context;
 use atla_core::{
-    ConfluenceContentTreeSearch, ConfluencePageCopy, ConfluencePageCreate, ConfluencePageSearch,
-    ConfluencePageUpdate,
+    ConfluenceAttachmentSearch, ConfluenceContentTreeSearch, ConfluencePageCopy,
+    ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate,
 };
 
 use crate::cli::{ContentViewFormat, GlobalArgs, PageAction, PageCommand};
 use crate::context::AppContext;
 
 use super::format::{
-    open_web_url, prepare_optional_body, prepare_required_body, print_content_nodes, print_page,
-    print_page_body, print_page_body_markdown, print_pages, read_body, resolve_required_space_id,
+    open_web_url, prepare_optional_body, prepare_required_body, print_attachments,
+    print_content_nodes, print_page, print_page_body, print_page_body_markdown,
+    print_page_with_attachments, print_pages, read_body, resolve_required_space_id,
     resolve_space_id, status_from_draft, view_format_body_representation,
 };
 use super::page_comment::run_page_comment;
@@ -125,7 +126,12 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
 
             print_pages(&page.results, global)?;
         }
-        PageAction::View { id, web, format } => {
+        PageAction::View {
+            id,
+            web,
+            format,
+            with_attachments,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -137,6 +143,14 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     id
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
+                if with_attachments {
+                    let att_url = format!(
+                        "{}/wiki/api/v2/pages/{}/attachments",
+                        profile.instance.trim_end_matches('/'),
+                        id
+                    );
+                    println!("Would GET {att_url} using profile `{profile_name}`");
+                }
                 return Ok(());
             }
 
@@ -160,7 +174,33 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     )
                 })?;
 
-            if matches!(format, Some(ContentViewFormat::Markdown)) {
+            if with_attachments {
+                let search = ConfluenceAttachmentSearch {
+                    page_id: id.clone(),
+                    filename: None,
+                    limit: 250,
+                };
+                let attachments = client
+                    .list_page_attachments(&search)
+                    .await
+                    .with_context(|| {
+                        format!("failed to list attachments for page `{id}`")
+                    })?;
+                if matches!(format, Some(ContentViewFormat::Markdown)) {
+                    print_page_body_markdown(&page)?;
+                } else if format.is_some() {
+                    print_page_body(&page)?;
+                } else {
+                    print_page_with_attachments(&page, &attachments.results, global)?;
+                    return Ok(());
+                }
+                // body-format view: print attachments separately (body is already printed above)
+                if attachments.results.is_empty() {
+                    eprintln!("(no attachments)");
+                } else {
+                    print_attachments(&attachments.results, global)?;
+                }
+            } else if matches!(format, Some(ContentViewFormat::Markdown)) {
                 print_page_body_markdown(&page)?;
             } else if format.is_some() {
                 print_page_body(&page)?;
@@ -390,11 +430,27 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             client
                 .delete_page(&id, purge, draft)
                 .await
-                .with_context(|| {
-                    format!(
-                        "failed to delete Confluence page `{id}` from {}",
-                        client.instance_url()
-                    )
+                .map_err(|err| {
+                    let msg = err.to_string();
+                    if purge && msg.contains("404") {
+                        anyhow::anyhow!(
+                            "failed to delete Confluence page `{id}` from {}\n\
+                            Hint: to purge a page it must first be in the trash; \
+                            run without --purge to move it to trash, then retry with --purge",
+                            client.instance_url()
+                        )
+                    } else if msg.contains("404") && !draft {
+                        anyhow::anyhow!(
+                            "failed to delete Confluence page `{id}` from {}\n\
+                            Hint: if this is a draft page, add the `--draft` flag",
+                            client.instance_url()
+                        )
+                    } else {
+                        anyhow::anyhow!(
+                            "failed to delete Confluence page `{id}` from {}: {err}",
+                            client.instance_url()
+                        )
+                    }
                 })?;
             println!("Deleted Confluence page {id}");
         }

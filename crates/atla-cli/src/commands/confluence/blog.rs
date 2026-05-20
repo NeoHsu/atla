@@ -117,7 +117,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
 
             print_blog_posts(&page.results, global)?;
         }
-        BlogAction::View { id } => {
+        BlogAction::View { id, .. } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -237,11 +237,27 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             client
                 .delete_blog_post(&id, purge, draft)
                 .await
-                .with_context(|| {
-                    format!(
-                        "failed to delete Confluence blog post `{id}` from {}",
-                        client.instance_url()
-                    )
+                .map_err(|err| {
+                    let msg = err.to_string();
+                    if purge && msg.contains("404") {
+                        anyhow::anyhow!(
+                            "failed to delete Confluence blog post `{id}` from {}\n\
+                            Hint: to purge a blog post it must first be in the trash; \
+                            run without --purge to move it to trash, then retry with --purge",
+                            client.instance_url()
+                        )
+                    } else if msg.contains("404") && !draft {
+                        anyhow::anyhow!(
+                            "failed to delete Confluence blog post `{id}` from {}\n\
+                            Hint: if this is a draft blog post, add the `--draft` flag",
+                            client.instance_url()
+                        )
+                    } else {
+                        anyhow::anyhow!(
+                            "failed to delete Confluence blog post `{id}` from {}: {err}",
+                            client.instance_url()
+                        )
+                    }
                 })?;
             print_deleted("blogPost", &id, global)?;
         }

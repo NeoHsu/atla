@@ -280,16 +280,15 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
         }
         IssueAction::Assign {
             key,
-            to,
+            target,
             account_id,
-            unassign,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let target = if unassign {
+            let target = if target.unassign {
                 JiraAssigneeTarget::Unassign
-            } else if let Some(to) = to {
+            } else if let Some(to) = target.to {
                 if to.eq_ignore_ascii_case("me") {
                     JiraAssigneeTarget::Me
                 } else if account_id {
@@ -300,6 +299,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             } else {
                 anyhow::bail!("provide --to <user> or --unassign");
             };
+            let is_unassign = matches!(&target, JiraAssigneeTarget::Unassign);
             let assign = JiraIssueAssign {
                 issue_id_or_key: key,
                 target,
@@ -311,7 +311,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                     profile.instance.trim_end_matches('/'),
                     assign.issue_id_or_key
                 );
-                if unassign {
+                if is_unassign {
                     println!("Would PUT {url} (unassign) using profile `{profile_name}`");
                 } else {
                     println!("Would PUT {url} using profile `{profile_name}`");

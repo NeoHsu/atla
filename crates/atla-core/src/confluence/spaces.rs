@@ -38,6 +38,32 @@ impl ConfluenceClient {
         Ok(page.results.into_iter().next())
     }
 
+    pub async fn get_space_by_id(&self, id: &str) -> Result<Option<ConfluenceSpace>, ApiError> {
+        let page = self
+            .generated
+            .get_spaces()
+            .ids(vec![parse_i64_id(id)?])
+            .limit(limit_non_zero(1)?)
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
+
+        Ok(page.results.into_iter().next().map(ConfluenceSpace::from))
+    }
+
+    pub async fn get_space(&self, key_or_id: &str) -> Result<Option<ConfluenceSpace>, ApiError> {
+        if let Some(space) = self.get_space_by_key(key_or_id).await? {
+            return Ok(Some(space));
+        }
+
+        if key_or_id.parse::<i64>().is_ok() {
+            return self.get_space_by_id(key_or_id).await;
+        }
+
+        Ok(None)
+    }
+
     pub async fn create_space(
         &self,
         space: &ConfluenceSpaceCreate,

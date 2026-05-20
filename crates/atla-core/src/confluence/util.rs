@@ -11,7 +11,9 @@ pub(super) fn limit_non_zero(limit: u32) -> Result<NonZeroU32, ApiError> {
 }
 
 pub(super) fn parse_i64_id(id: &str) -> Result<i64, ApiError> {
-    id.parse()
+    let numeric = id.strip_prefix("att").unwrap_or(id);
+    numeric
+        .parse()
         .map_err(|_| ApiError::Decode(format!("expected numeric Confluence id, got `{id}`")))
 }
 

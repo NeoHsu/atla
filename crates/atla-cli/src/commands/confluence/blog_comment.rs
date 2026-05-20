@@ -4,7 +4,9 @@ use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch};
 use crate::cli::{BlogCommentAction, GlobalArgs};
 use crate::context::AppContext;
 
-use super::format::{confluence_body_representation, print_comment, print_comments, read_body};
+use super::format::{
+    confluence_body_representation, print_comment, print_comments, read_body, print_deleted,
+};
 
 pub(super) async fn run_blog_comment(
     action: BlogCommentAction,
@@ -77,6 +79,36 @@ pub(super) async fn run_blog_comment(
                     )
                 })?;
             print_comment(&comment, global)?;
+        }
+        BlogCommentAction::Delete { blog_id, comment_id, yes } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if !yes && !global.dry_run {
+                anyhow::bail!("refusing to delete Confluence comment `{comment_id}` without --yes");
+            }
+
+            if global.dry_run {
+                println!(
+                    "Would DELETE {}/wiki/api/v2/footer-comments/{} for blog post `{blog_id}` using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/'),
+                    comment_id
+                );
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            client
+                .delete_page_comment(&comment_id)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to delete Confluence comment `{comment_id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_deleted("comment", &comment_id, global)?;
         }
     }
 

@@ -25,7 +25,7 @@ pub(super) async fn resolve_space_id(
     };
 
     let space = client
-        .get_space_by_key(space_key)
+        .get_space(space_key)
         .await
         .with_context(|| format!("failed to resolve Confluence space `{space_key}`"))?;
     let space =
@@ -439,13 +439,17 @@ pub(super) fn print_comments(
             .iter()
             .filter_map(|comment| comment.id.clone())
             .collect(),
-        &["id", "page_id", "status", "version", "body"],
+        &["id", "content_id", "status", "version", "body"],
         page.results
             .iter()
             .map(|comment| {
                 vec![
                     comment.id.as_deref().unwrap_or("-").to_owned(),
-                    comment.page_id.as_deref().unwrap_or("-").to_owned(),
+                    comment.page_id
+                        .as_deref()
+                        .or(comment.blog_post_id.as_deref())
+                        .unwrap_or("-")
+                        .to_owned(),
                     comment.status.as_deref().unwrap_or("-").to_owned(),
                     comment_version(comment).unwrap_or("-".to_owned()),
                     comment.body.as_deref().unwrap_or("-").replace('\n', " "),
@@ -538,6 +542,33 @@ pub(super) fn print_pages(pages: &[ConfluencePage], global: &GlobalArgs) -> anyh
             .collect(),
         None,
     )
+}
+
+/// Print a page alongside its attachments as a single unit. For JSON output, merges both into
+/// one object with an `"attachments"` field to avoid emitting two separate JSON values.
+pub(super) fn print_page_with_attachments(
+    page: &ConfluencePage,
+    attachments: &[ConfluenceAttachment],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => {
+            let mut page_json = serde_json::to_value(page)
+                .context("failed to serialize page")?;
+            page_json["attachments"] = serde_json::to_value(attachments)
+                .context("failed to serialize attachments")?;
+            output::print_json(&page_json)
+        }
+        _ => {
+            print_page(page, global)?;
+            if attachments.is_empty() {
+                eprintln!("(no attachments)");
+            } else {
+                print_attachments(attachments, global)?;
+            }
+            Ok(())
+        }
+    }
 }
 
 pub(super) fn print_page(page: &ConfluencePage, global: &GlobalArgs) -> anyhow::Result<()> {

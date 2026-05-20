@@ -79,6 +79,15 @@ impl AtlassianClient {
             .header(reqwest::header::ACCEPT, "application/json")
     }
 
+    /// Like `get()` but without forcing `Accept: application/json` — use for binary downloads.
+    pub fn get_binary(&self, path: &str) -> reqwest::RequestBuilder {
+        let url = self.url(path);
+        self.log_request("GET", &url);
+        self.http
+            .get(url)
+            .basic_auth(&self.email, Some(&self.token))
+    }
+
     pub fn post(&self, path: &str) -> reqwest::RequestBuilder {
         let url = self.url(path);
         self.log_request("POST", &url);

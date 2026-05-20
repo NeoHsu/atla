@@ -87,6 +87,13 @@ fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
             continue;
         }
 
+        if is_table_start(&lines, index) {
+            let (table, next_index) = parse_markdown_table(&lines, index);
+            blocks.push(table);
+            index = next_index;
+            continue;
+        }
+
         let (paragraph, next_index) = collect_paragraph(&lines, index);
         blocks.push(adf_paragraph(&paragraph));
         index = next_index;
@@ -281,7 +288,7 @@ fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value
 
         items.push(json!({
             "type": "listItem",
-            "content": [adf_paragraph(text)],
+            "content": [adf_paragraph(&[(text.to_owned(), false)])],
         }));
         index += 1;
     }
@@ -289,8 +296,8 @@ fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value
     (items, index)
 }
 
-fn collect_paragraph(lines: &[&str], start: usize) -> (String, usize) {
-    let mut collected = Vec::new();
+fn collect_paragraph(lines: &[&str], start: usize) -> (Vec<(String, bool)>, usize) {
+    let mut collected: Vec<(String, bool)> = Vec::new();
     let mut index = start;
     while index < lines.len() {
         let line = lines[index];
@@ -302,13 +309,81 @@ fn collect_paragraph(lines: &[&str], start: usize) -> (String, usize) {
             || task_list_marker(line).is_some()
             || unordered_list_text(line).is_some()
             || ordered_list_text(line).is_some()
+            || is_table_start(lines, index)
         {
             break;
         }
-        collected.push(line.trim());
+        // Detect hard line break: trailing two or more spaces.
+        let hard_break = line.ends_with("  ") || line.ends_with('\t');
+        collected.push((line.trim().to_owned(), hard_break));
         index += 1;
     }
-    (collected.join(" "), index)
+    (collected, index)
+}
+
+fn is_table_start(lines: &[&str], index: usize) -> bool {
+    if index + 1 >= lines.len() {
+        return false;
+    }
+    let line = lines[index];
+    let next = lines[index + 1];
+    is_table_row(line) && is_table_separator(next)
+}
+
+fn is_table_row(line: &str) -> bool {
+    let t = line.trim();
+    t.starts_with('|') && t.contains('|')
+}
+
+fn is_table_separator(line: &str) -> bool {
+    let t = line.trim();
+    t.starts_with('|')
+        && t.chars()
+            .all(|c| matches!(c, '|' | '-' | ':' | ' ' | '\t'))
+        && t.contains('-')
+}
+
+fn parse_table_row_cells(line: &str) -> Vec<String> {
+    let t = line.trim().trim_matches('|');
+    t.split('|').map(|cell| cell.trim().to_owned()).collect()
+}
+
+fn adf_table_cell(text: &str, header: bool) -> Value {
+    let cell_type = if header { "tableHeader" } else { "tableCell" };
+    json!({
+        "type": cell_type,
+        "attrs": {},
+        "content": [{"type": "paragraph", "content": parse_inline_markdown(text)}],
+    })
+}
+
+fn parse_markdown_table(lines: &[&str], start: usize) -> (Value, usize) {
+    let headers = parse_table_row_cells(lines[start]);
+    let mut index = start + 2; // skip header + separator
+    let mut rows: Vec<Value> = vec![json!({
+        "type": "tableRow",
+        "content": headers.iter().map(|h| adf_table_cell(h, true)).collect::<Vec<_>>(),
+    })];
+    while index < lines.len() {
+        let line = lines[index];
+        if !is_table_row(line) {
+            break;
+        }
+        let cells = parse_table_row_cells(line);
+        rows.push(json!({
+            "type": "tableRow",
+            "content": cells.iter().map(|c| adf_table_cell(c, false)).collect::<Vec<_>>(),
+        }));
+        index += 1;
+    }
+    (
+        json!({
+            "type": "table",
+            "attrs": {"isNumberColumnEnabled": false, "layout": "default"},
+            "content": rows,
+        }),
+        index,
+    )
 }
 
 fn task_list_marker(line: &str) -> Option<(bool, &str)> {
@@ -352,11 +427,21 @@ fn ordered_list_order(line: &str) -> Option<u64> {
     trimmed[..digits].parse().ok()
 }
 
-fn adf_paragraph(text: &str) -> Value {
-    json!({
-        "type": "paragraph",
-        "content": parse_inline_markdown(text),
-    })
+fn adf_paragraph(lines: &[(String, bool)]) -> Value {
+    if lines.is_empty() {
+        return json!({"type": "paragraph", "content": []});
+    }
+    let mut content: Vec<Value> = Vec::new();
+    for (i, (line, hard_break)) in lines.iter().enumerate() {
+        content.extend(parse_inline_markdown(line));
+        if *hard_break && i + 1 < lines.len() {
+            content.push(json!({"type": "hardBreak"}));
+        } else if !hard_break && i + 1 < lines.len() {
+            // Soft wrap: join with a space character
+            content.push(json!({"type": "text", "text": " "}));
+        }
+    }
+    json!({"type": "paragraph", "content": content})
 }
 
 fn adf_code_block(language: &str, code: &str) -> Value {
@@ -398,6 +483,18 @@ fn parse_inline_markdown(text: &str) -> Vec<Value> {
 }
 
 fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
+    // Handle backslash escapes: \* \_ \~ \\ \[ \] \! \| \# \`
+    if let Some(rest) = text.strip_prefix('\\') {
+        if let Some(ch) = rest.chars().next() {
+            if matches!(ch, '*' | '_' | '~' | '\\' | '[' | ']' | '!' | '|' | '#' | '`') {
+                return Some((
+                    vec![json!({"type": "text", "text": ch.to_string()})],
+                    1 + ch.len_utf8(),
+                ));
+            }
+        }
+    }
+
     if let Some((nodes, consumed)) = parse_delimited_mark(text, "**", "strong") {
         return Some((nodes, consumed));
     }
@@ -427,7 +524,8 @@ fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
         if let Some(after_open) = after_label.strip_prefix('(') {
             let url_end = after_open.find(')')?;
             let label = &rest[..label_end];
-            let url = &after_open[..url_end];
+            let raw_url = &after_open[..url_end];
+            let url = strip_link_title(raw_url);
             // 1([) + label_end + 1(]) + 1(() + url_end + 1())
             return Some((link_text(label, url), label_end + url_end + 4));
         }
@@ -438,12 +536,30 @@ fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
         if let Some(after_open) = after_alt.strip_prefix('(') {
             let url_end = after_open.find(')')?;
             let alt = &rest[..alt_end];
-            let url = &after_open[..url_end];
+            let raw_url = &after_open[..url_end];
+            let url = strip_link_title(raw_url);
             // 2(![) + alt_end + 1(]) + 1(() + url_end + 1())
             return Some((vec![inline_card(url, alt)], alt_end + url_end + 5));
         }
     }
     None
+}
+
+/// Strip an optional quoted title from a link URL: `url "title"` → `url`.
+fn strip_link_title(url: &str) -> &str {
+    let url = url.trim();
+    // Check for trailing `"title"` or `'title'`
+    if let Some(space_pos) = url.rfind(" \"") {
+        if url.ends_with('"') {
+            return url[..space_pos].trim();
+        }
+    }
+    if let Some(space_pos) = url.rfind(" '") {
+        if url.ends_with('\'') {
+            return url[..space_pos].trim();
+        }
+    }
+    url
 }
 
 fn push_plain_text(nodes: &mut Vec<Value>, plain: &mut String) {
@@ -1037,7 +1153,17 @@ fn attrs_u64(object: &serde_json::Map<String, Value>, name: &str) -> Option<u64>
 }
 
 fn escape_text(text: &str) -> String {
-    text.replace('\\', "\\\\")
+    let mut out = String::with_capacity(text.len() + 4);
+    for ch in text.chars() {
+        match ch {
+            '\\' | '*' | '_' | '~' | '`' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 fn trim_blank_lines(text: &str) -> String {

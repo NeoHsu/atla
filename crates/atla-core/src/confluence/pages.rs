@@ -219,7 +219,7 @@ impl ConfluenceClient {
             parent_id: Some(parent_id.to_owned()),
             body,
             representation: ConfluenceBodyRepresentation::Storage,
-            version,
+            version: version + 1,
             message: Some("Move page".to_owned()),
         })
         .await

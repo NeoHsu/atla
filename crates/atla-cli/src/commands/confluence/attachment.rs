@@ -118,7 +118,7 @@ pub(super) async fn run_attachment(
         }
         AttachmentAction::Download {
             attachment_id,
-            output,
+            save_to,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
@@ -135,7 +135,7 @@ pub(super) async fn run_attachment(
 
             let client = ctx.confluence_client()?;
             let download = client
-                .download_attachment(&attachment_id, output.as_deref())
+                .download_attachment(&attachment_id, save_to.as_deref())
                 .await
                 .with_context(|| {
                     format!(

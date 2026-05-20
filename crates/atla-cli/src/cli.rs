@@ -201,12 +201,10 @@ pub enum IssueAction {
     },
     Assign {
         key: String,
-        #[arg(long)]
-        to: Option<String>,
+        #[command(flatten)]
+        target: IssueAssignTargetArgs,
         #[arg(long)]
         account_id: bool,
-        #[arg(long)]
-        unassign: bool,
     },
     Transition {
         key: String,
@@ -231,6 +229,15 @@ pub enum IssueAction {
         #[command(subcommand)]
         action: IssueWorklogAction,
     },
+}
+
+#[derive(Debug, Args)]
+#[group(id = "assign_target", required = true, multiple = false)]
+pub struct IssueAssignTargetArgs {
+    #[arg(long)]
+    pub to: Option<String>,
+    #[arg(long)]
+    pub unassign: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -502,6 +509,8 @@ pub enum PageAction {
         web: bool,
         #[arg(long, value_enum)]
         format: Option<ContentViewFormat>,
+        #[arg(long)]
+        with_attachments: bool,
     },
     Children {
         id: String,
@@ -649,6 +658,8 @@ pub enum BlogAction {
     },
     View {
         id: String,
+        #[arg(long, value_enum)]
+        format: Option<ContentViewFormat>,
     },
     Update {
         id: String,
@@ -722,6 +733,12 @@ pub enum BlogCommentAction {
         parent: Option<String>,
         #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
         representation: BodyRepresentation,
+    },
+    Delete {
+        blog_id: String,
+        comment_id: String,
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -799,8 +816,8 @@ pub enum AttachmentAction {
     },
     Download {
         attachment_id: String,
-        #[arg(short, long)]
-        output: Option<PathBuf>,
+        #[arg(long = "save-to", short = 'f', value_name = "FILE")]
+        save_to: Option<PathBuf>,
     },
     Delete {
         attachment_id: String,
@@ -809,4 +826,74 @@ pub enum AttachmentAction {
         #[arg(long)]
         yes: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn attachment_download_accepts_save_to_flag() {
+        let cli = Cli::try_parse_from([
+            "atla",
+            "-o",
+            "json",
+            "confluence",
+            "attachment",
+            "download",
+            "att123",
+            "--save-to",
+            "download.txt",
+        ])
+        .expect("parse cli");
+
+        assert_eq!(cli.global.output, Some(OutputFormat::Json));
+        let Command::Confluence(command) = cli.command else {
+            panic!("expected confluence command");
+        };
+        let ConfluenceResource::Attachment(command) = command.resource else {
+            panic!("expected attachment command");
+        };
+        let AttachmentAction::Download {
+            attachment_id,
+            save_to,
+        } = command.action
+        else {
+            panic!("expected download action");
+        };
+        assert_eq!(attachment_id, "att123");
+        assert_eq!(
+            save_to.as_deref(),
+            Some(std::path::Path::new("download.txt"))
+        );
+    }
+
+    #[test]
+    fn attachment_download_accepts_short_file_flag() {
+        let cli = Cli::try_parse_from([
+            "atla",
+            "confluence",
+            "attachment",
+            "download",
+            "att123",
+            "-f",
+            "download.txt",
+        ])
+        .expect("parse cli");
+
+        let Command::Confluence(command) = cli.command else {
+            panic!("expected confluence command");
+        };
+        let ConfluenceResource::Attachment(command) = command.resource else {
+            panic!("expected attachment command");
+        };
+        let AttachmentAction::Download { save_to, .. } = command.action else {
+            panic!("expected download action");
+        };
+        assert_eq!(
+            save_to.as_deref(),
+            Some(std::path::Path::new("download.txt"))
+        );
+    }
 }

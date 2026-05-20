@@ -63,7 +63,7 @@ impl ConfluenceClient {
 
 #[cfg(test)]
 mod tests {
-    use super::util::limit_i32;
+    use super::util::{limit_i32, parse_i64_id};
     use super::*;
     use atla_confluence_api::types as generated_models;
     use atla_confluence_v1_api::types as generated_v1_models;
@@ -671,6 +671,36 @@ mod tests {
             attachment.download_link.as_deref(),
             Some("/download/attachments/111/diagram.png")
         );
+    }
+
+    #[test]
+    fn parses_attachment_download_link_from_links() {
+        let generated: generated_models::GetAttachmentByIdResponse = serde_json::from_str(
+            r#"{
+                "id": "att123",
+                "status": "current",
+                "title": "diagram.png",
+                "_links": {
+                    "download": "/download/attachments/111/diagram.png"
+                }
+            }"#,
+        )
+        .expect("parse attachment");
+        let attachment = ConfluenceAttachment::from(generated);
+
+        assert_eq!(
+            attachment.download_link.as_deref(),
+            Some("/download/attachments/111/diagram.png")
+        );
+    }
+
+    #[test]
+    fn parses_att_prefixed_numeric_ids() {
+        assert_eq!(
+            parse_i64_id("att2513502311").expect("attachment id"),
+            2513502311
+        );
+        assert_eq!(parse_i64_id("2513502311").expect("plain id"), 2513502311);
     }
 
     #[test]
