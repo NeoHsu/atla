@@ -1,7 +1,3 @@
-use atla_jira_api::apis as generated_apis;
-use serde::Serialize;
-use std::collections::HashMap;
-
 use crate::client::ApiError;
 use crate::markdown::markdown_to_adf;
 
@@ -9,15 +5,23 @@ pub(super) fn limit_i32(limit: u32) -> i32 {
     limit.min(i32::MAX as u32) as i32
 }
 
-pub(super) fn generated_error<T>(error: generated_apis::Error<T>) -> ApiError {
+pub(super) fn generated_error(error: atla_jira_api::Error<()>) -> ApiError {
     match error {
-        generated_apis::Error::Reqwest(error) => ApiError::Decode(error.to_string()),
-        generated_apis::Error::Serde(error) => ApiError::Decode(error.to_string()),
-        generated_apis::Error::Io(error) => ApiError::Decode(error.to_string()),
-        generated_apis::Error::ResponseError(response) => ApiError::Http {
-            status: response.status,
-            body: crate::client::extract_api_error_body(&response.content),
+        atla_jira_api::Error::InvalidRequest(msg) => ApiError::Decode(msg),
+        atla_jira_api::Error::CommunicationError(e) => ApiError::Decode(e.to_string()),
+        atla_jira_api::Error::ErrorResponse(rv) => {
+            let status = rv.status();
+            ApiError::Http {
+                status,
+                body: format!("{:?}", rv.into_inner()),
+            }
+        }
+        atla_jira_api::Error::InvalidResponsePayload(_, e) => ApiError::Decode(e.to_string()),
+        atla_jira_api::Error::UnexpectedResponse(resp) => ApiError::Http {
+            status: resp.status(),
+            body: String::new(),
         },
+        _ => ApiError::Decode("unknown API error".to_owned()),
     }
 }
 
@@ -28,24 +32,15 @@ pub(super) fn issue_fields(fields: Option<&[String]>) -> Vec<String> {
         .unwrap_or_else(super::default_issue_fields)
 }
 
-pub(super) fn serialized_string<T: Serialize>(value: T) -> Option<String> {
-    match serde_json::to_value(value).ok()? {
-        serde_json::Value::String(value) => Some(value),
-        _ => None,
-    }
-}
-
-pub(super) fn adf_body(text: &str) -> HashMap<String, serde_json::Value> {
+pub(super) fn adf_body(text: &str) -> serde_json::Map<String, serde_json::Value> {
     markdown_to_adf(text)
         .as_object()
         .expect("ADF root is an object")
         .clone()
-        .into_iter()
-        .collect()
 }
 
-pub(super) fn adf_plain_text(body: &HashMap<String, serde_json::Value>) -> String {
-    let value = serde_json::Value::Object(body.clone().into_iter().collect());
+pub(super) fn adf_plain_text(body: &serde_json::Map<String, serde_json::Value>) -> String {
+    let value = serde_json::Value::Object(body.clone());
     let mut parts = Vec::new();
     collect_adf_text(&value, &mut parts);
     parts.join("").trim().to_owned()

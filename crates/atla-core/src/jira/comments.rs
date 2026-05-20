@@ -1,4 +1,4 @@
-use atla_jira_api::apis as generated_apis;
+use atla_jira_api::types as generated_types;
 
 use super::JiraClient;
 use super::models::{JiraComment, JiraCommentPage};
@@ -11,15 +11,18 @@ impl JiraClient {
         issue_id_or_key: &str,
         body: &str,
     ) -> Result<JiraComment, ApiError> {
-        let comment = generated_apis::issue_comments_api::add_comment(
-            &self.generated,
-            issue_id_or_key,
-            atla_jira_api::models::CommentCreateRequest::new(adf_body(body)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let comment = self
+            .generated
+            .add_comment()
+            .issue_id_or_key(issue_id_or_key)
+            .body(generated_types::CommentCreateRequest {
+                body: adf_body(body),
+            })
+            .send()
+            .await
+            .map_err(generated_error)?;
 
-        Ok(comment.into())
+        Ok(comment.into_inner().into())
     }
 
     pub async fn update_comment(
@@ -28,16 +31,19 @@ impl JiraClient {
         comment_id: &str,
         body: &str,
     ) -> Result<JiraComment, ApiError> {
-        let comment = generated_apis::issue_comments_api::update_comment(
-            &self.generated,
-            issue_id_or_key,
-            comment_id,
-            atla_jira_api::models::CommentCreateRequest::new(adf_body(body)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let comment = self
+            .generated
+            .update_comment()
+            .issue_id_or_key(issue_id_or_key)
+            .id(comment_id)
+            .body(generated_types::CommentCreateRequest {
+                body: adf_body(body),
+            })
+            .send()
+            .await
+            .map_err(generated_error)?;
 
-        Ok(comment.into())
+        Ok(comment.into_inner().into())
     }
 
     pub async fn list_comments(
@@ -45,16 +51,17 @@ impl JiraClient {
         issue_id_or_key: &str,
         max_results: u32,
     ) -> Result<JiraCommentPage, ApiError> {
-        let page = generated_apis::issue_comments_api::get_comments(
-            &self.generated,
-            issue_id_or_key,
-            Some(0),
-            Some(limit_i32(max_results)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let page = self
+            .generated
+            .get_comments()
+            .issue_id_or_key(issue_id_or_key)
+            .start_at(0)
+            .max_results(limit_i32(max_results))
+            .send()
+            .await
+            .map_err(generated_error)?;
 
-        Ok(page.into())
+        Ok(page.into_inner().into())
     }
 
     pub async fn delete_comment(
@@ -62,12 +69,13 @@ impl JiraClient {
         issue_id_or_key: &str,
         comment_id: &str,
     ) -> Result<(), ApiError> {
-        generated_apis::issue_comments_api::delete_comment(
-            &self.generated,
-            issue_id_or_key,
-            comment_id,
-        )
-        .await
-        .map_err(generated_error)
+        self.generated
+            .delete_comment()
+            .issue_id_or_key(issue_id_or_key)
+            .id(comment_id)
+            .send()
+            .await
+            .map(|_| ())
+            .map_err(generated_error)
     }
 }

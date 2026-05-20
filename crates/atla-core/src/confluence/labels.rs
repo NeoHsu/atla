@@ -1,6 +1,3 @@
-use atla_confluence_api::apis as generated_apis;
-use atla_confluence_v1_api::{apis as generated_v1_apis, models as generated_v1_models};
-
 use crate::client::ApiError;
 
 use super::ConfluenceClient;
@@ -12,16 +9,15 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceLabelSearch,
     ) -> Result<ConfluenceLabelPage, ApiError> {
-        let page = generated_apis::label_api::get_page_labels(
-            &self.generated,
-            parse_i64_id(&search.content_id)?,
-            search.prefix.as_deref(),
-            None,
-            None,
-            Some(limit_i32(search.limit)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self
+            .generated
+            .get_page_labels()
+            .id(parse_i64_id(&search.content_id)?)
+            .limit(limit_non_zero(search.limit)?);
+        if let Some(prefix) = &search.prefix {
+            request = request.prefix(prefix.clone());
+        }
+        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(page.into())
     }
@@ -30,16 +26,15 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceLabelSearch,
     ) -> Result<ConfluenceLabelPage, ApiError> {
-        let page = generated_apis::label_api::get_blog_post_labels(
-            &self.generated,
-            parse_i64_id(&search.content_id)?,
-            search.prefix.as_deref(),
-            None,
-            None,
-            Some(limit_i32(search.limit)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self
+            .generated
+            .get_blog_post_labels()
+            .id(parse_i64_id(&search.content_id)?)
+            .limit(limit_non_zero(search.limit)?);
+        if let Some(prefix) = &search.prefix {
+            request = request.prefix(prefix.clone());
+        }
+        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(page.into())
     }
@@ -49,42 +44,37 @@ impl ConfluenceClient {
         content_id: &str,
         labels: &[String],
     ) -> Result<ConfluenceLabelPage, ApiError> {
-        let request = generated_v1_models::AddLabelsToContentRequest::LabelCreateArray(
+        let request = atla_confluence_v1_api::types::LabelCreateArray(
             labels
                 .iter()
-                .map(|label| {
-                    generated_v1_models::LabelCreate::new("global".to_owned(), label.clone())
+                .map(|label| atla_confluence_v1_api::types::LabelCreate {
+                    prefix: "global".to_owned(),
+                    name: label.clone(),
                 })
                 .collect(),
         );
-        let _labels = generated_v1_apis::content_labels_api::add_labels_to_content(
-            &self.generated_v1,
-            content_id,
-            request,
-        )
-        .await
-        .map_err(generated_v1_error)?;
+        let labels = self
+            .generated_v1
+            .add_labels_to_content()
+            .id(content_id)
+            .body(request)
+            .send()
+            .await
+            .map_err(generated_v1_error)?
+            .into_inner();
 
-        Ok(ConfluenceLabelPage {
-            results: labels
-                .iter()
-                .map(|label| ConfluenceLabel {
-                    id: None,
-                    name: Some(label.clone()),
-                    prefix: Some("global".to_owned()),
-                })
-                .collect(),
-        })
+        Ok(labels.into())
     }
 
     pub async fn remove_page_label(&self, content_id: &str, label: &str) -> Result<(), ApiError> {
-        generated_v1_apis::content_labels_api::remove_label_from_content_using_query_parameter(
-            &self.generated_v1,
-            content_id,
-            label,
-        )
-        .await
-        .map_err(generated_v1_error)
+        self.generated_v1
+            .remove_label_from_content_using_query_parameter()
+            .id(content_id)
+            .name(label)
+            .send()
+            .await
+            .map_err(generated_v1_error)?;
+        Ok(())
     }
 
     pub async fn add_blog_labels(

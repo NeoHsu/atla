@@ -1,5 +1,3 @@
-use atla_confluence_api::{apis as generated_apis, models as generated_models};
-
 use crate::client::ApiError;
 
 use super::ConfluenceClient;
@@ -11,29 +9,20 @@ impl ConfluenceClient {
         &self,
         search: &ConfluencePageSearch,
     ) -> Result<ConfluencePagePage, ApiError> {
-        let space_id = optional_i64_vec(search.space_id.as_deref())?;
-        let page = generated_apis::page_api::get_pages(
-            &self.generated,
-            None,
-            space_id,
-            None,
-            None,
-            search.title.as_deref(),
-            None,
-            None,
-            None,
-            Some(limit_i32(search.limit)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self
+            .generated
+            .get_pages()
+            .limit(limit_non_zero(search.limit)?);
+        if let Some(space_id) = optional_i64_vec(search.space_id.as_deref())? {
+            request = request.space_id(space_id);
+        }
+        if let Some(title) = &search.title {
+            request = request.title(title.clone());
+        }
+        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(ConfluencePagePage {
-            results: page
-                .results
-                .unwrap_or_default()
-                .into_iter()
-                .map(ConfluencePage::from)
-                .collect(),
+            results: page.results.into_iter().map(ConfluencePage::from).collect(),
         })
     }
 
@@ -43,40 +32,39 @@ impl ConfluenceClient {
     ) -> Result<ConfluenceContentTreePage, ApiError> {
         let id = parse_i64_id(&search.page_id)?;
         if let Some(depth) = search.depth {
-            let page = generated_apis::descendants_api::get_page_descendants(
-                &self.generated,
-                id,
-                Some(limit_i32(search.limit)),
-                Some(limit_i32(depth)),
-                None,
-            )
-            .await
-            .map_err(generated_error)?;
+            let page = self
+                .generated
+                .get_page_descendants()
+                .id(id)
+                .limit(limit_non_zero(search.limit)?)
+                .depth(limit_non_zero(depth)?)
+                .send()
+                .await
+                .map_err(generated_error)?
+                .into_inner();
 
             return Ok(ConfluenceContentTreePage {
                 results: page
                     .results
-                    .unwrap_or_default()
                     .into_iter()
                     .map(ConfluenceContentNode::from)
                     .collect(),
             });
         }
 
-        let page = generated_apis::children_api::get_page_direct_children(
-            &self.generated,
-            id,
-            None,
-            Some(limit_i32(search.limit)),
-            None,
-        )
-        .await
-        .map_err(generated_error)?;
+        let page = self
+            .generated
+            .get_page_direct_children()
+            .id(id)
+            .limit(limit_non_zero(search.limit)?)
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(ConfluenceContentTreePage {
             results: page
                 .results
-                .unwrap_or_default()
                 .into_iter()
                 .map(ConfluenceContentNode::from)
                 .collect(),
@@ -92,26 +80,15 @@ impl ConfluenceClient {
         id: &str,
         body_format: Option<ConfluenceBodyRepresentation>,
     ) -> Result<ConfluencePage, ApiError> {
-        let page = generated_apis::page_api::get_page_by_id(
-            &self.generated,
-            parse_i64_id(id)?,
-            body_format.map(ConfluenceBodyRepresentation::as_primary_body_single),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(true),
-            None,
-            None,
-            None,
-            None,
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self
+            .generated
+            .get_page_by_id()
+            .id(parse_i64_id(id)?)
+            .include_version(true);
+        if let Some(body_format) = body_format {
+            request = request.body_format(body_format.as_primary_body_single());
+        }
+        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(page.into())
     }
@@ -120,15 +97,14 @@ impl ConfluenceClient {
         &self,
         page: &ConfluencePageCreate,
     ) -> Result<ConfluencePage, ApiError> {
-        let page = generated_apis::page_api::create_page(
-            &self.generated,
-            page.to_generated(),
-            None,
-            page.private,
-            page.root_level,
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self.generated.create_page().body(page.to_generated());
+        if let Some(private) = page.private {
+            request = request.private(private);
+        }
+        if let Some(root_level) = page.root_level {
+            request = request.root_level(root_level);
+        }
+        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(page.into())
     }
@@ -169,16 +145,18 @@ impl ConfluenceClient {
         title: &str,
         status: ConfluenceContentStatus,
     ) -> Result<ConfluencePage, ApiError> {
-        let page = generated_apis::page_api::update_page_title(
-            &self.generated,
-            parse_i64_id(id)?,
-            generated_models::UpdatePageTitleRequest::new(
-                status.into_update_page_title_status(),
-                title.to_owned(),
-            ),
-        )
-        .await
-        .map_err(generated_error)?;
+        let page = self
+            .generated
+            .update_page_title()
+            .id(parse_i64_id(id)?)
+            .body(atla_confluence_api::types::UpdatePageTitleBody {
+                status: status.into_update_page_title_status(),
+                title: title.to_owned(),
+            })
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(page.into())
     }
@@ -187,69 +165,49 @@ impl ConfluenceClient {
         &self,
         page: &ConfluencePageUpdate,
     ) -> Result<ConfluencePage, ApiError> {
-        let updated = generated_apis::page_api::update_page(
-            &self.generated,
-            parse_i64_id(&page.id)?,
-            page.to_generated(),
-        )
-        .await
-        .map_err(generated_error)?;
+        let updated = self
+            .generated
+            .update_page()
+            .id(parse_i64_id(&page.id)?)
+            .body(page.to_generated())
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(updated.into())
     }
 
     pub async fn delete_page(&self, id: &str, purge: bool, draft: bool) -> Result<(), ApiError> {
-        generated_apis::page_api::delete_page(
-            &self.generated,
-            parse_i64_id(id)?,
-            Some(purge),
-            Some(draft),
-        )
-        .await
-        .map_err(generated_error)
+        self.generated
+            .delete_page()
+            .id(parse_i64_id(id)?)
+            .purge(purge)
+            .draft(draft)
+            .send()
+            .await
+            .map_err(generated_error)?;
+        Ok(())
     }
 
     pub async fn move_page(&self, id: &str, parent_id: &str) -> Result<ConfluencePage, ApiError> {
-        let existing = generated_apis::page_api::get_page_by_id(
-            &self.generated,
-            parse_i64_id(id)?,
-            Some(generated_models::PrimaryBodyRepresentationSingle::Storage),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(true),
-            None,
-            None,
-            None,
-            None,
-        )
-        .await
-        .map_err(generated_error)?;
+        let existing = self
+            .get_page_with_body_format(id, Some(ConfluenceBodyRepresentation::Storage))
+            .await?;
 
-        let body = existing
-            .body
-            .as_ref()
-            .and_then(|body| body.storage.as_ref())
-            .and_then(|body| body.value.clone())
-            .ok_or_else(|| {
-                ApiError::Decode(format!("page `{id}` did not include a storage body"))
-            })?;
+        let body = existing.body.ok_or_else(|| {
+            ApiError::Decode(format!("page `{id}` did not include a storage body"))
+        })?;
         let title = existing
             .title
-            .clone()
             .ok_or_else(|| ApiError::Decode(format!("page `{id}` did not include a title")))?;
         let version = existing
             .version
             .as_ref()
             .and_then(|version| version.number)
             .ok_or_else(|| ApiError::Decode(format!("page `{id}` did not include a version")))?;
-        let status = match existing.status {
-            Some(generated_models::ContentStatus::Draft) => ConfluenceContentStatus::Draft,
+        let status = match existing.status.as_deref() {
+            Some("draft") => ConfluenceContentStatus::Draft,
             _ => ConfluenceContentStatus::Current,
         };
 
@@ -261,8 +219,8 @@ impl ConfluenceClient {
             parent_id: Some(parent_id.to_owned()),
             body,
             representation: ConfluenceBodyRepresentation::Storage,
-            version: version as u64 + 1,
-            message: Some(format!("Move under {parent_id}")),
+            version,
+            message: Some("Move page".to_owned()),
         })
         .await
     }

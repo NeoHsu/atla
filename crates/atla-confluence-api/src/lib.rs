@@ -9,5 +9,4 @@ extern crate serde_json;
 extern crate serde_repr;
 extern crate url;
 
-pub mod apis;
-pub mod models;
+include!(concat!(env!("OUT_DIR"), "/codegen.rs"));

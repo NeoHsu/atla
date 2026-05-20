@@ -1,31 +1,32 @@
-use atla_jira_api::apis as generated_apis;
-
 use super::JiraClient;
 use super::models::{JiraBoard, JiraBoardPage, JiraBoardSearch};
-use super::util::{generated_error, limit_i32};
-use crate::client::ApiError;
+use super::util::limit_i32;
+use crate::client::{ApiError, read_json};
 
 impl JiraClient {
     pub async fn search_boards(&self, search: &JiraBoardSearch) -> Result<JiraBoardPage, ApiError> {
-        let value = generated_apis::agile_boards_api::search_boards(
-            &self.generated,
-            search.start_at.min(i64::MAX as u64) as i64,
-            limit_i32(search.max_results),
-            search.board_type.as_deref(),
-            search.name.as_deref(),
-            search.project_key_or_id.as_deref(),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self.raw_client.get("/rest/agile/1.0/board").query(&[
+            ("startAt", search.start_at.min(i64::MAX as u64).to_string()),
+            ("maxResults", limit_i32(search.max_results).to_string()),
+        ]);
+        if let Some(board_type) = &search.board_type {
+            request = request.query(&[("type", board_type.as_str())]);
+        }
+        if let Some(name) = &search.name {
+            request = request.query(&[("name", name.as_str())]);
+        }
+        if let Some(project) = &search.project_key_or_id {
+            request = request.query(&[("projectKeyOrId", project.as_str())]);
+        }
 
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
+        read_json(request).await
     }
 
     pub async fn get_board(&self, board_id: u64) -> Result<JiraBoard, ApiError> {
-        let value = generated_apis::agile_boards_api::get_board(&self.generated, board_id as i64)
-            .await
-            .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/board/{board_id}")),
+        )
+        .await
     }
 }

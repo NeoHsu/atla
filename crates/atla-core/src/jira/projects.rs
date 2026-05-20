@@ -1,5 +1,3 @@
-use atla_jira_api::apis as generated_apis;
-
 use super::JiraClient;
 use super::models::{JiraIssueType, JiraProject, JiraProjectPage, JiraProjectSearch};
 use super::util::{generated_error, limit_i32};
@@ -10,22 +8,27 @@ impl JiraClient {
         &self,
         search: &JiraProjectSearch,
     ) -> Result<JiraProjectPage, ApiError> {
-        let page = generated_apis::projects_api::search_projects(
-            &self.generated,
-            Some(search.start_at.min(i64::MAX as u64) as i64),
-            Some(limit_i32(search.max_results)),
-            search.query.as_deref(),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut builder = self
+            .generated
+            .search_projects()
+            .start_at(search.start_at.min(i64::MAX as u64) as i64)
+            .max_results(limit_i32(search.max_results));
 
-        Ok(page.into())
+        if let Some(query) = &search.query {
+            builder = builder.query(query.clone());
+        }
+
+        let page = builder.send().await.map_err(generated_error)?;
+        Ok(page.into_inner().into())
     }
 
     pub async fn get_project(&self, project_id_or_key: &str) -> Result<JiraProject, ApiError> {
-        generated_apis::projects_api::get_project(&self.generated, project_id_or_key)
+        self.generated
+            .get_project()
+            .project_id_or_key(project_id_or_key)
+            .send()
             .await
-            .map(JiraProject::from)
+            .map(|rv| JiraProject::from(rv.into_inner()))
             .map_err(generated_error)
     }
 
@@ -40,13 +43,15 @@ impl JiraClient {
             ))
         })?;
 
-        let issue_types = generated_apis::issue_types_api::get_issue_types_for_project(
-            &self.generated,
-            Some(&project_id),
-        )
-        .await
-        .map_err(generated_error)?;
+        let issue_types = self
+            .generated
+            .get_issue_types_for_project()
+            .project_id(&project_id)
+            .send()
+            .await
+            .map_err(generated_error)?;
 
-        Ok(issue_types.into_iter().map(JiraIssueType::from).collect())
+        let list: Vec<_> = Vec::from(issue_types.into_inner());
+        Ok(list.into_iter().map(JiraIssueType::from).collect())
     }
 }

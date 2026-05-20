@@ -1,6 +1,3 @@
-use atla_confluence_api::apis as generated_apis;
-use atla_confluence_v1_api::apis as generated_v1_apis;
-
 use crate::client::ApiError;
 
 use super::ConfluenceClient;
@@ -12,29 +9,18 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceSpaceSearch,
     ) -> Result<ConfluenceSpacePage, ApiError> {
-        let keys = search.key.as_ref().map(|key| vec![key.clone()]);
-        let page = generated_apis::space_api::get_spaces(
-            &self.generated,
-            None,
-            keys,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some(limit_i32(search.limit)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self
+            .generated
+            .get_spaces()
+            .limit(limit_non_zero(search.limit)?);
+        if let Some(key) = &search.key {
+            request = request.keys(vec![key.clone()]);
+        }
+        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(ConfluenceSpacePage {
             results: page
                 .results
-                .unwrap_or_default()
                 .into_iter()
                 .map(ConfluenceSpace::from)
                 .collect(),
@@ -62,10 +48,13 @@ impl ConfluenceClient {
             ));
         }
 
-        generated_apis::space_api::create_space(&self.generated, space.to_generated())
+        self.generated
+            .create_space()
+            .body(space.to_generated())
+            .send()
             .await
-            .map(ConfluenceSpace::from)
             .map_err(generated_error)
+            .map(|rv| ConfluenceSpace::from(rv.into_inner()))
     }
 
     pub async fn update_space(
@@ -78,13 +67,14 @@ impl ConfluenceClient {
             ));
         }
 
-        let _space = generated_v1_apis::space_api::update_space(
-            &self.generated_v1,
-            &space.key,
-            space.to_v1_update_request(),
-        )
-        .await
-        .map_err(generated_v1_error)?;
+        let _space = self
+            .generated_v1
+            .update_space()
+            .space_key(&space.key)
+            .body(space.to_v1_update_request())
+            .send()
+            .await
+            .map_err(generated_v1_error)?;
 
         self.get_space_by_key(&space.key).await?.ok_or_else(|| {
             ApiError::Decode(format!(
@@ -95,7 +85,11 @@ impl ConfluenceClient {
     }
 
     pub async fn delete_space(&self, key: &str) -> Result<(), ApiError> {
-        let _task = generated_v1_apis::space_api::delete_space(&self.generated_v1, key)
+        let _task = self
+            .generated_v1
+            .delete_space()
+            .space_key(key)
+            .send()
             .await
             .map_err(generated_v1_error)?;
         Ok(())

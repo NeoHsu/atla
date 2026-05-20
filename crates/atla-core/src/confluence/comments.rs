@@ -1,5 +1,3 @@
-use atla_confluence_api::{apis as generated_apis, models as generated_models};
-
 use crate::client::ApiError;
 
 use super::ConfluenceClient;
@@ -11,17 +9,16 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceCommentSearch,
     ) -> Result<ConfluenceCommentPage, ApiError> {
-        let page = generated_apis::comment_api::get_page_footer_comments(
-            &self.generated,
-            parse_i64_id(&search.content_id)?,
-            Some(generated_models::PrimaryBodyRepresentation::Storage),
-            None,
-            None,
-            None,
-            Some(limit_i32(search.limit)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let page = self
+            .generated
+            .get_page_footer_comments()
+            .id(parse_i64_id(&search.content_id)?)
+            .body_format(atla_confluence_api::types::PrimaryBodyRepresentation::Storage)
+            .limit(limit_non_zero(search.limit)?)
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(page.into())
     }
@@ -30,40 +27,42 @@ impl ConfluenceClient {
         &self,
         comment: &ConfluenceCommentCreate,
     ) -> Result<ConfluenceComment, ApiError> {
-        let created = generated_apis::comment_api::create_footer_comment(
-            &self.generated,
-            comment.to_generated_page_footer(),
-        )
-        .await
-        .map_err(generated_error)?;
+        let created = self
+            .generated
+            .create_footer_comment()
+            .body(comment.to_generated_page_footer())
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(created.into())
     }
 
     pub async fn delete_page_comment(&self, comment_id: &str) -> Result<(), ApiError> {
-        generated_apis::comment_api::delete_footer_comment(
-            &self.generated,
-            parse_i64_id(comment_id)?,
-        )
-        .await
-        .map_err(generated_error)
+        self.generated
+            .delete_footer_comment()
+            .comment_id(parse_i64_id(comment_id)?)
+            .send()
+            .await
+            .map_err(generated_error)?;
+        Ok(())
     }
 
     pub async fn list_blog_comments(
         &self,
         search: &ConfluenceCommentSearch,
     ) -> Result<ConfluenceCommentPage, ApiError> {
-        let page = generated_apis::comment_api::get_blog_post_footer_comments(
-            &self.generated,
-            parse_i64_id(&search.content_id)?,
-            Some(generated_models::PrimaryBodyRepresentation::Storage),
-            None,
-            None,
-            None,
-            Some(limit_i32(search.limit)),
-        )
-        .await
-        .map_err(generated_error)?;
+        let page = self
+            .generated
+            .get_blog_post_footer_comments()
+            .id(parse_i64_id(&search.content_id)?)
+            .body_format(atla_confluence_api::types::PrimaryBodyRepresentation::Storage)
+            .limit(limit_non_zero(search.limit)?)
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(page.into())
     }
@@ -72,12 +71,14 @@ impl ConfluenceClient {
         &self,
         comment: &ConfluenceCommentCreate,
     ) -> Result<ConfluenceComment, ApiError> {
-        let created = generated_apis::comment_api::create_footer_comment(
-            &self.generated,
-            comment.to_generated_blog_footer(),
-        )
-        .await
-        .map_err(generated_error)?;
+        let created = self
+            .generated
+            .create_footer_comment()
+            .body(comment.to_generated_blog_footer())
+            .send()
+            .await
+            .map_err(generated_error)?
+            .into_inner();
 
         Ok(created.into())
     }

@@ -1,9 +1,7 @@
-use atla_jira_api::apis as generated_apis;
-
 use super::JiraClient;
 use super::models::{JiraWorklog, JiraWorklogCreate, JiraWorklogPage};
-use super::util::{generated_error, limit_i32};
-use crate::client::ApiError;
+use super::util::limit_i32;
+use crate::client::{ApiError, read_json};
 
 impl JiraClient {
     pub async fn add_worklog(&self, worklog: &JiraWorklogCreate) -> Result<JiraWorklog, ApiError> {
@@ -23,15 +21,15 @@ impl JiraClient {
             );
         }
 
-        let value = generated_apis::issue_worklogs_api::add_worklog(
-            &self.generated,
-            &worklog.issue_id_or_key,
-            &json,
+        read_json(
+            self.raw_client
+                .post(&format!(
+                    "/rest/api/3/issue/{}/worklog",
+                    worklog.issue_id_or_key
+                ))
+                .json(&json),
         )
         .await
-        .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn list_worklogs(
@@ -39,16 +37,15 @@ impl JiraClient {
         issue_id_or_key: &str,
         max_results: u32,
     ) -> Result<JiraWorklogPage, ApiError> {
-        let value = generated_apis::issue_worklogs_api::get_issue_worklog(
-            &self.generated,
-            issue_id_or_key,
-            Some(0),
-            Some(limit_i32(max_results)),
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/api/3/issue/{issue_id_or_key}/worklog"))
+                .query(&[
+                    ("startAt", "0"),
+                    ("maxResults", &limit_i32(max_results).to_string()),
+                ]),
         )
         .await
-        .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 }
 

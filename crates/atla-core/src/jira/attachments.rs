@@ -1,17 +1,19 @@
-use atla_jira_api::apis as generated_apis;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::JiraClient;
 use super::models::{JiraAttachment, JiraAttachmentDownload};
 use super::util::generated_error;
-use crate::client::{ApiError, read_json};
+use crate::client::{ApiError, read_empty, read_json};
 
 impl JiraClient {
     pub async fn get_attachment(&self, id: &str) -> Result<JiraAttachment, ApiError> {
-        generated_apis::issue_attachments_api::get_attachment(&self.generated, id)
+        self.generated
+            .get_attachment()
+            .id(id)
+            .send()
             .await
-            .map(JiraAttachment::from)
+            .map(|rv| JiraAttachment::from(rv.into_inner()))
             .map_err(generated_error)
     }
 
@@ -65,9 +67,11 @@ impl JiraClient {
     }
 
     pub async fn delete_attachment(&self, attachment_id: &str) -> Result<(), ApiError> {
-        generated_apis::issue_attachments_api::remove_attachment(&self.generated, attachment_id)
-            .await
-            .map_err(generated_error)
+        read_empty(
+            self.raw_client
+                .delete(&format!("/rest/api/3/attachment/{attachment_id}")),
+        )
+        .await
     }
 
     pub async fn download_attachment(

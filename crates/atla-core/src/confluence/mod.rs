@@ -1,5 +1,5 @@
-use atla_confluence_api::apis as generated_apis;
-use atla_confluence_v1_api::apis as generated_v1_apis;
+use atla_confluence_api::Client as GeneratedClient;
+use atla_confluence_v1_api::Client as GeneratedV1Client;
 
 use crate::client::AtlassianClient;
 
@@ -18,24 +18,36 @@ pub use models::*;
 #[derive(Debug, Clone)]
 pub struct ConfluenceClient {
     raw_client: AtlassianClient,
-    generated: generated_apis::configuration::Configuration,
-    generated_v1: generated_v1_apis::configuration::Configuration,
+    generated: GeneratedClient,
+    generated_v1: GeneratedV1Client,
 }
 
 impl ConfluenceClient {
     pub fn new(client: AtlassianClient) -> Self {
-        let generated = generated_apis::configuration::Configuration {
-            base_path: format!("{}/wiki/api/v2", client.instance().base_url),
-            user_agent: Some("atla".to_owned()),
-            basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
-            ..Default::default()
-        };
-        let generated_v1 = generated_v1_apis::configuration::Configuration {
-            base_path: client.instance().base_url.clone(),
-            user_agent: Some("atla".to_owned()),
-            basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
-            ..Default::default()
-        };
+        use base64::Engine;
+        let creds = base64::engine::general_purpose::STANDARD.encode(format!(
+            "{}:{}",
+            client.email(),
+            client.token()
+        ));
+
+        let http_client = reqwest::Client::builder()
+            .default_headers({
+                let mut headers = reqwest::header::HeaderMap::new();
+                headers.insert(
+                    reqwest::header::AUTHORIZATION,
+                    format!("Basic {creds}").parse().unwrap(),
+                );
+                headers
+            })
+            .build()
+            .expect("http client");
+
+        let base_url_v2 = format!("{}/wiki/api/v2", client.instance().base_url);
+        let base_url_v1 = client.instance().base_url.clone();
+
+        let generated = GeneratedClient::new_with_client(&base_url_v2, http_client.clone());
+        let generated_v1 = GeneratedV1Client::new_with_client(&base_url_v1, http_client);
 
         Self {
             raw_client: client,
@@ -53,8 +65,9 @@ impl ConfluenceClient {
 mod tests {
     use super::util::limit_i32;
     use super::*;
-    use atla_confluence_api::models as generated_models;
-    use atla_confluence_v1_api::models as generated_v1_models;
+    use atla_confluence_api::types as generated_models;
+    use atla_confluence_v1_api::types as generated_v1_models;
+    use serde_json::json;
 
     #[test]
     fn parses_space_page() {
@@ -108,27 +121,29 @@ mod tests {
         }
         .to_v1_update_request();
 
-        assert_eq!(request.name, Some(Some("Development".to_owned())));
-        let description = request
-            .description
-            .expect("description")
-            .expect("description payload");
+        assert_eq!(
+            request.name.as_deref().map(|name| name.as_str()),
+            Some("Development")
+        );
+        let description = request.description.expect("description");
+        let description = description.0.expect("description payload");
         assert_eq!(description.plain.value.as_deref(), Some("Team docs"));
         assert_eq!(description.plain.representation.as_deref(), Some("plain"));
     }
 
     #[test]
     fn converts_created_space_response() {
-        let space = ConfluenceSpace::from(generated_models::CreateSpace201Response {
-            id: Some("12345".to_owned()),
-            key: Some("DEV".to_owned()),
-            name: Some("Development".to_owned()),
-            r#type: Some(generated_models::SpaceType::Global),
-            status: Some(generated_models::SpaceStatus::Current),
-            homepage_id: Some("67890".to_owned()),
-            current_active_alias: Some("DEV".to_owned()),
-            ..generated_models::CreateSpace201Response::new()
-        });
+        let generated: generated_models::CreateSpaceResponse = serde_json::from_value(json!({
+            "id": "12345",
+            "key": "DEV",
+            "name": "Development",
+            "type": "global",
+            "status": "current",
+            "homepageId": "67890",
+            "currentActiveAlias": "DEV"
+        }))
+        .expect("parse generated space");
+        let space = ConfluenceSpace::from(generated);
 
         assert_eq!(space.key.as_deref(), Some("DEV"));
         assert_eq!(space.space_type.as_deref(), Some("global"));
@@ -172,14 +187,15 @@ mod tests {
 
     #[test]
     fn converts_direct_child_content_node() {
-        let child = ConfluenceContentNode::from(generated_models::ChildrenResponse {
-            id: Some("333".to_owned()),
-            status: None,
-            title: Some("Folder".to_owned()),
-            r#type: Some("folder".to_owned()),
-            space_id: Some("12345".to_owned()),
-            child_position: Some(Some(4)),
-        });
+        let generated: generated_models::ChildrenResponse = serde_json::from_value(json!({
+            "id": "333",
+            "title": "Folder",
+            "type": "folder",
+            "spaceId": "12345",
+            "childPosition": 4
+        }))
+        .expect("parse generated child");
+        let child = ConfluenceContentNode::from(generated);
 
         assert_eq!(child.id.as_deref(), Some("333"));
         assert_eq!(child.content_type.as_deref(), Some("folder"));
@@ -190,15 +206,16 @@ mod tests {
 
     #[test]
     fn converts_descendant_content_node() {
-        let descendant = ConfluenceContentNode::from(generated_models::DescendantsResponse {
-            id: Some("444".to_owned()),
-            status: None,
-            title: Some("Whiteboard".to_owned()),
-            r#type: Some("whiteboard".to_owned()),
-            parent_id: Some("333".to_owned()),
-            depth: Some(2),
-            child_position: Some(Some(1)),
-        });
+        let generated: generated_models::DescendantsResponse = serde_json::from_value(json!({
+            "id": "444",
+            "title": "Whiteboard",
+            "type": "whiteboard",
+            "parentId": "333",
+            "depth": 2,
+            "childPosition": 1
+        }))
+        .expect("parse generated descendant");
+        let descendant = ConfluenceContentNode::from(generated);
 
         assert_eq!(descendant.id.as_deref(), Some("444"));
         assert_eq!(descendant.content_type.as_deref(), Some("whiteboard"));
@@ -271,7 +288,7 @@ mod tests {
         let Some(body) = generated.body else {
             panic!("expected body");
         };
-        let generated_models::CreateFooterCommentModelBody::CommentBodyWrite(body) = *body else {
+        let generated_models::CreateFooterCommentModelBody::BodyWrite(body) = body else {
             panic!("expected comment body write");
         };
         assert_eq!(body.value.as_deref(), Some("<p>Looks good</p>"));
@@ -319,13 +336,13 @@ mod tests {
         let Some(body) = request.body else {
             panic!("expected generated body");
         };
-        let generated_models::CreatePageRequestBody::PageBodyWrite(body) = *body else {
+        let generated_models::CreatePageBodyBody::BodyWrite(body) = body else {
             panic!("expected page body write");
         };
         assert_eq!(body.value.as_deref(), Some("<p>Hello</p>"));
         assert_eq!(
             body.representation,
-            Some(generated_models::page_body_write::Representation::Storage)
+            Some(generated_models::PageBodyWriteRepresentation::Storage)
         );
     }
 
@@ -392,23 +409,24 @@ mod tests {
 
     #[test]
     fn converts_v1_search_page() {
-        let page = generated_v1_models::SearchPageResponseSearchResult::new(
-            vec![generated_v1_models::SearchResult {
-                title: "Runbook".to_owned(),
-                excerpt: "Useful page".to_owned(),
-                url: "/wiki/spaces/DEV/pages/111/Runbook".to_owned(),
-                content: Some(Box::new(generated_v1_models::Content {
-                    id: Some("111".to_owned()),
-                    r#type: "page".to_owned(),
-                    status: "current".to_owned(),
-                    title: Some("Runbook".to_owned()),
-                    version: None,
-                    _links: None,
-                })),
-            }],
-            1,
-            1,
-        );
+        let generated: generated_v1_models::SearchPageResponseSearchResult =
+            serde_json::from_value(json!({
+                "results": [{
+                    "title": "Runbook",
+                    "excerpt": "Useful page",
+                    "url": "/wiki/spaces/DEV/pages/111/Runbook",
+                    "content": {
+                        "id": "111",
+                        "type": "page",
+                        "status": "current",
+                        "title": "Runbook"
+                    }
+                }],
+                "size": 1,
+                "totalSize": 1
+            }))
+            .expect("parse generated search page");
+        let page = generated;
 
         let page = ConfluenceSearchPage::from(page);
         let result = &page.results[0];
@@ -425,20 +443,18 @@ mod tests {
 
     #[test]
     fn converts_v1_attachment_upload_result() {
-        let mut links = std::collections::HashMap::new();
-        links.insert(
-            "download".to_owned(),
-            "/download/attachments/111/diagram.png".to_owned(),
-        );
-
-        let attachment = ConfluenceAttachment::from(generated_v1_models::Content {
-            id: Some("att123".to_owned()),
-            r#type: "attachment".to_owned(),
-            status: "current".to_owned(),
-            title: Some("diagram.png".to_owned()),
-            version: Some(Box::new(generated_v1_models::Version::new(2))),
-            _links: Some(links),
-        });
+        let generated: generated_v1_models::Content = serde_json::from_value(json!({
+            "id": "att123",
+            "type": "attachment",
+            "status": "current",
+            "title": "diagram.png",
+            "version": { "number": 2 },
+            "_links": {
+                "download": "/download/attachments/111/diagram.png"
+            }
+        }))
+        .expect("parse generated v1 attachment");
+        let attachment = ConfluenceAttachment::from(generated);
 
         assert_eq!(attachment.id.as_deref(), Some("att123"));
         assert_eq!(attachment.title.as_deref(), Some("diagram.png"));
@@ -486,16 +502,17 @@ mod tests {
 
     #[test]
     fn converts_space_from_generated_space() {
-        let space = ConfluenceSpace::from(generated_models::SpaceBulk {
-            id: Some("12345".to_owned()),
-            key: Some("DEV".to_owned()),
-            name: Some("Development".to_owned()),
-            r#type: Some(generated_models::SpaceType::Global),
-            status: Some(generated_models::SpaceStatus::Current),
-            homepage_id: Some("67890".to_owned()),
-            current_active_alias: Some("dev".to_owned()),
-            ..generated_models::SpaceBulk::new()
-        });
+        let generated: generated_models::SpaceBulk = serde_json::from_value(json!({
+            "id": "12345",
+            "key": "DEV",
+            "name": "Development",
+            "type": "global",
+            "status": "current",
+            "homepageId": "67890",
+            "currentActiveAlias": "dev"
+        }))
+        .expect("parse generated bulk space");
+        let space = ConfluenceSpace::from(generated);
 
         assert_eq!(space.id.as_deref(), Some("12345"));
         assert_eq!(space.key.as_deref(), Some("DEV"));
@@ -836,29 +853,27 @@ mod tests {
 
     #[test]
     fn converts_page_from_generated() {
-        let mut version = generated_models::Version::new();
-        version.number = Some(3);
-        version.message = Some("Updated".to_owned());
-        version.created_at = Some("2026-05-17T01:00:00Z".parse().expect("parse created_at"));
-
-        let mut storage = generated_models::BodyType::new();
-        storage.value = Some("<p>Hello</p>".to_owned());
-
-        let mut body = generated_models::BodySingle::new();
-        body.storage = Some(Box::new(storage));
-
-        let page = ConfluencePage::from(generated_models::CreatePage200Response {
-            id: Some("111".to_owned()),
-            status: Some(generated_models::ContentStatus::Current),
-            title: Some("My Page".to_owned()),
-            space_id: Some("12345".to_owned()),
-            parent_id: Some("100".to_owned()),
-            author_id: Some("abc".to_owned()),
-            created_at: Some("2026-05-17T00:00:00Z".parse().expect("parse created_at")),
-            version: Some(Box::new(version)),
-            body: Some(Box::new(body)),
-            ..generated_models::CreatePage200Response::new()
-        });
+        let generated: generated_models::CreatePageResponse = serde_json::from_value(json!({
+            "id": "111",
+            "status": "current",
+            "title": "My Page",
+            "spaceId": "12345",
+            "parentId": "100",
+            "authorId": "abc",
+            "createdAt": "2026-05-17T00:00:00Z",
+            "version": {
+                "number": 3,
+                "message": "Updated",
+                "createdAt": "2026-05-17T01:00:00Z"
+            },
+            "body": {
+                "storage": {
+                    "value": "<p>Hello</p>"
+                }
+            }
+        }))
+        .expect("parse generated page");
+        let page = ConfluencePage::from(generated);
 
         assert_eq!(page.id.as_deref(), Some("111"));
         assert_eq!(page.status.as_deref(), Some("current"));
@@ -881,27 +896,25 @@ mod tests {
 
     #[test]
     fn converts_blog_post_from_generated() {
-        let mut version = generated_models::Version::new();
-        version.number = Some(2);
-        version.message = Some("Published".to_owned());
-
-        let mut storage = generated_models::BodyType::new();
-        storage.value = Some("<p>Shipped</p>".to_owned());
-
-        let mut body = generated_models::BodySingle::new();
-        body.storage = Some(Box::new(storage));
-
-        let post = ConfluenceBlogPost::from(generated_models::CreateBlogPost200Response {
-            id: Some("222".to_owned()),
-            status: Some(generated_models::BlogPostContentStatus::Current),
-            title: Some("Release Notes".to_owned()),
-            space_id: Some("12345".to_owned()),
-            author_id: Some("abc".to_owned()),
-            created_at: Some("2026-05-17T00:00:00Z".parse().expect("parse created_at")),
-            version: Some(Box::new(version)),
-            body: Some(Box::new(body)),
-            ..generated_models::CreateBlogPost200Response::new()
-        });
+        let generated: generated_models::CreateBlogPostResponse = serde_json::from_value(json!({
+            "id": "222",
+            "status": "current",
+            "title": "Release Notes",
+            "spaceId": "12345",
+            "authorId": "abc",
+            "createdAt": "2026-05-17T00:00:00Z",
+            "version": {
+                "number": 2,
+                "message": "Published"
+            },
+            "body": {
+                "storage": {
+                    "value": "<p>Shipped</p>"
+                }
+            }
+        }))
+        .expect("parse generated blog post");
+        let post = ConfluenceBlogPost::from(generated);
 
         assert_eq!(post.id.as_deref(), Some("222"));
         assert_eq!(post.status.as_deref(), Some("current"));
@@ -923,28 +936,23 @@ mod tests {
 
     #[test]
     fn converts_space_comment_page() {
-        let mut version = generated_models::Version::new();
-        version.number = Some(1);
-
-        let mut storage = generated_models::BodyType::new();
-        storage.value = Some("<p>Looks good</p>".to_owned());
-
-        let mut body = generated_models::BodyBulk::new();
-        body.storage = Some(Box::new(storage));
-
-        let page =
-            ConfluenceCommentPage::from(generated_models::MultiEntityResultPageCommentModel {
-                results: Some(vec![generated_models::PageCommentModel {
-                    id: Some("c1".to_owned()),
-                    status: Some(generated_models::ContentStatus::Current),
-                    title: Some("First comment".to_owned()),
-                    page_id: Some("111".to_owned()),
-                    version: Some(Box::new(version)),
-                    body: Some(Box::new(body)),
-                    ..generated_models::PageCommentModel::new()
-                }]),
-                ..generated_models::MultiEntityResultPageCommentModel::new()
-            });
+        let generated: generated_models::MultiEntityResultPageCommentModel =
+            serde_json::from_value(json!({
+                "results": [{
+                    "id": "c1",
+                    "status": "current",
+                    "title": "First comment",
+                    "pageId": "111",
+                    "version": { "number": 1 },
+                    "body": {
+                        "storage": {
+                            "value": "<p>Looks good</p>"
+                        }
+                    }
+                }]
+            }))
+            .expect("parse generated comments page");
+        let page = ConfluenceCommentPage::from(generated);
 
         assert_eq!(page.results.len(), 1);
         let comment = &page.results[0];

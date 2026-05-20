@@ -1,4 +1,3 @@
-use atla_jira_api::apis as generated_apis;
 use chrono::Utc;
 
 use super::JiraClient;
@@ -6,34 +5,34 @@ use super::models::{
     JiraIssueSearchPage, JiraSprint, JiraSprintCreate, JiraSprintPage, JiraSprintSearch,
     JiraSprintUpdate,
 };
-use super::util::{generated_error, issue_fields, limit_i32};
-use crate::client::ApiError;
+use super::util::{issue_fields, limit_i32};
+use crate::client::{ApiError, read_empty, read_json};
 
 impl JiraClient {
     pub async fn list_sprints(
         &self,
         search: &JiraSprintSearch,
     ) -> Result<JiraSprintPage, ApiError> {
-        let value = generated_apis::agile_sprints_api::get_sprints_for_board(
-            &self.generated,
-            search.board_id as i64,
-            search.start_at.min(i64::MAX as u64) as i64,
-            limit_i32(search.max_results),
-            search.state.as_deref(),
-        )
-        .await
-        .map_err(generated_error)?;
+        let mut request = self
+            .raw_client
+            .get(&format!("/rest/agile/1.0/board/{}/sprint", search.board_id))
+            .query(&[
+                ("startAt", search.start_at.min(i64::MAX as u64).to_string()),
+                ("maxResults", limit_i32(search.max_results).to_string()),
+            ]);
+        if let Some(state) = &search.state {
+            request = request.query(&[("state", state.as_str())]);
+        }
 
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
+        read_json(request).await
     }
 
     pub async fn get_sprint(&self, sprint_id: u64) -> Result<JiraSprint, ApiError> {
-        let value =
-            generated_apis::agile_sprints_api::get_sprint(&self.generated, sprint_id as i64)
-                .await
-                .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/sprint/{sprint_id}")),
+        )
+        .await
     }
 
     pub async fn get_sprint_issues(
@@ -42,26 +41,25 @@ impl JiraClient {
         max_results: u32,
         fields: Option<Vec<String>>,
     ) -> Result<JiraIssueSearchPage, ApiError> {
-        let fields_str = issue_fields(fields.as_deref());
-        let value = generated_apis::agile_sprints_api::get_issues_for_sprint(
-            &self.generated,
-            sprint_id as i64,
-            limit_i32(max_results),
-            &fields_str.join(","),
+        let fields_str = issue_fields(fields.as_deref()).join(",");
+        read_json(
+            self.raw_client
+                .get(&format!("/rest/agile/1.0/sprint/{sprint_id}/issue"))
+                .query(&[
+                    ("maxResults", &limit_i32(max_results).to_string()),
+                    ("fields", &fields_str),
+                ]),
         )
         .await
-        .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn create_sprint(&self, sprint: &JiraSprintCreate) -> Result<JiraSprint, ApiError> {
-        let value =
-            generated_apis::agile_sprints_api::create_sprint(&self.generated, sprint.to_json())
-                .await
-                .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
+        read_json(
+            self.raw_client
+                .post("/rest/agile/1.0/sprint")
+                .json(&sprint.to_json()),
+        )
+        .await
     }
 
     pub async fn update_sprint(&self, update: &JiraSprintUpdate) -> Result<JiraSprint, ApiError> {
@@ -94,7 +92,6 @@ impl JiraClient {
                 .unwrap_or_else(|| Utc::now().format("%Y-%m-%dT%H:%M:%S%.3f+0000").to_string());
             obj.insert("startDate".to_owned(), start.into());
         }
-        // Include endDate on any state transition (required by Jira API); preserve or default.
         if state_change && !obj.contains_key("endDate") {
             let end = update
                 .end_date
@@ -108,15 +105,12 @@ impl JiraClient {
             obj.insert("endDate".to_owned(), end.into());
         }
 
-        let value = generated_apis::agile_sprints_api::update_sprint(
-            &self.generated,
-            update.id as i64,
-            body,
+        read_json(
+            self.raw_client
+                .post(&format!("/rest/agile/1.0/sprint/{}", update.id))
+                .json(&body),
         )
         .await
-        .map_err(generated_error)?;
-
-        serde_json::from_value(value).map_err(|e| ApiError::Decode(e.to_string()))
     }
 
     pub async fn move_issues_to_sprint(
@@ -124,21 +118,20 @@ impl JiraClient {
         sprint_id: u64,
         issues: &[String],
     ) -> Result<(), ApiError> {
-        generated_apis::agile_sprints_api::move_issues_to_sprint(
-            &self.generated,
-            sprint_id as i64,
-            serde_json::json!({ "issues": issues }),
+        read_empty(
+            self.raw_client
+                .post(&format!("/rest/agile/1.0/sprint/{sprint_id}/issue"))
+                .json(&serde_json::json!({ "issues": issues })),
         )
         .await
-        .map_err(generated_error)
     }
 
     pub async fn move_issues_to_backlog(&self, issues: &[String]) -> Result<(), ApiError> {
-        generated_apis::agile_sprints_api::move_issues_to_backlog(
-            &self.generated,
-            serde_json::json!({ "issues": issues }),
+        read_empty(
+            self.raw_client
+                .post("/rest/agile/1.0/backlog/issue")
+                .json(&serde_json::json!({ "issues": issues })),
         )
         .await
-        .map_err(generated_error)
     }
 }

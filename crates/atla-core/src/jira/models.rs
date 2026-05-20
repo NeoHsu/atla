@@ -1,8 +1,8 @@
-use atla_jira_api::models as generated_models;
+use atla_jira_api::types as generated_types;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use super::util::{adf_plain_text, issue_fields, quote_jql_value, serialized_string};
+use super::util::{adf_plain_text, issue_fields, quote_jql_value};
 use crate::client::ApiError;
 use crate::markdown::markdown_to_adf;
 
@@ -117,12 +117,12 @@ pub struct JiraCreatedIssue {
     pub self_url: Option<String>,
 }
 
-impl From<generated_models::CreatedIssue> for JiraCreatedIssue {
-    fn from(issue: generated_models::CreatedIssue) -> Self {
+impl From<generated_types::CreatedIssue> for JiraCreatedIssue {
+    fn from(issue: generated_types::CreatedIssue) -> Self {
         Self {
             id: issue.id,
             key: issue.key,
-            self_url: issue.param_self,
+            self_url: issue.self_,
         }
     }
 }
@@ -137,7 +137,7 @@ pub struct JiraIssueCreate {
 }
 
 impl JiraIssueCreate {
-    pub(super) fn to_generated(&self) -> generated_models::IssueUpdateDetails {
+    pub(super) fn to_generated(&self) -> generated_types::IssueUpdateDetails {
         let mut fields = self.fields.clone();
         fields.insert(
             "project".to_owned(),
@@ -152,9 +152,9 @@ impl JiraIssueCreate {
             fields.insert("description".to_owned(), markdown_to_adf(description));
         }
 
-        generated_models::IssueUpdateDetails {
-            fields: Some(fields.into_iter().collect()),
-            update: None,
+        generated_types::IssueUpdateDetails {
+            fields,
+            update: serde_json::Map::new(),
         }
     }
 }
@@ -201,7 +201,7 @@ impl JiraIssueUpdate {
         self.summary.is_none() && self.description.is_none() && self.fields.is_empty()
     }
 
-    pub(super) fn to_generated(&self) -> generated_models::IssueUpdateDetails {
+    pub(super) fn to_generated(&self) -> generated_types::IssueUpdateDetails {
         let mut fields = self.fields.clone();
         if let Some(summary) = &self.summary {
             fields.insert("summary".to_owned(), summary.clone().into());
@@ -210,9 +210,9 @@ impl JiraIssueUpdate {
             fields.insert("description".to_owned(), markdown_to_adf(description));
         }
 
-        generated_models::IssueUpdateDetails {
-            fields: Some(fields.into_iter().collect()),
-            update: None,
+        generated_types::IssueUpdateDetails {
+            fields,
+            update: serde_json::Map::new(),
         }
     }
 }
@@ -228,17 +228,12 @@ pub struct JiraIssueSearchPage {
     pub issues: Vec<JiraIssue>,
 }
 
-impl From<generated_models::SearchAndReconcileResults> for JiraIssueSearchPage {
-    fn from(page: generated_models::SearchAndReconcileResults) -> Self {
+impl From<generated_types::SearchAndReconcileResults> for JiraIssueSearchPage {
+    fn from(page: generated_types::SearchAndReconcileResults) -> Self {
         Self {
             is_last: page.is_last,
             next_page_token: page.next_page_token,
-            issues: page
-                .issues
-                .unwrap_or_default()
-                .into_iter()
-                .map(JiraIssue::from)
-                .collect(),
+            issues: page.issues.into_iter().map(JiraIssue::from).collect(),
         }
     }
 }
@@ -282,16 +277,12 @@ impl JiraIssue {
     }
 }
 
-impl From<generated_models::IssueBean> for JiraIssue {
-    fn from(issue: generated_models::IssueBean) -> Self {
+impl From<generated_types::IssueBean> for JiraIssue {
+    fn from(issue: generated_types::IssueBean) -> Self {
         Self {
             id: issue.id,
             key: issue.key,
-            fields: issue
-                .fields
-                .unwrap_or_default()
-                .into_iter()
-                .collect::<serde_json::Map<String, serde_json::Value>>(),
+            fields: issue.fields,
         }
     }
 }
@@ -322,12 +313,12 @@ impl JiraTransition {
     }
 }
 
-impl From<generated_models::Transition> for JiraTransition {
-    fn from(transition: generated_models::Transition) -> Self {
+impl From<generated_types::Transition> for JiraTransition {
+    fn from(transition: generated_types::Transition) -> Self {
         Self {
             id: transition.id,
             name: transition.name,
-            to_status: transition.to.map(|status| JiraStatus::from(*status)),
+            to_status: transition.to.map(JiraStatus::from),
             fields: serde_json::Map::new(),
         }
     }
@@ -340,8 +331,8 @@ pub struct JiraStatus {
     pub name: Option<String>,
 }
 
-impl From<generated_models::Status> for JiraStatus {
-    fn from(status: generated_models::Status) -> Self {
+impl From<generated_types::Status> for JiraStatus {
+    fn from(status: generated_types::Status) -> Self {
         Self {
             id: status.id,
             name: status.name,
@@ -362,18 +353,13 @@ pub struct JiraCommentPage {
     pub comments: Vec<JiraComment>,
 }
 
-impl From<generated_models::PageOfComments> for JiraCommentPage {
-    fn from(page: generated_models::PageOfComments) -> Self {
+impl From<generated_types::PageOfComments> for JiraCommentPage {
+    fn from(page: generated_types::PageOfComments) -> Self {
         Self {
             start_at: page.start_at.unwrap_or_default().max(0) as u32,
             max_results: page.max_results.unwrap_or_default().max(0) as u32,
             total: page.total.map(|total| total.max(0) as u32),
-            comments: page
-                .comments
-                .unwrap_or_default()
-                .into_iter()
-                .map(JiraComment::from)
-                .collect(),
+            comments: page.comments.into_iter().map(JiraComment::from).collect(),
         }
     }
 }
@@ -390,15 +376,19 @@ pub struct JiraComment {
     pub updated: Option<String>,
 }
 
-impl From<generated_models::Comment> for JiraComment {
-    fn from(comment: generated_models::Comment) -> Self {
+impl From<generated_types::Comment> for JiraComment {
+    fn from(comment: generated_types::Comment) -> Self {
+        let body_map = if comment.body.is_empty() {
+            None
+        } else {
+            Some(comment.body.clone())
+        };
         Self {
             id: comment.id,
-            body: comment.body.as_ref().map(|b| {
-                serde_json::Value::Object(b.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-            }),
-            body_text: comment
-                .body
+            body: body_map
+                .as_ref()
+                .map(|b| serde_json::Value::Object(b.clone())),
+            body_text: body_map
                 .as_ref()
                 .map(adf_plain_text)
                 .filter(|text| !text.is_empty()),
@@ -417,21 +407,17 @@ pub struct JiraIssueLinkCreate {
 }
 
 impl JiraIssueLinkCreate {
-    pub(super) fn to_generated(&self) -> generated_models::LinkIssueRequestJsonBean {
-        generated_models::LinkIssueRequestJsonBean {
-            r#type: Some(Box::new(generated_models::LinkIssueRequestJsonBeanType {
+    pub(super) fn to_generated(&self) -> generated_types::LinkIssueRequestJsonBean {
+        generated_types::LinkIssueRequestJsonBean {
+            type_: Some(generated_types::LinkIssueRequestJsonBeanType {
                 name: Some(self.link_type.clone()),
-            })),
-            inward_issue: Some(Box::new(
-                generated_models::LinkIssueRequestJsonBeanInwardIssue {
-                    key: Some(self.source_key.clone()),
-                },
-            )),
-            outward_issue: Some(Box::new(
-                generated_models::LinkIssueRequestJsonBeanInwardIssue {
-                    key: Some(self.target_key.clone()),
-                },
-            )),
+            }),
+            inward_issue: Some(generated_types::LinkIssueRequestJsonBeanInwardIssue {
+                key: Some(self.source_key.clone()),
+            }),
+            outward_issue: Some(generated_types::LinkIssueRequestJsonBeanOutwardIssue {
+                key: Some(self.target_key.clone()),
+            }),
         }
     }
 }
@@ -458,8 +444,8 @@ pub struct JiraAttachment {
     pub thumbnail: Option<String>,
 }
 
-impl From<generated_models::Attachment> for JiraAttachment {
-    fn from(attachment: generated_models::Attachment) -> Self {
+impl From<generated_types::Attachment> for JiraAttachment {
+    fn from(attachment: generated_types::Attachment) -> Self {
         Self {
             id: attachment.id,
             filename: attachment.filename,
@@ -720,8 +706,8 @@ pub struct JiraIssueType {
     pub subtask: Option<bool>,
 }
 
-impl From<generated_models::IssueType> for JiraIssueType {
-    fn from(issue_type: generated_models::IssueType) -> Self {
+impl From<generated_types::IssueType> for JiraIssueType {
+    fn from(issue_type: generated_types::IssueType) -> Self {
         Self {
             id: issue_type.id,
             name: issue_type.name,
@@ -746,19 +732,14 @@ pub struct JiraProjectPage {
     pub values: Vec<JiraProject>,
 }
 
-impl From<generated_models::PageBeanProject> for JiraProjectPage {
-    fn from(page: generated_models::PageBeanProject) -> Self {
+impl From<generated_types::PageBeanProject> for JiraProjectPage {
+    fn from(page: generated_types::PageBeanProject) -> Self {
         Self {
             start_at: page.start_at.unwrap_or_default().max(0) as u64,
             max_results: page.max_results.unwrap_or_default().max(0) as u32,
             total: page.total.map(|total| total.max(0) as u64),
             is_last: page.is_last,
-            values: page
-                .values
-                .unwrap_or_default()
-                .into_iter()
-                .map(JiraProject::from)
-                .collect(),
+            values: page.values.into_iter().map(JiraProject::from).collect(),
         }
     }
 }
@@ -775,14 +756,14 @@ pub struct JiraProject {
     pub archived: Option<bool>,
 }
 
-impl From<generated_models::Project> for JiraProject {
-    fn from(project: generated_models::Project) -> Self {
+impl From<generated_types::Project> for JiraProject {
+    fn from(project: generated_types::Project) -> Self {
         Self {
             id: project.id,
             key: project.key,
             name: project.name,
-            project_type_key: project.project_type_key,
-            style: project.style.and_then(serialized_string),
+            project_type_key: project.project_type_key.map(|k| k.to_string()),
+            style: project.style.map(|s| s.to_string()),
             simplified: project.simplified,
             archived: project.archived,
         }

@@ -1,4 +1,4 @@
-use atla_jira_api::apis as generated_apis;
+use atla_jira_api::Client as GeneratedClient;
 
 use crate::client::AtlassianClient;
 
@@ -37,17 +37,29 @@ pub fn default_issue_fields() -> Vec<String> {
 #[derive(Debug, Clone)]
 pub struct JiraClient {
     raw_client: AtlassianClient,
-    generated: generated_apis::configuration::Configuration,
+    generated: GeneratedClient,
 }
 
 impl JiraClient {
     pub fn new(client: AtlassianClient) -> Self {
-        let generated = generated_apis::configuration::Configuration {
-            base_path: client.instance().base_url.clone(),
-            user_agent: Some("atla".to_owned()),
-            basic_auth: Some((client.email().to_owned(), Some(client.token().to_owned()))),
-            ..Default::default()
-        };
+        use base64::Engine;
+        use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+
+        let creds = base64::engine::general_purpose::STANDARD.encode(format!(
+            "{}:{}",
+            client.email(),
+            client.token()
+        ));
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Basic {creds}")).expect("valid header"),
+        );
+        let http_client = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .expect("build reqwest client");
+        let generated = GeneratedClient::new_with_client(&client.instance().base_url, http_client);
 
         Self {
             raw_client: client,
@@ -64,7 +76,7 @@ impl JiraClient {
 mod tests {
     use super::util::adf_body;
     use super::*;
-    use atla_jira_api::models as generated_models;
+    use atla_jira_api::types as generated_types;
 
     #[cfg(test)]
     #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -123,20 +135,20 @@ mod tests {
 
     #[test]
     fn converts_generated_project_page() {
-        let page = generated_models::PageBeanProject {
+        let page = generated_types::PageBeanProject {
             start_at: Some(0),
             max_results: Some(50),
             total: Some(1),
             is_last: Some(true),
-            values: Some(vec![generated_models::Project {
+            values: vec![generated_types::Project {
                 id: Some("10000".to_owned()),
                 key: Some("PROJ".to_owned()),
                 name: Some("Project".to_owned()),
-                project_type_key: Some("software".to_owned()),
-                style: Some(generated_models::project::Style::Classic),
+                project_type_key: Some(generated_types::ProjectProjectTypeKey::Software),
+                style: Some(generated_types::ProjectStyle::Classic),
                 simplified: Some(false),
                 archived: Some(false),
-            }]),
+            }],
         };
 
         let page = JiraProjectPage::from(page);
@@ -161,7 +173,7 @@ mod tests {
         };
 
         let generated = issue.to_generated();
-        let fields = generated.fields.expect("fields");
+        let fields = &generated.fields;
 
         assert_eq!(fields["project"], serde_json::json!({ "key": "PROJ" }));
         assert_eq!(fields["issuetype"], serde_json::json!({ "name": "Task" }));
@@ -184,7 +196,7 @@ mod tests {
         };
 
         let generated = issue.to_generated();
-        let fields = generated.fields.expect("fields");
+        let fields = &generated.fields;
 
         assert_eq!(fields["summary"], serde_json::json!("Updated summary"));
         assert_eq!(fields["labels"], serde_json::json!(["cli"]));
@@ -268,13 +280,13 @@ mod tests {
 
     #[test]
     fn converts_transition() {
-        let transition = JiraTransition::from(generated_models::Transition {
+        let transition = JiraTransition::from(generated_types::Transition {
             id: Some("31".to_owned()),
             name: Some("Done".to_owned()),
-            to: Some(Box::new(generated_models::Status {
+            to: Some(generated_types::Status {
                 id: Some("10001".to_owned()),
                 name: Some("Done".to_owned()),
-            })),
+            }),
         });
 
         assert_eq!(transition.id.as_deref(), Some("31"));
@@ -317,15 +329,15 @@ mod tests {
 
     #[test]
     fn converts_comment_body_to_plain_text() {
-        let comment = JiraComment::from(generated_models::Comment {
+        let comment = JiraComment::from(generated_types::Comment {
             id: Some("10010".to_owned()),
-            param_self: None,
-            body: Some(adf_body("Line one\nLine two")),
-            author: Some(Box::new(generated_models::User {
+            self_: None,
+            body: adf_body("Line one\nLine two"),
+            author: Some(generated_types::User {
                 account_id: Some("account-id".to_owned()),
                 display_name: Some("Neo".to_owned()),
                 active: Some(true),
-            })),
+            }),
             created: Some("2026-05-18T00:00:00.000+0000".to_owned()),
             updated: None,
         });
@@ -337,34 +349,32 @@ mod tests {
 
     #[test]
     fn converts_adf_nodes_using_attrs_text() {
-        let comment = JiraComment::from(generated_models::Comment {
+        let comment = JiraComment::from(generated_types::Comment {
             id: Some("10011".to_owned()),
-            param_self: None,
-            body: Some(
-                serde_json::json!({
-                    "type": "doc",
-                    "version": 1,
-                    "content": [
-                        {
-                            "type": "paragraph",
-                            "content": [
-                                {
-                                    "type": "mention",
-                                    "attrs": {
-                                        "id": "abc",
-                                        "text": "@Neo"
-                                    }
+            self_: None,
+            body: serde_json::json!({
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "mention",
+                                "attrs": {
+                                    "id": "abc",
+                                    "text": "@Neo"
                                 }
-                            ]
-                        }
-                    ]
-                })
-                .as_object()
-                .expect("ADF root object")
-                .clone()
-                .into_iter()
-                .collect(),
-            ),
+                            }
+                        ]
+                    }
+                ]
+            })
+            .as_object()
+            .expect("ADF root object")
+            .clone()
+            .into_iter()
+            .collect(),
             author: None,
             created: None,
             updated: None,
@@ -462,7 +472,7 @@ mod tests {
 
     #[test]
     fn converts_generated_issue_search_page() {
-        let fields = serde_json::json!({
+        let fields: serde_json::Map<String, serde_json::Value> = serde_json::json!({
             "summary": "Fix login",
             "status": { "name": "In Progress" },
             "assignee": { "displayName": "Neo" },
@@ -474,14 +484,14 @@ mod tests {
         .clone()
         .into_iter()
         .collect();
-        let page = generated_models::SearchAndReconcileResults {
+        let page = generated_types::SearchAndReconcileResults {
             is_last: Some(false),
             next_page_token: Some("next-token".to_owned()),
-            issues: Some(vec![generated_models::IssueBean {
+            issues: vec![generated_types::IssueBean {
                 id: Some("10002".to_owned()),
                 key: Some("PROJ-1".to_owned()),
-                fields: Some(fields),
-            }]),
+                fields,
+            }],
         };
 
         let page = JiraIssueSearchPage::from(page);
@@ -550,22 +560,22 @@ mod tests {
 
     #[test]
     fn converts_generated_comment_page() {
-        let page = generated_models::PageOfComments {
+        let page = generated_types::PageOfComments {
             start_at: Some(0),
             max_results: Some(25),
             total: Some(1),
-            comments: Some(vec![generated_models::Comment {
+            comments: vec![generated_types::Comment {
                 id: Some("c1".to_owned()),
-                body: Some(adf_body("Hello")),
-                author: Some(Box::new(generated_models::User {
+                body: adf_body("Hello"),
+                author: Some(generated_types::User {
                     account_id: Some("a1".to_owned()),
                     display_name: Some("Alice".to_owned()),
                     active: Some(true),
-                })),
+                }),
                 created: Some("2026-05-01T00:00:00.000Z".to_owned()),
                 updated: None,
-                param_self: None,
-            }]),
+                self_: None,
+            }],
         };
 
         let page = JiraCommentPage::from(page);
@@ -661,7 +671,7 @@ mod tests {
 
     #[test]
     fn converts_generated_issue_type() {
-        let issue_type = JiraIssueType::from(generated_models::IssueType {
+        let issue_type = JiraIssueType::from(generated_types::IssueType {
             id: Some("1".to_owned()),
             name: Some("Task".to_owned()),
             description: Some("A task".to_owned()),

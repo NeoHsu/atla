@@ -19,30 +19,16 @@ jobs:
         with:
           node-version: "24"
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Cache OpenAPI generator
-        uses: actions/cache@v5
-        with:
-          path: ~/.local/share/atla-tools/openapi-generator
-          key: openapi-generator-7.22.0
-
       - name: Refresh Atlassian specs
         run: scripts/update-specs.sh
 
-      - name: Regenerate API clients
-        run: scripts/generate.sh --in-place
-
-      - name: Verify generated workspace
+      - name: Verify workspace builds with updated specs
         run: cargo check --workspace
 
       - uses: peter-evans/create-pull-request@v8
@@ -52,6 +38,6 @@ jobs:
           commit-message: "chore: update Atlassian OpenAPI specs"
           title: "chore: update Atlassian OpenAPI specs"
           body: |
-            Automated refresh of Atlassian OpenAPI specs and generated API clients.
+            Automated refresh of Atlassian OpenAPI specs.
 
-            This workflow runs `scripts/update-specs.sh`, regenerates the checked-in API crates, and verifies the workspace with `cargo check --workspace`.
+            This workflow runs `scripts/update-specs.sh` and verifies the workspace builds with `cargo check --workspace`. Progenitor regenerates API clients at build time from the updated specs.

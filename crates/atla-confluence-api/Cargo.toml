@@ -1,23 +1,28 @@
 [package]
 name = "atla-confluence-api"
 version = "0.1.0"
-authors = ["OpenAPI Generator team and contributors"]
-description = "This document describes Confluence's v2 APIs. This is intended to be an iteration on the existing Confluence Cloud REST API with improvements in both endpoint definitions and performance."
-# Override this license by providing a License Object in the OpenAPI.
-license = "Unlicense"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+doctest = false
+
+[build-dependencies]
+progenitor = "0.14"
+serde_json = "1"
+openapiv3 = "2"
+syn = { version = "2", features = ["full"] }
+prettyplease = "0.2"
 
 [dependencies]
-serde = { version = "^1.0", features = ["derive"] }
-serde_with = { version = "^3.8", default-features = false, features = ["base64", "std", "macros"] }
-serde_json = "^1.0"
-serde_repr = "^0.1"
-url = "^2.5"
-uuid = { version = "^1.8", features = ["serde", "v4"] }
-chrono = { version = "^0.4",  features = ["serde"] }
-reqwest.workspace = true
-
-[features]
-default = ["rustls"]
-native-tls = ["reqwest/native-tls"]
-rustls = ["reqwest/rustls-tls"]
+progenitor-client = "0.14"
+reqwest = { workspace = true, features = ["json", "rustls"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_repr = "0.1"
+chrono = { workspace = true }
+uuid = { version = "1", features = ["serde"] }
+url = "2"
+regress = "0.11"
+bytes = "1"

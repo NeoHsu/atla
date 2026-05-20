@@ -1,6 +1,7 @@
-use atla_confluence_api::models as generated_models;
-use atla_confluence_v1_api::models as generated_v1_models;
+use atla_confluence_api::types as generated_types;
+use atla_confluence_v1_api::types as generated_v1_types;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,50 +12,40 @@ pub enum ConfluenceBodyRepresentation {
 }
 
 impl ConfluenceBodyRepresentation {
-    pub(super) fn as_primary_body_single(
-        self,
-    ) -> generated_models::PrimaryBodyRepresentationSingle {
+    pub(super) fn as_primary_body_single(self) -> generated_types::PrimaryBodyRepresentationSingle {
         match self {
-            Self::Storage | Self::Wiki => {
-                generated_models::PrimaryBodyRepresentationSingle::Storage
-            }
+            Self::Storage | Self::Wiki => generated_types::PrimaryBodyRepresentationSingle::Storage,
             Self::AtlasDocFormat => {
-                generated_models::PrimaryBodyRepresentationSingle::AtlasDocFormat
+                generated_types::PrimaryBodyRepresentationSingle::AtlasDocFormat
             }
         }
     }
 
-    pub(super) fn as_page_body_write(self) -> generated_models::page_body_write::Representation {
+    pub(super) fn as_page_body_write(self) -> generated_types::PageBodyWriteRepresentation {
         match self {
-            Self::Storage => generated_models::page_body_write::Representation::Storage,
-            Self::Wiki => generated_models::page_body_write::Representation::Wiki,
-            Self::AtlasDocFormat => {
-                generated_models::page_body_write::Representation::AtlasDocFormat
-            }
+            Self::Storage => generated_types::PageBodyWriteRepresentation::Storage,
+            Self::Wiki => generated_types::PageBodyWriteRepresentation::Wiki,
+            Self::AtlasDocFormat => generated_types::PageBodyWriteRepresentation::AtlasDocFormat,
         }
     }
 
     pub(super) fn as_blog_post_body_write(
         self,
-    ) -> generated_models::blog_post_body_write::Representation {
+    ) -> generated_types::BlogPostBodyWriteRepresentation {
         match self {
-            Self::Storage => generated_models::blog_post_body_write::Representation::Storage,
-            Self::Wiki => generated_models::blog_post_body_write::Representation::Wiki,
+            Self::Storage => generated_types::BlogPostBodyWriteRepresentation::Storage,
+            Self::Wiki => generated_types::BlogPostBodyWriteRepresentation::Wiki,
             Self::AtlasDocFormat => {
-                generated_models::blog_post_body_write::Representation::AtlasDocFormat
+                generated_types::BlogPostBodyWriteRepresentation::AtlasDocFormat
             }
         }
     }
 
-    pub(super) fn as_comment_body_write(
-        self,
-    ) -> generated_models::comment_body_write::Representation {
+    pub(super) fn as_comment_body_write(self) -> generated_types::CommentBodyWriteRepresentation {
         match self {
-            Self::Storage => generated_models::comment_body_write::Representation::Storage,
-            Self::Wiki => generated_models::comment_body_write::Representation::Wiki,
-            Self::AtlasDocFormat => {
-                generated_models::comment_body_write::Representation::AtlasDocFormat
-            }
+            Self::Storage => generated_types::CommentBodyWriteRepresentation::Storage,
+            Self::Wiki => generated_types::CommentBodyWriteRepresentation::Wiki,
+            Self::AtlasDocFormat => generated_types::CommentBodyWriteRepresentation::AtlasDocFormat,
         }
     }
 }
@@ -66,44 +57,40 @@ pub enum ConfluenceContentStatus {
 }
 
 impl ConfluenceContentStatus {
-    pub(super) fn into_create_page_status(self) -> generated_models::create_page_request::Status {
+    pub(super) fn into_create_page_status(self) -> generated_types::CreatePageBodyStatus {
         match self {
-            Self::Current => generated_models::create_page_request::Status::Current,
-            Self::Draft => generated_models::create_page_request::Status::Draft,
+            Self::Current => generated_types::CreatePageBodyStatus::Current,
+            Self::Draft => generated_types::CreatePageBodyStatus::Draft,
         }
     }
 
-    pub(super) fn into_update_page_status(self) -> generated_models::update_page_request::Status {
+    pub(super) fn into_update_page_status(self) -> generated_types::UpdatePageBodyStatus {
         match self {
-            Self::Current => generated_models::update_page_request::Status::Current,
-            Self::Draft => generated_models::update_page_request::Status::Draft,
+            Self::Current => generated_types::UpdatePageBodyStatus::Current,
+            Self::Draft => generated_types::UpdatePageBodyStatus::Draft,
         }
     }
 
     pub(super) fn into_update_page_title_status(
         self,
-    ) -> generated_models::update_page_title_request::Status {
+    ) -> generated_types::UpdatePageTitleBodyStatus {
         match self {
-            Self::Current => generated_models::update_page_title_request::Status::Current,
-            Self::Draft => generated_models::update_page_title_request::Status::Draft,
+            Self::Current => generated_types::UpdatePageTitleBodyStatus::Current,
+            Self::Draft => generated_types::UpdatePageTitleBodyStatus::Draft,
         }
     }
 
-    pub(super) fn into_create_blog_post_status(
-        self,
-    ) -> generated_models::create_blog_post_request::Status {
+    pub(super) fn into_create_blog_post_status(self) -> generated_types::CreateBlogPostBodyStatus {
         match self {
-            Self::Current => generated_models::create_blog_post_request::Status::Current,
-            Self::Draft => generated_models::create_blog_post_request::Status::Draft,
+            Self::Current => generated_types::CreateBlogPostBodyStatus::Current,
+            Self::Draft => generated_types::CreateBlogPostBodyStatus::Draft,
         }
     }
 
-    pub(super) fn into_update_blog_post_status(
-        self,
-    ) -> generated_models::update_blog_post_request::Status {
+    pub(super) fn into_update_blog_post_status(self) -> generated_types::UpdateBlogPostBodyStatus {
         match self {
-            Self::Current => generated_models::update_blog_post_request::Status::Current,
-            Self::Draft => generated_models::update_blog_post_request::Status::Draft,
+            Self::Current => generated_types::UpdateBlogPostBodyStatus::Current,
+            Self::Draft => generated_types::UpdateBlogPostBodyStatus::Draft,
         }
     }
 }
@@ -130,20 +117,21 @@ pub struct ConfluencePageCopy {
 }
 
 impl ConfluencePageCreate {
-    pub(super) fn to_generated(&self) -> generated_models::CreatePageRequest {
-        let mut request = generated_models::CreatePageRequest::new(self.space_id.clone());
-        request.status = Some(self.status.into_create_page_status());
-        request.title = Some(self.title.clone());
-        request.parent_id.clone_from(&self.parent_id);
-        request.body = self.body.as_ref().map(|body| {
-            Box::new(generated_models::CreatePageRequestBody::PageBodyWrite(
-                Box::new(generated_models::PageBodyWrite {
+    pub(super) fn to_generated(&self) -> generated_types::CreatePageBody {
+        generated_types::CreatePageBody {
+            body: self.body.as_ref().map(|body| {
+                generated_types::PageBodyWrite {
                     representation: Some(self.representation.as_page_body_write()),
                     value: Some(body.clone()),
-                }),
-            ))
-        });
-        request
+                }
+                .into()
+            }),
+            parent_id: self.parent_id.clone(),
+            space_id: self.space_id.clone(),
+            status: Some(self.status.into_create_page_status()),
+            subtype: None,
+            title: Some(self.title.clone()),
+        }
     }
 }
 
@@ -161,33 +149,24 @@ pub struct ConfluencePageUpdate {
 }
 
 impl ConfluencePageUpdate {
-    pub(super) fn to_generated(&self) -> generated_models::UpdatePageRequest {
-        let mut version = generated_models::UpdatePageRequestVersion::new();
-        version.number = Some(self.version as i32);
-        version.message.clone_from(&self.message);
-
-        let mut request = generated_models::UpdatePageRequest::new(
-            self.id.clone(),
-            self.status.into_update_page_status(),
-            self.title.clone(),
-            generated_models::CreatePageRequestBody::PageBodyWrite(Box::new(
-                generated_models::PageBodyWrite {
-                    representation: Some(self.representation.as_page_body_write()),
-                    value: Some(self.body.clone()),
-                },
-            )),
-            version,
-        );
-
-        request.space_id = self
-            .space_id
-            .as_ref()
-            .map(|space_id| Some(serde_json::Value::String(space_id.clone())));
-        request.parent_id = self
-            .parent_id
-            .as_ref()
-            .map(|parent_id| Some(serde_json::Value::String(parent_id.clone())));
-        request
+    pub(super) fn to_generated(&self) -> generated_types::UpdatePageBody {
+        generated_types::UpdatePageBody {
+            body: generated_types::PageBodyWrite {
+                representation: Some(self.representation.as_page_body_write()),
+                value: Some(self.body.clone()),
+            }
+            .into(),
+            id: self.id.clone(),
+            owner_id: None,
+            parent_id: self.parent_id.clone(),
+            space_id: self.space_id.clone(),
+            status: self.status.into_update_page_status(),
+            title: self.title.clone(),
+            version: generated_types::UpdatePageBodyVersion {
+                message: self.message.clone(),
+                number: Some(self.version as i32),
+            },
+        }
     }
 }
 
@@ -202,21 +181,20 @@ pub struct ConfluenceBlogPostCreate {
 }
 
 impl ConfluenceBlogPostCreate {
-    pub(super) fn to_generated(&self) -> generated_models::CreateBlogPostRequest {
-        let mut request = generated_models::CreateBlogPostRequest::new(self.space_id.clone());
-        request.status = Some(self.status.into_create_blog_post_status());
-        request.title = Some(self.title.clone());
-        request.body = self.body.as_ref().map(|body| {
-            Box::new(
-                generated_models::CreateBlogPostRequestBody::BlogPostBodyWrite(Box::new(
-                    generated_models::BlogPostBodyWrite {
-                        representation: Some(self.representation.as_blog_post_body_write()),
-                        value: Some(body.clone()),
-                    },
-                )),
-            )
-        });
-        request
+    pub(super) fn to_generated(&self) -> generated_types::CreateBlogPostBody {
+        generated_types::CreateBlogPostBody {
+            body: self.body.as_ref().map(|body| {
+                generated_types::BlogPostBodyWrite {
+                    representation: Some(self.representation.as_blog_post_body_write()),
+                    value: Some(body.clone()),
+                }
+                .into()
+            }),
+            created_at: None,
+            space_id: self.space_id.clone(),
+            status: Some(self.status.into_create_blog_post_status()),
+            title: Some(self.title.clone()),
+        }
     }
 }
 
@@ -233,25 +211,23 @@ pub struct ConfluenceBlogPostUpdate {
 }
 
 impl ConfluenceBlogPostUpdate {
-    pub(super) fn to_generated(&self) -> generated_models::UpdateBlogPostRequest {
-        let mut version = generated_models::UpdateBlogPostRequestVersion::new();
-        version.number = Some(self.version as i32);
-        version.message.clone_from(&self.message);
-
-        let mut request = generated_models::UpdateBlogPostRequest::new(
-            self.id.clone(),
-            self.status.into_update_blog_post_status(),
-            self.title.clone(),
-            generated_models::CreateBlogPostRequestBody::BlogPostBodyWrite(Box::new(
-                generated_models::BlogPostBodyWrite {
-                    representation: Some(self.representation.as_blog_post_body_write()),
-                    value: Some(self.body.clone()),
-                },
-            )),
-            version,
-        );
-        request.space_id.clone_from(&self.space_id);
-        request
+    pub(super) fn to_generated(&self) -> generated_types::UpdateBlogPostBody {
+        generated_types::UpdateBlogPostBody {
+            body: generated_types::BlogPostBodyWrite {
+                representation: Some(self.representation.as_blog_post_body_write()),
+                value: Some(self.body.clone()),
+            }
+            .into(),
+            created_at: None,
+            id: self.id.clone(),
+            space_id: self.space_id.clone(),
+            status: self.status.into_update_blog_post_status(),
+            title: self.title.clone(),
+            version: generated_types::UpdateBlogPostBodyVersion {
+                message: self.message.clone(),
+                number: Some(self.version as i32),
+            },
+        }
     }
 }
 
@@ -287,18 +263,22 @@ pub struct ConfluenceSpaceCreate {
 }
 
 impl ConfluenceSpaceCreate {
-    pub(super) fn to_generated(&self) -> generated_models::CreateSpaceRequest {
-        let mut request = generated_models::CreateSpaceRequest::new(self.name.clone());
-        request.key.clone_from(&self.key);
-        request.alias.clone_from(&self.alias);
-        request.create_private_space = self.private.then_some(true);
-        request.description = self.description.as_ref().map(|description| {
-            let mut generated = generated_models::CreateSpaceRequestDescription::new();
-            generated.value = Some(description.clone());
-            generated.representation = Some("plain".to_owned());
-            Box::new(generated)
-        });
-        request
+    pub(super) fn to_generated(&self) -> generated_types::CreateSpaceBody {
+        generated_types::CreateSpaceBody {
+            alias: self.alias.clone(),
+            copy_space_access_configuration: None,
+            create_private_space: self.private.then_some(true),
+            description: self.description.as_ref().map(|description| {
+                generated_types::CreateSpaceBodyDescription {
+                    representation: Some("plain".to_owned()),
+                    value: Some(description.clone()),
+                }
+            }),
+            key: self.key.clone(),
+            name: self.name.clone(),
+            role_assignments: Vec::new(),
+            template_key: None,
+        }
     }
 }
 
@@ -310,20 +290,26 @@ pub struct ConfluenceSpaceUpdate {
 }
 
 impl ConfluenceSpaceUpdate {
-    pub(super) fn to_v1_update_request(&self) -> generated_v1_models::SpaceUpdate {
-        let mut payload = generated_v1_models::SpaceUpdate::new();
-        payload.name = self.name.clone().map(Some);
-        if let Some(description) = &self.description {
-            payload.description = Some(Some(Box::new(
-                generated_v1_models::SpaceDescriptionCreate::new(
-                    generated_v1_models::SpaceDescriptionCreatePlain {
-                        value: Some(description.clone()),
-                        representation: Some("plain".to_owned()),
+    pub(super) fn to_v1_update_request(&self) -> generated_v1_types::SpaceUpdate {
+        generated_v1_types::SpaceUpdate {
+            description: self.description.as_ref().map(|description| {
+                generated_v1_types::SpaceDescriptionCreate(Some(
+                    generated_v1_types::SpaceDescriptionCreateInner {
+                        plain: generated_v1_types::SpaceDescriptionCreateInnerPlain {
+                            representation: Some("plain".to_owned()),
+                            value: Some(description.clone()),
+                        },
                     },
-                ),
-            )));
+                ))
+            }),
+            homepage: None,
+            name: self.name.clone().map(|name| {
+                name.try_into()
+                    .expect("validated Confluence space name should fit generated type")
+            }),
+            status: None,
+            type_: None,
         }
-        payload
     }
 }
 
@@ -538,38 +524,38 @@ pub struct ConfluenceCommentCreate {
 }
 
 impl ConfluenceCommentCreate {
-    pub(super) fn to_generated_page_footer(&self) -> generated_models::CreateFooterCommentModel {
-        let mut comment = generated_models::CreateFooterCommentModel::new();
-        comment.page_id = Some(self.content_id.clone());
-        comment
-            .parent_comment_id
-            .clone_from(&self.parent_comment_id);
-        comment.body = Some(Box::new(
-            generated_models::CreateFooterCommentModelBody::CommentBodyWrite(Box::new(
-                generated_models::CommentBodyWrite {
+    pub(super) fn to_generated_page_footer(&self) -> generated_types::CreateFooterCommentModel {
+        generated_types::CreateFooterCommentModel {
+            attachment_id: None,
+            blog_post_id: None,
+            body: Some(
+                generated_types::CommentBodyWrite {
                     representation: Some(self.representation.as_comment_body_write()),
                     value: Some(self.body.clone()),
-                },
-            )),
-        ));
-        comment
+                }
+                .into(),
+            ),
+            custom_content_id: None,
+            page_id: Some(self.content_id.clone()),
+            parent_comment_id: self.parent_comment_id.clone(),
+        }
     }
 
-    pub(super) fn to_generated_blog_footer(&self) -> generated_models::CreateFooterCommentModel {
-        let mut comment = generated_models::CreateFooterCommentModel::new();
-        comment.blog_post_id = Some(self.content_id.clone());
-        comment
-            .parent_comment_id
-            .clone_from(&self.parent_comment_id);
-        comment.body = Some(Box::new(
-            generated_models::CreateFooterCommentModelBody::CommentBodyWrite(Box::new(
-                generated_models::CommentBodyWrite {
+    pub(super) fn to_generated_blog_footer(&self) -> generated_types::CreateFooterCommentModel {
+        generated_types::CreateFooterCommentModel {
+            attachment_id: None,
+            blog_post_id: Some(self.content_id.clone()),
+            body: Some(
+                generated_types::CommentBodyWrite {
                     representation: Some(self.representation.as_comment_body_write()),
                     value: Some(self.body.clone()),
-                },
-            )),
-        ));
-        comment
+                }
+                .into(),
+            ),
+            custom_content_id: None,
+            page_id: None,
+            parent_comment_id: self.parent_comment_id.clone(),
+        }
     }
 }
 
@@ -625,363 +611,408 @@ pub struct ConfluenceAttachmentDownload {
     pub bytes: u64,
 }
 
-pub(super) fn version_from_generated(
-    version: Option<Box<generated_models::Version>>,
-) -> Option<ConfluenceVersion> {
-    version.map(|version| ConfluenceVersion {
-        number: version.number.map(|number| number as u64),
-        message: version.message,
-        created_at: version.created_at.map(|created_at| created_at.to_rfc3339()),
+fn to_value<T: Serialize>(value: &T) -> Value {
+    serde_json::to_value(value).expect("generated Confluence types should serialize")
+}
+
+fn field<'a>(value: &'a Value, names: &[&str]) -> Option<&'a Value> {
+    names.iter().find_map(|name| value.get(*name))
+}
+
+fn string_from_value(value: &Value) -> Option<String> {
+    value
+        .as_str()
+        .map(ToOwned::to_owned)
+        .or_else(|| value.as_i64().map(|n| n.to_string()))
+        .or_else(|| value.as_u64().map(|n| n.to_string()))
+}
+
+fn optional_string(value: &Value, names: &[&str]) -> Option<String> {
+    field(value, names).and_then(string_from_value)
+}
+
+fn optional_i32(value: &Value, names: &[&str]) -> Option<i32> {
+    field(value, names)
+        .and_then(Value::as_i64)
+        .and_then(|n| i32::try_from(n).ok())
+}
+
+fn optional_i64(value: &Value, names: &[&str]) -> Option<i64> {
+    field(value, names).and_then(Value::as_i64)
+}
+
+fn optional_body_text(value: &Value) -> Option<String> {
+    let Some(body) = field(value, &["body"]) else {
+        return None;
+    };
+    if let Some(text) = string_from_value(body) {
+        return Some(text);
+    }
+    for key in [
+        "storage",
+        "atlas_doc_format",
+        "atlasDocFormat",
+        "view",
+        "export_view",
+        "exportView",
+    ] {
+        if let Some(text) = field(body, &[key]).and_then(|inner| optional_string(inner, &["value"]))
+        {
+            return Some(text);
+        }
+    }
+    None
+}
+
+fn version_from_json(value: &Value) -> Option<ConfluenceVersion> {
+    let version = field(value, &["version"])?;
+    Some(ConfluenceVersion {
+        number: optional_i32(version, &["number"]).map(|n| n as u64),
+        message: optional_string(version, &["message"]),
+        created_at: optional_string(version, &["createdAt", "when"]),
     })
 }
 
-pub(super) fn version_from_generated_v1(
-    version: Option<Box<generated_v1_models::Version>>,
-) -> Option<ConfluenceVersion> {
-    version.map(|version| ConfluenceVersion {
-        number: Some(version.number as u64),
-        message: version.message,
-        created_at: version.when.map(|created_at| created_at.to_rfc3339()),
-    })
-}
-
-pub(super) fn v1_link(
-    links: &Option<std::collections::HashMap<String, String>>,
-    name: &str,
-) -> Option<String> {
-    links.as_ref().and_then(|links| links.get(name).cloned())
-}
-
-pub(super) fn body_from_generated(
-    body: Option<Box<generated_models::BodySingle>>,
-) -> Option<String> {
-    body.and_then(|body| {
-        let body = *body;
-        body.storage
-            .and_then(|body| body.value)
-            .or_else(|| body.atlas_doc_format.and_then(|body| body.value))
-            .or_else(|| body.view.and_then(|body| body.value))
-    })
-}
-
-pub(super) fn body_from_generated_bulk(
-    body: Option<Box<generated_models::BodyBulk>>,
-) -> Option<String> {
-    body.and_then(|body| {
-        let body = *body;
-        body.storage
-            .and_then(|body| body.value)
-            .or_else(|| body.atlas_doc_format.and_then(|body| body.value))
-    })
-}
-
-impl From<generated_models::SpaceBulk> for ConfluenceSpace {
-    fn from(space: generated_models::SpaceBulk) -> Self {
-        Self {
-            id: space.id,
-            key: space.key,
-            name: space.name,
-            space_type: space.r#type.map(|space_type| space_type.to_string()),
-            status: space.status.map(|status| status.to_string()),
-            homepage_id: space.homepage_id,
-            current_active_alias: space.current_active_alias,
-        }
+fn content_node_from_json(value: &Value) -> ConfluenceContentNode {
+    ConfluenceContentNode {
+        id: optional_string(value, &["id"]),
+        status: optional_string(value, &["status"]),
+        title: optional_string(value, &["title"]),
+        content_type: optional_string(value, &["type"]),
+        space_id: optional_string(value, &["spaceId"]),
+        parent_id: optional_string(value, &["parentId"]),
+        depth: optional_i32(value, &["depth"]),
+        child_position: optional_i32(value, &["childPosition"]),
     }
 }
 
-impl From<generated_models::CreateSpace201Response> for ConfluenceSpace {
-    fn from(space: generated_models::CreateSpace201Response) -> Self {
-        Self {
-            id: space.id,
-            key: space.key,
-            name: space.name,
-            space_type: space.r#type.map(|space_type| space_type.to_string()),
-            status: space.status.map(|status| status.to_string()),
-            homepage_id: space.homepage_id,
-            current_active_alias: space.current_active_alias,
-        }
+fn page_from_json(value: &Value) -> ConfluencePage {
+    ConfluencePage {
+        id: optional_string(value, &["id"]),
+        status: optional_string(value, &["status"]),
+        title: optional_string(value, &["title"]),
+        space_id: optional_string(value, &["spaceId"]),
+        parent_id: optional_string(value, &["parentId"]),
+        author_id: optional_string(value, &["authorId"]),
+        owner_id: optional_string(value, &["ownerId"]),
+        created_at: optional_string(value, &["createdAt"]),
+        version: version_from_json(value),
+        body: optional_body_text(value),
     }
 }
 
-impl From<generated_models::PageBulk> for ConfluencePage {
-    fn from(page: generated_models::PageBulk) -> Self {
-        Self {
-            id: page.id,
-            status: page.status.map(|status| status.to_string()),
-            title: page.title,
-            space_id: page.space_id,
-            parent_id: page.parent_id,
-            author_id: page.author_id,
-            owner_id: page.owner_id.flatten(),
-            created_at: page.created_at.map(|created_at| created_at.to_rfc3339()),
-            version: version_from_generated(page.version),
-            body: None,
-        }
+fn blog_post_from_json(value: &Value) -> ConfluenceBlogPost {
+    ConfluenceBlogPost {
+        id: optional_string(value, &["id"]),
+        status: optional_string(value, &["status"]),
+        title: optional_string(value, &["title"]),
+        space_id: optional_string(value, &["spaceId"]),
+        author_id: optional_string(value, &["authorId"]),
+        created_at: optional_string(value, &["createdAt"]),
+        version: version_from_json(value),
+        body: optional_body_text(value),
     }
 }
 
-impl From<generated_models::ChildrenResponse> for ConfluenceContentNode {
-    fn from(child: generated_models::ChildrenResponse) -> Self {
-        Self {
-            id: child.id,
-            status: child.status.map(|status| status.to_string()),
-            title: child.title,
-            content_type: child.r#type,
-            space_id: child.space_id,
-            parent_id: None,
-            depth: None,
-            child_position: child.child_position.flatten(),
-        }
+fn space_from_json(value: &Value) -> ConfluenceSpace {
+    ConfluenceSpace {
+        id: optional_string(value, &["id"]),
+        key: optional_string(value, &["key"]),
+        name: optional_string(value, &["name"]),
+        space_type: optional_string(value, &["type"]),
+        status: optional_string(value, &["status"]),
+        homepage_id: optional_string(value, &["homepageId"]),
+        current_active_alias: optional_string(value, &["currentActiveAlias"]),
     }
 }
 
-impl From<generated_models::DescendantsResponse> for ConfluenceContentNode {
-    fn from(descendant: generated_models::DescendantsResponse) -> Self {
-        Self {
-            id: descendant.id,
-            status: descendant.status.map(|status| status.to_string()),
-            title: descendant.title,
-            content_type: descendant.r#type,
-            space_id: None,
-            parent_id: descendant.parent_id,
-            depth: descendant.depth,
-            child_position: descendant.child_position.flatten(),
-        }
+fn label_from_json(value: &Value) -> ConfluenceLabel {
+    ConfluenceLabel {
+        id: optional_string(value, &["id"]),
+        name: optional_string(value, &["name"]),
+        prefix: optional_string(value, &["prefix"]),
     }
 }
 
-impl From<generated_models::CreatePage200Response> for ConfluencePage {
-    fn from(page: generated_models::CreatePage200Response) -> Self {
-        Self {
-            id: page.id,
-            status: page.status.map(|status| status.to_string()),
-            title: page.title,
-            space_id: page.space_id,
-            parent_id: page.parent_id,
-            author_id: page.author_id,
-            owner_id: page.owner_id.flatten(),
-            created_at: page.created_at.map(|created_at| created_at.to_rfc3339()),
-            version: version_from_generated(page.version),
-            body: body_from_generated(page.body),
-        }
+fn comment_from_json(value: &Value) -> ConfluenceComment {
+    ConfluenceComment {
+        id: optional_string(value, &["id"]),
+        status: optional_string(value, &["status"]),
+        title: optional_string(value, &["title"]),
+        page_id: optional_string(value, &["pageId"]),
+        blog_post_id: optional_string(value, &["blogPostId"]),
+        parent_comment_id: optional_string(value, &["parentCommentId"]),
+        body: optional_body_text(value),
+        version: version_from_json(value),
     }
 }
 
-impl From<generated_models::BlogPostBulk> for ConfluenceBlogPost {
-    fn from(post: generated_models::BlogPostBulk) -> Self {
-        Self {
-            id: post.id,
-            status: post.status.map(|status| status.to_string()),
-            title: post.title,
-            space_id: post.space_id,
-            author_id: post.author_id,
-            created_at: post.created_at.map(|created_at| created_at.to_rfc3339()),
-            version: version_from_generated(post.version),
-            body: None,
-        }
+fn attachment_from_json(value: &Value) -> ConfluenceAttachment {
+    ConfluenceAttachment {
+        id: optional_string(value, &["id"]),
+        status: optional_string(value, &["status"]),
+        title: optional_string(value, &["title"]),
+        page_id: optional_string(value, &["pageId"]),
+        blog_post_id: optional_string(value, &["blogPostId"]),
+        media_type: optional_string(value, &["mediaType"]),
+        media_type_description: optional_string(value, &["mediaTypeDescription"]),
+        file_id: optional_string(value, &["fileId"]),
+        file_size: optional_i64(value, &["fileSize"]),
+        webui_link: optional_string(value, &["webuiLink"]),
+        download_link: optional_string(value, &["downloadLink"]),
+        version: version_from_json(value),
     }
 }
 
-impl From<generated_models::CreateBlogPost200Response> for ConfluenceBlogPost {
-    fn from(post: generated_models::CreateBlogPost200Response) -> Self {
-        Self {
-            id: post.id,
-            status: post.status.map(|status| status.to_string()),
-            title: post.title,
-            space_id: post.space_id,
-            author_id: post.author_id,
-            created_at: post.created_at.map(|created_at| created_at.to_rfc3339()),
-            version: version_from_generated(post.version),
-            body: body_from_generated(post.body),
-        }
+fn v1_link(value: &Value, name: &str) -> Option<String> {
+    field(value, &["_links", "links"])
+        .and_then(|links| links.get(name))
+        .and_then(string_from_value)
+}
+
+fn search_content_from_json(value: &Value) -> ConfluenceSearchContent {
+    ConfluenceSearchContent {
+        id: optional_string(value, &["id"]),
+        content_type: optional_string(value, &["type"]),
+        status: optional_string(value, &["status"]),
+        title: optional_string(value, &["title"]),
     }
 }
 
-impl From<generated_models::MultiEntityResultLabel> for ConfluenceLabelPage {
-    fn from(page: generated_models::MultiEntityResultLabel) -> Self {
+fn search_result_from_json(value: &Value) -> ConfluenceSearchResult {
+    ConfluenceSearchResult {
+        title: optional_string(value, &["title"]),
+        url: optional_string(value, &["url"]),
+        excerpt: optional_string(value, &["excerpt"]),
+        content: field(value, &["content"]).map(search_content_from_json),
+    }
+}
+
+impl From<generated_types::SpaceBulk> for ConfluenceSpace {
+    fn from(space: generated_types::SpaceBulk) -> Self {
+        space_from_json(&to_value(&space))
+    }
+}
+
+impl From<generated_types::CreateSpaceResponse> for ConfluenceSpace {
+    fn from(space: generated_types::CreateSpaceResponse) -> Self {
+        space_from_json(&to_value(&space))
+    }
+}
+
+impl From<generated_types::PageBulk> for ConfluencePage {
+    fn from(page: generated_types::PageBulk) -> Self {
+        page_from_json(&to_value(&page))
+    }
+}
+
+impl From<generated_types::ChildrenResponse> for ConfluenceContentNode {
+    fn from(child: generated_types::ChildrenResponse) -> Self {
+        content_node_from_json(&to_value(&child))
+    }
+}
+
+impl From<generated_types::DescendantsResponse> for ConfluenceContentNode {
+    fn from(descendant: generated_types::DescendantsResponse) -> Self {
+        content_node_from_json(&to_value(&descendant))
+    }
+}
+
+impl From<generated_types::CreatePageResponse> for ConfluencePage {
+    fn from(page: generated_types::CreatePageResponse) -> Self {
+        page_from_json(&to_value(&page))
+    }
+}
+
+impl From<generated_types::UpdatePageResponse> for ConfluencePage {
+    fn from(page: generated_types::UpdatePageResponse) -> Self {
+        page_from_json(&to_value(&page))
+    }
+}
+
+impl From<generated_types::UpdatePageTitleResponse> for ConfluencePage {
+    fn from(page: generated_types::UpdatePageTitleResponse) -> Self {
+        page_from_json(&to_value(&page))
+    }
+}
+
+impl From<generated_types::GetPageByIdResponse> for ConfluencePage {
+    fn from(page: generated_types::GetPageByIdResponse) -> Self {
+        page_from_json(&to_value(&page))
+    }
+}
+
+impl From<generated_types::BlogPostBulk> for ConfluenceBlogPost {
+    fn from(post: generated_types::BlogPostBulk) -> Self {
+        blog_post_from_json(&to_value(&post))
+    }
+}
+
+impl From<generated_types::CreateBlogPostResponse> for ConfluenceBlogPost {
+    fn from(post: generated_types::CreateBlogPostResponse) -> Self {
+        blog_post_from_json(&to_value(&post))
+    }
+}
+
+impl From<generated_types::UpdateBlogPostResponse> for ConfluenceBlogPost {
+    fn from(post: generated_types::UpdateBlogPostResponse) -> Self {
+        blog_post_from_json(&to_value(&post))
+    }
+}
+
+impl From<generated_types::GetBlogPostByIdResponse> for ConfluenceBlogPost {
+    fn from(post: generated_types::GetBlogPostByIdResponse) -> Self {
+        blog_post_from_json(&to_value(&post))
+    }
+}
+
+impl From<generated_types::MultiEntityResultLabel> for ConfluenceLabelPage {
+    fn from(page: generated_types::MultiEntityResultLabel) -> Self {
+        let value = to_value(&page);
         Self {
-            results: page
-                .results
+            results: field(&value, &["results"])
+                .and_then(Value::as_array)
+                .cloned()
                 .unwrap_or_default()
                 .into_iter()
-                .map(ConfluenceLabel::from)
+                .map(|label| label_from_json(&label))
                 .collect(),
         }
     }
 }
 
-impl From<generated_models::Label> for ConfluenceLabel {
-    fn from(label: generated_models::Label) -> Self {
-        Self {
-            id: label.id,
-            name: label.name,
-            prefix: label.prefix,
-        }
+impl From<generated_types::Label> for ConfluenceLabel {
+    fn from(label: generated_types::Label) -> Self {
+        label_from_json(&to_value(&label))
     }
 }
 
-impl From<generated_models::MultiEntityResultPageCommentModel> for ConfluenceCommentPage {
-    fn from(page: generated_models::MultiEntityResultPageCommentModel) -> Self {
+impl From<generated_v1_types::LabelArray> for ConfluenceLabelPage {
+    fn from(page: generated_v1_types::LabelArray) -> Self {
+        let value = to_value(&page);
         Self {
-            results: page
-                .results
+            results: field(&value, &["results"])
+                .and_then(Value::as_array)
+                .cloned()
                 .unwrap_or_default()
                 .into_iter()
-                .map(ConfluenceComment::from)
+                .map(|label| label_from_json(&label))
                 .collect(),
         }
     }
 }
 
-impl From<generated_models::MultiEntityResultBlogPostCommentModel> for ConfluenceCommentPage {
-    fn from(page: generated_models::MultiEntityResultBlogPostCommentModel) -> Self {
+impl From<generated_v1_types::Label> for ConfluenceLabel {
+    fn from(label: generated_v1_types::Label) -> Self {
+        label_from_json(&to_value(&label))
+    }
+}
+
+impl From<generated_types::MultiEntityResultPageCommentModel> for ConfluenceCommentPage {
+    fn from(page: generated_types::MultiEntityResultPageCommentModel) -> Self {
+        let value = to_value(&page);
         Self {
-            results: page
-                .results
+            results: field(&value, &["results"])
+                .and_then(Value::as_array)
+                .cloned()
                 .unwrap_or_default()
                 .into_iter()
-                .map(ConfluenceComment::from)
+                .map(|comment| comment_from_json(&comment))
                 .collect(),
         }
     }
 }
 
-impl From<generated_models::PageCommentModel> for ConfluenceComment {
-    fn from(comment: generated_models::PageCommentModel) -> Self {
+impl From<generated_types::MultiEntityResultBlogPostCommentModel> for ConfluenceCommentPage {
+    fn from(page: generated_types::MultiEntityResultBlogPostCommentModel) -> Self {
+        let value = to_value(&page);
         Self {
-            id: comment.id,
-            status: comment.status.map(|status| status.to_string()),
-            title: comment.title,
-            page_id: comment.page_id,
-            blog_post_id: None,
-            parent_comment_id: None,
-            body: body_from_generated_bulk(comment.body),
-            version: version_from_generated(comment.version),
-        }
-    }
-}
-
-impl From<generated_models::BlogPostCommentModel> for ConfluenceComment {
-    fn from(comment: generated_models::BlogPostCommentModel) -> Self {
-        Self {
-            id: comment.id,
-            status: comment.status.map(|status| status.to_string()),
-            title: comment.title,
-            page_id: None,
-            blog_post_id: comment.blog_post_id,
-            parent_comment_id: None,
-            body: body_from_generated_bulk(comment.body),
-            version: version_from_generated(comment.version),
-        }
-    }
-}
-
-impl From<generated_models::CreateFooterComment201Response> for ConfluenceComment {
-    fn from(comment: generated_models::CreateFooterComment201Response) -> Self {
-        Self {
-            id: comment.id,
-            status: comment.status.map(|status| status.to_string()),
-            title: comment.title,
-            page_id: comment.page_id,
-            blog_post_id: comment.blog_post_id,
-            parent_comment_id: comment.parent_comment_id,
-            body: body_from_generated(comment.body),
-            version: version_from_generated(comment.version),
-        }
-    }
-}
-
-impl From<generated_v1_models::SearchPageResponseSearchResult> for ConfluenceSearchPage {
-    fn from(page: generated_v1_models::SearchPageResponseSearchResult) -> Self {
-        Self {
-            results: page
-                .results
+            results: field(&value, &["results"])
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
                 .into_iter()
-                .map(ConfluenceSearchResult::from)
+                .map(|comment| comment_from_json(&comment))
                 .collect(),
-            size: Some(page.size as u64),
-            total_size: Some(page.total_size as u64),
         }
     }
 }
 
-impl From<generated_v1_models::SearchResult> for ConfluenceSearchResult {
-    fn from(result: generated_v1_models::SearchResult) -> Self {
+impl From<generated_types::PageCommentModel> for ConfluenceComment {
+    fn from(comment: generated_types::PageCommentModel) -> Self {
+        comment_from_json(&to_value(&comment))
+    }
+}
+
+impl From<generated_types::BlogPostCommentModel> for ConfluenceComment {
+    fn from(comment: generated_types::BlogPostCommentModel) -> Self {
+        comment_from_json(&to_value(&comment))
+    }
+}
+
+impl From<generated_types::CreateFooterCommentResponse> for ConfluenceComment {
+    fn from(comment: generated_types::CreateFooterCommentResponse) -> Self {
+        comment_from_json(&to_value(&comment))
+    }
+}
+
+impl From<generated_v1_types::SearchPageResponseSearchResult> for ConfluenceSearchPage {
+    fn from(page: generated_v1_types::SearchPageResponseSearchResult) -> Self {
+        let value = to_value(&page);
         Self {
-            title: Some(result.title),
-            url: Some(result.url),
-            excerpt: Some(result.excerpt),
-            content: result
-                .content
-                .map(|content| ConfluenceSearchContent::from(*content)),
+            results: field(&value, &["results"])
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|result| search_result_from_json(&result))
+                .collect(),
+            size: optional_i32(&value, &["size"]).map(|n| n as u64),
+            total_size: optional_i32(&value, &["totalSize"]).map(|n| n as u64),
         }
     }
 }
 
-impl From<generated_v1_models::Content> for ConfluenceSearchContent {
-    fn from(content: generated_v1_models::Content) -> Self {
-        Self {
-            id: content.id,
-            content_type: Some(content.r#type),
-            status: Some(content.status),
-            title: content.title,
-        }
+impl From<generated_v1_types::SearchResult> for ConfluenceSearchResult {
+    fn from(result: generated_v1_types::SearchResult) -> Self {
+        search_result_from_json(&to_value(&result))
     }
 }
 
-impl From<generated_models::AttachmentBulk> for ConfluenceAttachment {
-    fn from(attachment: generated_models::AttachmentBulk) -> Self {
-        Self {
-            id: attachment.id,
-            status: attachment.status.map(|status| status.to_string()),
-            title: attachment.title,
-            page_id: attachment.page_id,
-            blog_post_id: attachment.blog_post_id,
-            media_type: attachment.media_type,
-            media_type_description: attachment.media_type_description,
-            file_id: attachment.file_id,
-            file_size: attachment.file_size,
-            webui_link: attachment.webui_link,
-            download_link: attachment.download_link,
-            version: version_from_generated(attachment.version),
-        }
+impl From<generated_v1_types::Content> for ConfluenceSearchContent {
+    fn from(content: generated_v1_types::Content) -> Self {
+        search_content_from_json(&to_value(&content))
     }
 }
 
-impl From<generated_models::GetAttachmentById200Response> for ConfluenceAttachment {
-    fn from(attachment: generated_models::GetAttachmentById200Response) -> Self {
-        Self {
-            id: attachment.id,
-            status: attachment.status.map(|status| status.to_string()),
-            title: attachment.title,
-            page_id: attachment.page_id,
-            blog_post_id: attachment.blog_post_id,
-            media_type: attachment.media_type,
-            media_type_description: attachment.media_type_description,
-            file_id: attachment.file_id,
-            file_size: attachment.file_size,
-            webui_link: attachment.webui_link,
-            download_link: attachment.download_link,
-            version: version_from_generated(attachment.version),
-        }
+impl From<generated_types::AttachmentBulk> for ConfluenceAttachment {
+    fn from(attachment: generated_types::AttachmentBulk) -> Self {
+        attachment_from_json(&to_value(&attachment))
     }
 }
 
-impl From<generated_v1_models::Content> for ConfluenceAttachment {
-    fn from(content: generated_v1_models::Content) -> Self {
-        Self {
-            id: content.id,
-            status: Some(content.status),
-            title: content.title,
+impl From<generated_types::GetAttachmentByIdResponse> for ConfluenceAttachment {
+    fn from(attachment: generated_types::GetAttachmentByIdResponse) -> Self {
+        attachment_from_json(&to_value(&attachment))
+    }
+}
+
+impl From<generated_v1_types::Content> for ConfluenceAttachment {
+    fn from(content: generated_v1_types::Content) -> Self {
+        let value = to_value(&content);
+        ConfluenceAttachment {
+            id: optional_string(&value, &["id"]),
+            status: optional_string(&value, &["status"]),
+            title: optional_string(&value, &["title"]),
             page_id: None,
             blog_post_id: None,
             media_type: None,
             media_type_description: None,
             file_id: None,
             file_size: None,
-            webui_link: v1_link(&content._links, "webui"),
-            download_link: v1_link(&content._links, "download"),
-            version: version_from_generated_v1(content.version),
+            webui_link: v1_link(&value, "webui"),
+            download_link: v1_link(&value, "download"),
+            version: version_from_json(&value),
         }
     }
 }

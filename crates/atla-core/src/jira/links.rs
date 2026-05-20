@@ -1,4 +1,3 @@
-use atla_jira_api::apis as generated_apis;
 use serde::Deserialize;
 
 use super::JiraClient;
@@ -13,8 +12,12 @@ impl JiraClient {
             ..link.clone()
         };
 
-        generated_apis::issue_links_api::link_issues(&self.generated, resolved.to_generated())
+        self.generated
+            .link_issues()
+            .body(resolved.to_generated())
+            .send()
             .await
+            .map(|_| ())
             .map_err(generated_error)
     }
 
@@ -22,18 +25,12 @@ impl JiraClient {
         &self,
         issue_id_or_key: &str,
     ) -> Result<Vec<JiraIssueLink>, ApiError> {
-        let issue = generated_apis::issues_api::get_issue(
-            &self.generated,
-            issue_id_or_key,
-            Some(vec!["issuelinks".to_owned()]),
-        )
-        .await
-        .map_err(generated_error)?;
+        let issue = self
+            .get_issue(issue_id_or_key, Some(vec!["issuelinks".to_owned()]))
+            .await?;
 
-        let fields: serde_json::Map<String, serde_json::Value> =
-            issue.fields.unwrap_or_default().into_iter().collect();
-
-        Ok(fields
+        Ok(issue
+            .fields
             .get("issuelinks")
             .and_then(serde_json::Value::as_array)
             .into_iter()
@@ -43,39 +40,18 @@ impl JiraClient {
     }
 
     pub async fn delete_issue_link(&self, link_id: &str) -> Result<(), ApiError> {
-        generated_apis::issue_links_api::delete_issue_link(&self.generated, link_id)
+        self.generated
+            .delete_issue_link()
+            .link_id(link_id)
+            .send()
             .await
+            .map(|_| ())
             .map_err(generated_error)
     }
 
     async fn resolve_link_type(&self, user_input: &str) -> Result<String, ApiError> {
-        let url = format!(
-            "{}/rest/api/3/issueLinkType",
-            self.generated.base_path.trim_end_matches('/')
-        );
-        let mut request = self.generated.client.get(url);
-
-        if let Some(user_agent) = &self.generated.user_agent {
-            request = request.header(reqwest::header::USER_AGENT, user_agent.clone());
-        }
-        if let Some(token) = &self.generated.oauth_access_token {
-            request = request.bearer_auth(token);
-        }
-        if let Some(token) = &self.generated.bearer_access_token {
-            request = request.bearer_auth(token);
-        }
-        if let Some((username, password)) = &self.generated.basic_auth {
-            request = request.basic_auth(username.clone(), password.clone());
-        }
-        if let Some(api_key) = &self.generated.api_key {
-            let value = match &api_key.prefix {
-                Some(prefix) => format!("{prefix} {}", api_key.key),
-                None => api_key.key.clone(),
-            };
-            request = request.header(reqwest::header::AUTHORIZATION, value);
-        }
-
-        let response: JiraIssueLinkTypesResponse = read_json(request).await?;
+        let response: JiraIssueLinkTypesResponse =
+            read_json(self.raw_client.get("/rest/api/3/issueLinkType")).await?;
         Ok(
             canonical_link_type_name(user_input, &response.issue_link_types)
                 .unwrap_or(user_input)
