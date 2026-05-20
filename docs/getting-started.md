@@ -18,12 +18,6 @@ Key features:
 
 ## Installation
 
-### Homebrew (macOS / Linux)
-
-```bash
-brew install NeoHsu/tap/atla
-```
-
 ### Installer script (macOS / Linux)
 
 ```bash

@@ -1,8 +1,8 @@
 {
   "generated_at": "2026-05-20T03:54:55Z",
   "generator": {
-    "tool": "openapi-generator-cli",
-    "version": "7.22.0"
+    "tool": "progenitor",
+    "version": "0.14"
   },
   "specs": {
     "jira": {

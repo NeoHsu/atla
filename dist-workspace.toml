@@ -4,9 +4,7 @@ members = ["cargo:."]
 [dist]
 cargo-dist-version = "0.31.0"
 ci = "github"
-installers = ["shell", "powershell", "homebrew"]
-tap = "NeoHsu/homebrew-tap"
-publish-jobs = ["homebrew"]
+installers = ["shell", "powershell"]
 targets = [
     "aarch64-apple-darwin",
     "aarch64-unknown-linux-gnu",

@@ -239,54 +239,11 @@ jobs:
           echo "$ANNOUNCEMENT_BODY" > "$RUNNER_TEMP/notes.txt"
           gh release create "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --title "$ANNOUNCEMENT_TITLE" --notes-file "$RUNNER_TEMP/notes.txt" artifacts/*
 
-  publish-homebrew-formula:
-    needs:
-      - plan
-      - host
-    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
-    runs-on: ubuntu-22.04
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      PLAN: ${{ needs.plan.outputs.val }}
-      GITHUB_USER: github-actions[bot]
-      GITHUB_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: true
-          repository: NeoHsu/homebrew-tap
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-
-      - name: Fetch Homebrew formulae
-        uses: actions/download-artifact@v7
-        with:
-          pattern: artifacts-*
-          path: Formula/
-          merge-multiple: true
-
-      - name: Commit formula files
-        shell: bash
-        run: |
-          git config --global user.name "$GITHUB_USER"
-          git config --global user.email "$GITHUB_EMAIL"
-          for release in $(echo "$PLAN" | jq --compact-output '.releases[] | select([.artifacts[] | endswith(".rb")] | any)'); do
-            filename=$(echo "$release" | jq '.artifacts[] | select(endswith(".rb"))' --raw-output)
-            name=$(echo "$filename" | sed "s/\.rb$//")
-            version=$(echo "$release" | jq .app_version --raw-output)
-            export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
-            brew update
-            brew style --except-cops FormulaAudit/Homepage,FormulaAudit/Desc,FormulaAuditStrict --fix "Formula/${filename}" || true
-            git add "Formula/${filename}"
-            git commit -m "${name} ${version}"
-          done
-          git push
-
   announce:
     needs:
       - plan
       - host
-      - publish-homebrew-formula
-    if: ${{ always() && needs.host.result == 'success' && (needs.publish-homebrew-formula.result == 'skipped' || needs.publish-homebrew-formula.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' }}
     runs-on: ubuntu-22.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest_path="${repo_root}/specs/manifest.json"
-generator_version="${OPENAPI_GENERATOR_VERSION:-7.22.0}"
+generator_version="progenitor-0.14"
 
 jira_url="https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json"
 confluence_v2_url="https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json"
@@ -44,7 +44,7 @@ def sha256_file(relative_path: str) -> str:
 
 base = {
     "generator": {
-        "tool": "openapi-generator-cli",
+        "tool": "progenitor",
         "version": generator_version,
     },
     "specs": {

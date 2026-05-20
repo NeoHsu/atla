@@ -16,12 +16,13 @@ and machine-friendly output formats.
 | [Jira](docs/jira.md) | Full Jira command reference: projects, issues, boards, sprints |
 | [Confluence](docs/confluence.md) | Full Confluence command reference: spaces, pages, blogs, attachments |
 | [Output Formats](docs/output-formats.md) | Global flags, output formats, scripting/CI patterns |
+| [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
 | [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
 
 ## Install
 
 Download a prebuilt binary from GitHub Releases, use the generated installer, or
-install through Homebrew or mise after the first release is published.
+install through mise after the first release is published.
 
 Installer script:
 
@@ -47,12 +48,6 @@ Direct release downloads:
 
 Each archive contains the prebuilt `atla` executable plus README, license, and
 changelog files. Checksums are published next to the release assets.
-
-Homebrew:
-
-```bash
-brew install NeoHsu/tap/atla
-```
 
 mise:
 
@@ -84,7 +79,7 @@ Phase 1 is ready for an initial binary release.
 | Jira commands | Stable | Projects, search, issues, comments, assignment, transitions, boards, sprints. |
 | Confluence commands | Stable | Spaces, pages, blogs, search, attachments, page labels, page comments. |
 | Generated clients | Stable | Jira v3, Confluence v2, and scoped Confluence v1 clients are checked in. |
-| Release automation | Stable | GitHub Releases and Homebrew formula publishing via cargo-dist. |
+| Release automation | Stable | GitHub Releases via cargo-dist. |
 | Spec refresh automation | Stable | Scheduled workflow opens PRs for Atlassian OpenAPI spec updates. |
 
 ## Feature Matrix
@@ -214,11 +209,10 @@ cargo check
 cargo test
 ```
 
-Refresh Atlassian specs and generated clients:
+Refresh Atlassian specs:
 
 ```bash
 scripts/update-specs.sh
-scripts/generate.sh --in-place
 cargo check --workspace
 ```
 
@@ -226,7 +220,7 @@ cargo check --workspace
 
 Releases are built by cargo-dist. The release workflow runs on version tags such
 as `v0.1.0`, builds Linux, macOS, and Windows binaries, creates a GitHub
-Release, and publishes the Homebrew formula to `NeoHsu/homebrew-tap`.
+Release with prebuilt binaries and installer scripts.
 
 Release checklist:
 
@@ -236,8 +230,4 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Required GitHub secret:
-
-| Secret | Purpose |
-| --- | --- |
-| `HOMEBREW_TAP_TOKEN` | Personal access token or GitHub App token with write access to `NeoHsu/homebrew-tap`. |
+Releases are built by cargo-dist and published to GitHub Releases automatically.
