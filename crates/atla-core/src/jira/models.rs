@@ -1,5 +1,5 @@
 use atla_jira_api::types as generated_types;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::path::PathBuf;
 
 use super::util::{adf_plain_text, issue_fields, quote_jql_value};
@@ -434,6 +434,7 @@ pub struct JiraIssueLink {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraAttachment {
+    #[serde(default, deserialize_with = "deserialize_string_or_number")]
     pub id: Option<String>,
     pub filename: Option<String>,
     pub mime_type: Option<String>,
@@ -768,4 +769,17 @@ impl From<generated_types::Project> for JiraProject {
             archived: project.archived,
         }
     }
+}
+
+/// Deserializes a value that may be either a JSON string or number into `Option<String>`.
+fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    Ok(value.and_then(|v| match v {
+        serde_json::Value::String(s) => Some(s),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }))
 }

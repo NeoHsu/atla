@@ -221,6 +221,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_jira_attachment_with_integer_id() {
+        let attachment: JiraAttachment = serde_json::from_value(serde_json::json!({
+            "id": 126308,
+            "filename": "screenshot.png",
+            "mimeType": "image/png",
+            "size": 1024,
+            "content": "https://example.atlassian.net/rest/api/3/attachment/content/126308"
+        }))
+        .expect("attachment with integer id");
+
+        assert_eq!(attachment.id.as_deref(), Some("126308"));
+        assert_eq!(attachment.filename.as_deref(), Some("screenshot.png"));
+    }
+
+    #[test]
     fn builds_attachment_output_paths() {
         assert_eq!(
             attachment_output_path(None, "error.png"),
