@@ -79,4 +79,3 @@ cargo doc --open
 ## Author
 
 ecosystem@atlassian.com
-

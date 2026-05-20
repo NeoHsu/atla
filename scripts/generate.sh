@@ -64,7 +64,7 @@ replace_in_file() {
   local pattern="$2"
   local replacement="$3"
 
-  python - "$file" "$pattern" "$replacement" <<'PY'
+  python3 - "$file" "$pattern" "$replacement" <<'PY'
 from pathlib import Path
 import re
 import sys
@@ -82,16 +82,15 @@ prepend_line_if_missing() {
   local file="$1"
   local line="$2"
 
-  python - "$file" "$line" <<'PY'
+  python3 - "$file" "$line" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
 line = sys.argv[2]
 text = path.read_text()
-prefix = f"{line}\n"
-if not text.startswith(prefix):
-    text = prefix + text
+if line not in text:
+    text = f"{line}\n" + text
 path.write_text(text)
 PY
 }
@@ -120,7 +119,7 @@ fix_generated_lints() {
 }
 
 update_specs_manifest_generated_at() {
-  python - "${manifest_path}" "${generator_version}" <<'PY'
+  python3 - "${manifest_path}" "${generator_version}" <<'PY'
 from datetime import datetime, timezone
 from pathlib import Path
 import json
@@ -193,7 +192,7 @@ format_generated_crate() {
     return
   fi
 
-  edition="$(python - "${manifest}" <<'PY'
+  edition="$(python3 - "${manifest}" <<'PY'
 from pathlib import Path
 import re
 import sys

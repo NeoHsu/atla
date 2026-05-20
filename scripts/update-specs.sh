@@ -26,7 +26,7 @@ curl -fL "${confluence_v1_url}" \
   "${repo_root}/specs/confluence-v1.json" \
   "${repo_root}/specs/confluence-v1-partial.json"
 
-python - "${repo_root}" "${manifest_path}" "${generator_version}" "${jira_url}" "${confluence_v2_url}" "${confluence_v1_url}" <<'PY'
+python3 - "${repo_root}" "${manifest_path}" "${generator_version}" "${jira_url}" "${confluence_v2_url}" "${confluence_v1_url}" <<'PY'
 from pathlib import Path
 import hashlib
 import json
