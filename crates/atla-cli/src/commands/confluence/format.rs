@@ -445,7 +445,8 @@ pub(super) fn print_comments(
             .map(|comment| {
                 vec![
                     comment.id.as_deref().unwrap_or("-").to_owned(),
-                    comment.page_id
+                    comment
+                        .page_id
                         .as_deref()
                         .or(comment.blog_post_id.as_deref())
                         .unwrap_or("-")
@@ -553,10 +554,9 @@ pub(super) fn print_page_with_attachments(
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => {
-            let mut page_json = serde_json::to_value(page)
-                .context("failed to serialize page")?;
-            page_json["attachments"] = serde_json::to_value(attachments)
-                .context("failed to serialize attachments")?;
+            let mut page_json = serde_json::to_value(page).context("failed to serialize page")?;
+            page_json["attachments"] =
+                serde_json::to_value(attachments).context("failed to serialize attachments")?;
             output::print_json(&page_json)
         }
         _ => {

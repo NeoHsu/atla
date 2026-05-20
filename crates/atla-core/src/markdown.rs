@@ -338,8 +338,7 @@ fn is_table_row(line: &str) -> bool {
 fn is_table_separator(line: &str) -> bool {
     let t = line.trim();
     t.starts_with('|')
-        && t.chars()
-            .all(|c| matches!(c, '|' | '-' | ':' | ' ' | '\t'))
+        && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' ' | '\t'))
         && t.contains('-')
 }
 
@@ -484,15 +483,17 @@ fn parse_inline_markdown(text: &str) -> Vec<Value> {
 
 fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
     // Handle backslash escapes: \* \_ \~ \\ \[ \] \! \| \# \`
-    if let Some(rest) = text.strip_prefix('\\') {
-        if let Some(ch) = rest.chars().next() {
-            if matches!(ch, '*' | '_' | '~' | '\\' | '[' | ']' | '!' | '|' | '#' | '`') {
-                return Some((
-                    vec![json!({"type": "text", "text": ch.to_string()})],
-                    1 + ch.len_utf8(),
-                ));
-            }
-        }
+    if let Some(rest) = text.strip_prefix('\\')
+        && let Some(ch) = rest.chars().next()
+        && matches!(
+            ch,
+            '*' | '_' | '~' | '\\' | '[' | ']' | '!' | '|' | '#' | '`'
+        )
+    {
+        return Some((
+            vec![json!({"type": "text", "text": ch.to_string()})],
+            1 + ch.len_utf8(),
+        ));
     }
 
     if let Some((nodes, consumed)) = parse_delimited_mark(text, "**", "strong") {
@@ -549,15 +550,15 @@ fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
 fn strip_link_title(url: &str) -> &str {
     let url = url.trim();
     // Check for trailing `"title"` or `'title'`
-    if let Some(space_pos) = url.rfind(" \"") {
-        if url.ends_with('"') {
-            return url[..space_pos].trim();
-        }
+    if let Some(space_pos) = url.rfind(" \"")
+        && url.ends_with('"')
+    {
+        return url[..space_pos].trim();
     }
-    if let Some(space_pos) = url.rfind(" '") {
-        if url.ends_with('\'') {
-            return url[..space_pos].trim();
-        }
+    if let Some(space_pos) = url.rfind(" '")
+        && url.ends_with('\'')
+    {
+        return url[..space_pos].trim();
     }
     url
 }

@@ -5,7 +5,7 @@ use crate::cli::{BlogCommentAction, GlobalArgs};
 use crate::context::AppContext;
 
 use super::format::{
-    confluence_body_representation, print_comment, print_comments, read_body, print_deleted,
+    confluence_body_representation, print_comment, print_comments, print_deleted, read_body,
 };
 
 pub(super) async fn run_blog_comment(
@@ -80,7 +80,11 @@ pub(super) async fn run_blog_comment(
                 })?;
             print_comment(&comment, global)?;
         }
-        BlogCommentAction::Delete { blog_id, comment_id, yes } => {
+        BlogCommentAction::Delete {
+            blog_id,
+            comment_id,
+            yes,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();

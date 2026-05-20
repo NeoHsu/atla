@@ -642,9 +642,7 @@ fn optional_i64(value: &Value, names: &[&str]) -> Option<i64> {
 }
 
 fn optional_body_text(value: &Value) -> Option<String> {
-    let Some(body) = field(value, &["body"]) else {
-        return None;
-    };
+    let body = field(value, &["body"])?;
     if let Some(text) = string_from_value(body) {
         return Some(text);
     }

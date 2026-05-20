@@ -122,9 +122,7 @@ impl ConfluenceClient {
                     "/wiki/rest/api/content/{content_id}/child/attachment/{attachment_id}/download"
                 )
             })
-            .unwrap_or_else(|| {
-                format!("/wiki/rest/api/content/{attachment_id}/download")
-            });
+            .unwrap_or_else(|| format!("/wiki/rest/api/content/{attachment_id}/download"));
         let mut download_links = attachment
             .download_link
             .clone()

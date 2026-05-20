@@ -183,9 +183,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 let attachments = client
                     .list_page_attachments(&search)
                     .await
-                    .with_context(|| {
-                        format!("failed to list attachments for page `{id}`")
-                    })?;
+                    .with_context(|| format!("failed to list attachments for page `{id}`"))?;
                 if matches!(format, Some(ContentViewFormat::Markdown)) {
                     print_page_body_markdown(&page)?;
                 } else if format.is_some() {
@@ -427,31 +425,28 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             }
 
             let client = ctx.confluence_client()?;
-            client
-                .delete_page(&id, purge, draft)
-                .await
-                .map_err(|err| {
-                    let msg = err.to_string();
-                    if purge && msg.contains("404") {
-                        anyhow::anyhow!(
-                            "failed to delete Confluence page `{id}` from {}\n\
+            client.delete_page(&id, purge, draft).await.map_err(|err| {
+                let msg = err.to_string();
+                if purge && msg.contains("404") {
+                    anyhow::anyhow!(
+                        "failed to delete Confluence page `{id}` from {}\n\
                             Hint: to purge a page it must first be in the trash; \
                             run without --purge to move it to trash, then retry with --purge",
-                            client.instance_url()
-                        )
-                    } else if msg.contains("404") && !draft {
-                        anyhow::anyhow!(
-                            "failed to delete Confluence page `{id}` from {}\n\
+                        client.instance_url()
+                    )
+                } else if msg.contains("404") && !draft {
+                    anyhow::anyhow!(
+                        "failed to delete Confluence page `{id}` from {}\n\
                             Hint: if this is a draft page, add the `--draft` flag",
-                            client.instance_url()
-                        )
-                    } else {
-                        anyhow::anyhow!(
-                            "failed to delete Confluence page `{id}` from {}: {err}",
-                            client.instance_url()
-                        )
-                    }
-                })?;
+                        client.instance_url()
+                    )
+                } else {
+                    anyhow::anyhow!(
+                        "failed to delete Confluence page `{id}` from {}: {err}",
+                        client.instance_url()
+                    )
+                }
+            })?;
             println!("Deleted Confluence page {id}");
         }
         PageAction::Move { id, parent } => {
