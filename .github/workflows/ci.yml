@@ -30,6 +30,23 @@ jobs:
         run: |
           if command -v java >/dev/null 2>&1; then
             scripts/generate.sh --product all --in-place
+
+            # Restore manually-maintained files (tracked in git but not generated from spec)
+            for crate_dir in crates/atla-jira-api crates/atla-confluence-api crates/atla-confluence-v1-api; do
+              files_list="${crate_dir}/.openapi-generator/FILES"
+              if [[ -f "${files_list}" ]]; then
+                git diff --name-only --diff-filter=D "${crate_dir}" | while IFS= read -r deleted; do
+                  rel="${deleted#${crate_dir}/}"
+                  if ! grep -qxF "${rel}" "${files_list}" 2>/dev/null; then
+                    git checkout -- "${deleted}"
+                  fi
+                done
+              fi
+            done
+
+            # Restore hand-edited files that contain necessary fixes not in the spec
+            git checkout -- crates/atla-jira-api/src/models/attachment.rs
+
             git --no-pager diff --exit-code crates/atla-jira-api crates/atla-confluence-api crates/atla-confluence-v1-api || \
               (echo "Generated code is out of date. Please run scripts/generate.sh --product all --in-place" && exit 1)
           else

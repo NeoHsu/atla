@@ -6,6 +6,18 @@ Unified Atlassian CLI for Jira and Confluence.
 Confluence commands with profile-based authentication, human-friendly tables,
 and machine-friendly output formats.
 
+## Documentation
+
+| File | Description |
+| --- | --- |
+| [Getting Started](docs/getting-started.md) | Installation, first-time setup, shell completions, quick demo |
+| [Authentication](docs/authentication.md) | Auth commands, multi-profile management, token storage, env vars |
+| [Configuration](docs/configuration.md) | Config keys, aliases, config.toml schema, environment overrides |
+| [Jira](docs/jira.md) | Full Jira command reference: projects, issues, boards, sprints |
+| [Confluence](docs/confluence.md) | Full Confluence command reference: spaces, pages, blogs, attachments |
+| [Output Formats](docs/output-formats.md) | Global flags, output formats, scripting/CI patterns |
+| [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
+
 ## Install
 
 Download a prebuilt binary from GitHub Releases, use the generated installer, or
