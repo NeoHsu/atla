@@ -153,6 +153,17 @@ const selectedOperations = {
       response: "IssueTypeList",
     },
   },
+  "/rest/api/3/issue/createmeta/{projectIdOrKey}/issuetypes/{issueTypeId}": {
+    get: {
+      parameters: [
+        pathParameter("projectIdOrKey", { type: "string" }),
+        pathParameter("issueTypeId", { type: "string" }),
+        queryParameter("startAt", { type: "integer", format: "int32" }),
+        queryParameter("maxResults", { type: "integer", format: "int32" }),
+      ],
+      response: "IssueFieldPage",
+    },
+  },
   "/rest/api/3/attachment/{id}": {
     get: {
       parameters: [
@@ -471,6 +482,44 @@ function simplifiedSchemas() {
         thumbnail: { type: "string" },
         created: { type: "string" },
         author: { "$ref": "#/components/schemas/User" },
+      },
+    },
+    IssueFieldPage: {
+      type: "object",
+      properties: {
+        startAt: { type: "integer", format: "int32" },
+        maxResults: { type: "integer", format: "int32" },
+        total: { type: "integer", format: "int32" },
+        fields: {
+          type: "array",
+          items: { $ref: "#/components/schemas/IssueFieldMeta" },
+        },
+      },
+    },
+    IssueFieldMeta: {
+      type: "object",
+      properties: {
+        fieldId: { type: "string" },
+        key: { type: "string" },
+        name: { type: "string" },
+        required: { type: "boolean" },
+        hasDefaultValue: { type: "boolean" },
+        schema: {
+          type: "object",
+          additionalProperties: true,
+        },
+        allowedValues: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        operations: {
+          type: "array",
+          items: { type: "string" },
+        },
+        autoCompleteUrl: { type: "string" },
       },
     },
     LinkIssueRequestJsonBean: {

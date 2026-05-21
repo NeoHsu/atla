@@ -152,7 +152,7 @@ atla jira issue delete PROJ-123 --delete-subtasks --yes
 **Syntax**
 
 ```bash
-atla jira issue assign <KEY> [--to me|ACCOUNT_ID|NAME] [--account-id] [--unassign]
+atla jira issue assign <KEY> <--to me|ACCOUNT_ID|NAME | --unassign> [--account-id]
 ```
 
 **Examples**
@@ -385,6 +385,67 @@ atla jira issue link github-commits PROJ-123 -o json | jq '.[].url'
 ```
 
 Returns: `id` (short SHA), `author`, `timestamp`, `repository`, `message` (first line), `url`.
+
+### Issue Fields
+
+List the fields available when creating an issue, including which are required and what values are allowed.
+
+**Syntax**
+
+```bash
+atla jira issue fields --project KEY --type TYPE [--required-only]
+```
+
+**Flags**
+
+| Flag | Description |
+| --- | --- |
+| `--project KEY` | Project key (required) |
+| `--type TYPE` | Issue type name or ID — e.g. `Bug`, `Story`, `Task` (required) |
+| `--required-only` | Show only required fields |
+
+**Examples**
+
+```bash
+# All fields for Bug in PROJ
+atla jira issue fields --project PROJ --type Bug
+
+# Only the required fields
+atla jira issue fields --project PROJ --type Bug --required-only
+
+# Machine-readable output for scripting
+atla jira issue fields --project PROJ --type Bug -o json
+```
+
+**Output columns**
+
+| Column | Description |
+| --- | --- |
+| `field_id` | Field ID to use in `--field` (e.g. `customfield_10108`) |
+| `name` | Human-readable field name (e.g. `Severity`) |
+| `required` | `true` if the field must be provided on create |
+| `type` | Schema type: `string`, `option`, `array`, `priority`, `user`, etc. |
+| `allowed_values` | First 5 allowed values for option/array fields |
+
+**Typical workflow — create with all required fields**
+
+```bash
+# 1. Discover required fields
+atla jira issue fields --project PROJ --type Bug --required-only
+
+# 2. Create with the required fields filled in
+atla jira issue create --project PROJ --type Bug \
+  --summary "Login page crashes on Safari" \
+  --field 'components=[{"id":"10582"}]' \
+  --field 'customfield_10108={"id":"10022"}' \
+  --field 'priority={"id":"10002"}' \
+  --field 'customfield_10166="5.1.0"' \
+  --field 'versions=[{"id":"13135"}]'
+```
+
+> **Tip:** For `string` type fields (e.g. `Affect Build`), wrap the value in JSON string quotes:
+> `--field 'customfield_10166="5.1.0"'` — not `--field customfield_10166=5.1.0`.
+> Plain values without quotes are auto-wrapped as `{"name":"..."}`, which the API rejects for string fields.
 
 ### Worklogs
 
@@ -638,16 +699,32 @@ atla jira issue view PROJ-123 --fields '*all' --output json
 On `create`, `update`, and `transition`, `--field` lets you set arbitrary Jira fields.
 
 - Raw JSON is accepted: `--field customfield_12345='{"value":"Ready"}'`
-- Plain values are auto-wrapped as `{"name":"VALUE"}`
+- Plain values are auto-wrapped as `{"name":"VALUE"}` — correct for option/priority fields
 - `assignee=...` becomes `{"accountId":"..."}`
 - `parent=PROJ-1` becomes `{"key":"PROJ-1"}`
+- **Text (string) fields must be quoted as a JSON string**: `--field customfield_10166='"5.1.0"'`
+  Plain values like `5.1.0` would be auto-wrapped as `{"name":"5.1.0"}`, which the API rejects for string fields.
 
 Examples:
 
 ```bash
-atla jira issue create --project PROJ --type Story --summary 'Parent issue'   --field priority=Highest
+atla jira issue create --project PROJ --type Story --summary 'Parent issue' \
+  --field priority=Highest
 
-atla jira issue transition PROJ-123 --to Done   --field resolution='{"name":"Done"}'
+atla jira issue transition PROJ-123 --to Done \
+  --field resolution='{"name":"Done"}'
+
+# String custom field — use JSON string syntax
+atla jira issue create --project PROJ --type Bug --summary 'Login crash' \
+  --field 'customfield_10166="5.1.0"'
+```
+
+### Discovering required fields
+
+Before creating an issue in a project that has required custom fields, use `issue fields` to see what the API expects:
+
+```bash
+atla jira issue fields --project PROJ --type Bug --required-only
 ```
 
 ## `--dry-run` tips

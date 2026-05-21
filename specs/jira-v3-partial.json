@@ -1224,6 +1224,100 @@
         "x-atlassian-connect-scope": "READ"
       }
     },
+    "/rest/api/3/issue/createmeta/{projectIdOrKey}/issuetypes/{issueTypeId}": {
+      "get": {
+        "deprecated": false,
+        "description": "Returns a page of field metadata for a specified project and issuetype id. Use the information to populate the requests in [ Create issue](#api-rest-api-3-issue-post) and [Create issues](#api-rest-api-3-issue-bulk-post).\n\nThis operation can be accessed anonymously.\n\n**[Permissions](#permissions) required:** *Create issues* [project permission](https://confluence.atlassian.com/x/yodKLg) in the requested projects.",
+        "operationId": "getCreateIssueMetaIssueTypeId",
+        "parameters": [
+          {
+            "name": "projectIdOrKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "issueTypeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startAt",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "maxResults",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueFieldPage"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          },
+          {
+            "OAuth2": [
+              "read:jira-work"
+            ]
+          },
+          {}
+        ],
+        "summary": "Get create field metadata for a project and issue type id",
+        "tags": [
+          "Issues"
+        ],
+        "x-atlassian-data-security-policy": [
+          {
+            "app-access-rule-exempt": true
+          }
+        ],
+        "x-atlassian-oauth2-scopes": [
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:jira-work"
+            ],
+            "state": "Current"
+          },
+          {
+            "scheme": "OAuth2",
+            "scopes": [
+              "read:issue-meta:jira",
+              "read:avatar:jira",
+              "read:field-configuration:jira"
+            ],
+            "state": "Beta"
+          }
+        ],
+        "x-atlassian-connect-scope": "READ"
+      }
+    },
     "/rest/api/3/attachment/{id}": {
       "get": {
         "deprecated": false,
@@ -1722,6 +1816,69 @@
           },
           "author": {
             "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "IssueFieldPage": {
+        "type": "object",
+        "properties": {
+          "startAt": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxResults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssueFieldMeta"
+            }
+          }
+        }
+      },
+      "IssueFieldMeta": {
+        "type": "object",
+        "properties": {
+          "fieldId": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "hasDefaultValue": {
+            "type": "boolean"
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "allowedValues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "autoCompleteUrl": {
+            "type": "string"
           }
         }
       },

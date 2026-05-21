@@ -104,7 +104,10 @@ impl ConfluenceClient {
         if let Some(root_level) = page.root_level {
             request = request.root_level(root_level);
         }
-        let page = request.send().await.map_err(generated_error)?.into_inner();
+        let page = match request.send().await {
+            Ok(rv) => rv.into_inner(),
+            Err(e) => return Err(generated_error_with_body(e).await),
+        };
 
         Ok(page.into())
     }
@@ -165,15 +168,17 @@ impl ConfluenceClient {
         &self,
         page: &ConfluencePageUpdate,
     ) -> Result<ConfluencePage, ApiError> {
-        let updated = self
+        let updated = match self
             .generated
             .update_page()
             .id(parse_i64_id(&page.id)?)
             .body(page.to_generated())
             .send()
             .await
-            .map_err(generated_error)?
-            .into_inner();
+        {
+            Ok(rv) => rv.into_inner(),
+            Err(e) => return Err(generated_error_with_body(e).await),
+        };
 
         Ok(updated.into())
     }

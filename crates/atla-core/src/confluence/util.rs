@@ -1,6 +1,6 @@
 use std::num::NonZeroU32;
 
-use crate::client::ApiError;
+use crate::client::{ApiError, extract_api_error_body};
 
 pub(super) fn limit_i32(limit: u32) -> i32 {
     limit.min(i32::MAX as u32) as i32
@@ -38,6 +38,36 @@ pub(super) fn generated_error(error: atla_confluence_api::Error<()>) -> ApiError
             body: String::new(),
         },
         _ => ApiError::Decode("unknown API error".to_owned()),
+    }
+}
+
+pub(super) async fn generated_error_with_body(error: atla_confluence_api::Error<()>) -> ApiError {
+    match error {
+        atla_confluence_api::Error::UnexpectedResponse(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            ApiError::Http {
+                status,
+                body: extract_api_error_body(&body),
+            }
+        }
+        other => generated_error(other),
+    }
+}
+
+pub(super) async fn generated_v1_error_with_body(
+    error: atla_confluence_v1_api::Error<()>,
+) -> ApiError {
+    match error {
+        atla_confluence_v1_api::Error::UnexpectedResponse(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            ApiError::Http {
+                status,
+                body: extract_api_error_body(&body),
+            }
+        }
+        other => generated_v1_error(other),
     }
 }
 

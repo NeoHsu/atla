@@ -1,9 +1,9 @@
 use anyhow::Context;
 use atla_core::{
     JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage, JiraComment, JiraCommentPage,
-    JiraCreatedIssue, JiraGithubCommit, JiraGithubPullRequest, JiraIssue, JiraIssueLabelUpdate,
-    JiraIssueLink, JiraIssueType, JiraProject, JiraSprint, JiraSprintPage, JiraTransition,
-    JiraUser, JiraWorklog, JiraWorklogPage, markdown::adf_to_markdown,
+    JiraCreatedIssue, JiraGithubCommit, JiraGithubPullRequest, JiraIssue, JiraIssueField,
+    JiraIssueLabelUpdate, JiraIssueLink, JiraIssueType, JiraProject, JiraSprint, JiraSprintPage,
+    JiraTransition, JiraUser, JiraWorklog, JiraWorklogPage, markdown::adf_to_markdown,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -738,6 +738,53 @@ pub(super) fn print_issue_types(
     )
 }
 
+pub(super) fn print_issue_fields(
+    fields: &[JiraIssueField],
+    required_only: bool,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    let filtered: Vec<&JiraIssueField> = if required_only {
+        fields.iter().filter(|f| f.required).collect()
+    } else {
+        fields.iter().collect()
+    };
+
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        &filtered,
+        filtered.iter().map(|f| f.field_id.clone()).collect(),
+        &["field_id", "name", "required", "type", "allowed_values"],
+        filtered
+            .iter()
+            .map(|f| {
+                let av = if f.allowed_values.is_empty() {
+                    "-".to_owned()
+                } else {
+                    f.allowed_values
+                        .iter()
+                        .take(5)
+                        .map(|v| v.display())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                        + if f.allowed_values.len() > 5 {
+                            ", …"
+                        } else {
+                            ""
+                        }
+                };
+                vec![
+                    f.field_id.clone(),
+                    f.name.clone(),
+                    f.required.to_string(),
+                    f.schema_type.as_deref().unwrap_or("-").to_owned(),
+                    av,
+                ]
+            })
+            .collect(),
+        None,
+    )
+}
+
 pub(super) fn print_attachment_downloads(
     downloads: &[JiraAttachmentDownload],
     global: &GlobalArgs,
@@ -1186,6 +1233,9 @@ pub(super) fn parse_fields(
 
 /// Parse a field value: try JSON first; if that fails and the value is a plain
 /// identifier (no JSON structural chars), auto-wrap it as `{"name": value}`.
+///
+/// Note: plain string fields (e.g. text custom fields) must be quoted as JSON strings:
+/// `--field myfield="some value"` sends the string directly without wrapping.
 pub(super) fn parse_field_value(name: &str, raw: &str) -> anyhow::Result<serde_json::Value> {
     if let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) {
         return Ok(v);
@@ -1204,8 +1254,9 @@ pub(super) fn parse_field_value(name: &str, raw: &str) -> anyhow::Result<serde_j
     }
     anyhow::bail!(
         "invalid value for field `{name}`: `{raw}`\n  \
-         Tip: use JSON (e.g. --field '{name}={{\"name\":\"High\"}}') \
-         or a plain name (e.g. --field '{name}=High')"
+         Tip: use JSON for objects/arrays (e.g. --field '{name}={{\"name\":\"High\"}}'),\n  \
+         a plain name (e.g. --field '{name}=High') for option fields,\n  \
+         or a quoted JSON string (e.g. --field '{name}=\"some text\"') for text fields"
     )
 }
 

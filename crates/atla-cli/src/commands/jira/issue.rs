@@ -1,7 +1,7 @@
 use anyhow::Context;
 use atla_core::{
-    JiraAssigneeTarget, JiraIssueAssign, JiraIssueCreate, JiraIssueList, JiraIssueUpdate,
-    default_issue_fields,
+    JiraAssigneeTarget, JiraIssueAssign, JiraIssueCreate, JiraIssueFieldsQuery, JiraIssueList,
+    JiraIssueUpdate, default_issue_fields,
 };
 
 use crate::cli::{GlobalArgs, IssueAction, IssueCommand, IssueCommentAction};
@@ -12,9 +12,9 @@ use super::format::{
     can_prompt, issue_fields_for_url, open_web_url, parse_fields, parse_issue_fields,
     parse_label_update, print_comment, print_comments, print_created_issue, print_deleted,
     print_github_commits, print_github_pull_requests, print_issue, print_issue_assign,
-    print_issue_comments_section, print_issue_delete, print_issue_update, print_issue_with_github,
-    print_issues, print_section_header, print_transition_update, read_optional_text,
-    read_required_text, select_transition,
+    print_issue_comments_section, print_issue_delete, print_issue_fields, print_issue_update,
+    print_issue_with_github, print_issues, print_section_header, print_transition_update,
+    read_optional_text, read_required_text, select_transition,
 };
 use super::link::run_issue_link;
 use super::worklog::run_issue_worklog;
@@ -587,6 +587,48 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
         IssueAction::Attachment { action } => run_issue_attachment(action, global).await?,
         IssueAction::Link { action } => run_issue_link(action, global).await?,
         IssueAction::Worklog { action } => run_issue_worklog(action, global).await?,
+        IssueAction::Fields {
+            project,
+            issue_type,
+            required_only,
+        } => {
+            let ctx = AppContext::load(global)?;
+            let client = ctx.jira_client()?;
+
+            let issue_types = client
+                .list_issue_types(&project)
+                .await
+                .with_context(|| format!("failed to list issue types for project `{project}`"))?;
+
+            let matched = issue_types
+                .iter()
+                .find(|t| {
+                    t.name
+                        .as_deref()
+                        .map(|n| n.eq_ignore_ascii_case(&issue_type))
+                        == Some(true)
+                        || t.id.as_deref() == Some(issue_type.as_str())
+                })
+                .ok_or_else(|| {
+                    anyhow::anyhow!("issue type `{issue_type}` not found in project `{project}`")
+                })?;
+
+            let type_id = matched
+                .id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("issue type has no id"))?;
+
+            let query = JiraIssueFieldsQuery {
+                project_key: project.clone(),
+                issue_type_id: type_id.to_owned(),
+            };
+
+            let fields = client.get_issue_fields(&query).await.with_context(|| {
+                format!("failed to get fields for `{issue_type}` in project `{project}`")
+            })?;
+
+            print_issue_fields(&fields, required_only, global)?;
+        }
     }
 
     Ok(())

@@ -53,7 +53,10 @@ impl ConfluenceClient {
         if let Some(private) = post.private {
             request = request.private(private);
         }
-        let post = request.send().await.map_err(generated_error)?.into_inner();
+        let post = match request.send().await {
+            Ok(rv) => rv.into_inner(),
+            Err(e) => return Err(generated_error_with_body(e).await),
+        };
 
         Ok(post.into())
     }
@@ -62,15 +65,17 @@ impl ConfluenceClient {
         &self,
         post: &ConfluenceBlogPostUpdate,
     ) -> Result<ConfluenceBlogPost, ApiError> {
-        let post = self
+        let post = match self
             .generated
             .update_blog_post()
             .id(parse_i64_id(&post.id)?)
             .body(post.to_generated())
             .send()
             .await
-            .map_err(generated_error)?
-            .into_inner();
+        {
+            Ok(rv) => rv.into_inner(),
+            Err(e) => return Err(generated_error_with_body(e).await),
+        };
 
         Ok(post.into())
     }

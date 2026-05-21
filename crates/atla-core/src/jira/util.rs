@@ -1,4 +1,4 @@
-use crate::client::ApiError;
+use crate::client::{ApiError, extract_api_error_body};
 use crate::markdown::markdown_to_adf;
 
 pub(super) fn limit_i32(limit: u32) -> i32 {
@@ -22,6 +22,20 @@ pub(super) fn generated_error(error: atla_jira_api::Error<()>) -> ApiError {
             body: String::new(),
         },
         _ => ApiError::Decode("unknown API error".to_owned()),
+    }
+}
+
+pub(super) async fn generated_error_with_body(error: atla_jira_api::Error<()>) -> ApiError {
+    match error {
+        atla_jira_api::Error::UnexpectedResponse(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            ApiError::Http {
+                status,
+                body: extract_api_error_body(&body),
+            }
+        }
+        other => generated_error(other),
     }
 }
 

@@ -232,6 +232,16 @@ pub enum IssueAction {
         #[command(subcommand)]
         action: IssueWorklogAction,
     },
+    /// List fields required to create an issue in a project
+    Fields {
+        #[arg(long)]
+        project: String,
+        #[arg(long = "type")]
+        issue_type: String,
+        /// Show only required fields (default: show all)
+        #[arg(long)]
+        required_only: bool,
+    },
 }
 
 #[derive(Debug, Args)]

@@ -3,10 +3,10 @@ use atla_jira_api::types as generated_types;
 use super::JiraClient;
 use super::models::{
     JiraAssigneeTarget, JiraCreatedIssue, JiraIssue, JiraIssueAssign, JiraIssueCreate,
-    JiraIssueLabelUpdate, JiraIssueSearch, JiraIssueSearchPage, JiraIssueUpdate, JiraTransition,
-    JiraUser,
+    JiraIssueField, JiraIssueFieldsQuery, JiraIssueLabelUpdate, JiraIssueSearch,
+    JiraIssueSearchPage, JiraIssueUpdate, JiraTransition, JiraUser,
 };
-use super::util::{generated_error, issue_fields, limit_i32};
+use super::util::{generated_error, generated_error_with_body, issue_fields, limit_i32};
 use crate::client::{ApiError, read_empty, read_json};
 
 impl JiraClient {
@@ -14,24 +14,30 @@ impl JiraClient {
         &self,
         issue: &JiraIssueCreate,
     ) -> Result<JiraCreatedIssue, ApiError> {
-        self.generated
+        match self
+            .generated
             .create_issue()
             .body(issue.to_generated())
             .send()
             .await
-            .map(|rv| JiraCreatedIssue::from(rv.into_inner()))
-            .map_err(generated_error)
+        {
+            Ok(rv) => Ok(JiraCreatedIssue::from(rv.into_inner())),
+            Err(e) => Err(generated_error_with_body(e).await),
+        }
     }
 
     pub async fn update_issue(&self, issue: &JiraIssueUpdate) -> Result<(), ApiError> {
-        self.generated
+        match self
+            .generated
             .edit_issue()
             .issue_id_or_key(&issue.issue_id_or_key)
             .body(issue.to_generated())
             .send()
             .await
-            .map(|_| ())
-            .map_err(generated_error)
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(generated_error_with_body(e).await),
+        }
     }
 
     pub async fn update_issue_labels(&self, labels: &JiraIssueLabelUpdate) -> Result<(), ApiError> {
@@ -47,14 +53,17 @@ impl JiraClient {
             update: update_map,
         };
 
-        self.generated
+        match self
+            .generated
             .edit_issue()
             .issue_id_or_key(&labels.issue_id_or_key)
             .body(details)
             .send()
             .await
-            .map(|_| ())
-            .map_err(generated_error)
+        {
+            Ok(_) => Ok(()),
+            Err(e) => Err(generated_error_with_body(e).await),
+        }
     }
 
     pub async fn search_issues(
@@ -168,13 +177,17 @@ impl JiraClient {
                 fields
             },
         };
-        self.generated
+        match self
+            .generated
             .do_transition()
             .issue_id_or_key(issue_id_or_key)
             .body(transition_request)
             .send()
             .await
-            .map_err(generated_error)?;
+        {
+            Ok(_) => {}
+            Err(e) => return Err(generated_error_with_body(e).await),
+        }
 
         Ok(transition)
     }
@@ -247,6 +260,45 @@ impl JiraClient {
 
     async fn current_user(&self) -> Result<JiraUser, ApiError> {
         read_json(self.raw_client.get("/rest/api/3/myself")).await
+    }
+
+    pub async fn get_issue_fields(
+        &self,
+        query: &JiraIssueFieldsQuery,
+    ) -> Result<Vec<JiraIssueField>, ApiError> {
+        let page_size = 50_i32;
+        let mut all_fields: Vec<JiraIssueField> = Vec::new();
+        let mut start_at = 0_i32;
+
+        loop {
+            let page = match self
+                .generated
+                .get_create_issue_meta_issue_type_id()
+                .project_id_or_key(&query.project_key)
+                .issue_type_id(&query.issue_type_id)
+                .max_results(page_size)
+                .start_at(start_at)
+                .send()
+                .await
+            {
+                Ok(rv) => rv.into_inner(),
+                Err(e) => return Err(generated_error_with_body(e).await),
+            };
+
+            let total = page.total.unwrap_or(i32::MAX);
+            let fetched = page.fields.len() as i32;
+            all_fields.extend(JiraIssueField::from_page(page));
+
+            if fetched == 0 {
+                break;
+            }
+            start_at += fetched;
+            if start_at >= total {
+                break;
+            }
+        }
+
+        Ok(all_fields)
     }
 
     async fn find_assignable_users(

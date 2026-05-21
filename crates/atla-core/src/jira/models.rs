@@ -793,6 +793,76 @@ impl From<generated_types::Project> for JiraProject {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JiraIssueFieldsQuery {
+    pub project_key: String,
+    pub issue_type_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JiraIssueField {
+    pub field_id: String,
+    pub name: String,
+    pub required: bool,
+    pub schema_type: Option<String>,
+    pub allowed_values: Vec<JiraFieldAllowedValue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct JiraFieldAllowedValue {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub value: Option<String>,
+}
+
+impl JiraFieldAllowedValue {
+    pub fn display(&self) -> String {
+        self.name
+            .as_deref()
+            .or(self.value.as_deref())
+            .or(self.id.as_deref())
+            .unwrap_or("-")
+            .to_owned()
+    }
+}
+
+impl JiraIssueField {
+    pub fn from_page(page: generated_types::IssueFieldPage) -> Vec<Self> {
+        page.fields
+            .into_iter()
+            .filter_map(Self::from_meta)
+            .collect()
+    }
+
+    fn from_meta(f: generated_types::IssueFieldMeta) -> Option<Self> {
+        let field_id = f.field_id.or(f.key)?;
+
+        let schema_type = f
+            .schema
+            .get("type")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+
+        let allowed_values = f
+            .allowed_values
+            .iter()
+            .map(|av| JiraFieldAllowedValue {
+                id: av.get("id").and_then(|v| v.as_str()).map(str::to_owned),
+                name: av.get("name").and_then(|v| v.as_str()).map(str::to_owned),
+                value: av.get("value").and_then(|v| v.as_str()).map(str::to_owned),
+            })
+            .collect();
+
+        Some(Self {
+            field_id,
+            name: f.name.unwrap_or_default(),
+            required: f.required.unwrap_or(false),
+            schema_type,
+            allowed_values,
+        })
+    }
+}
+
 /// Deserializes a value that may be either a JSON string or number into `Option<String>`.
 fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where

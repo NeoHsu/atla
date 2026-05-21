@@ -50,6 +50,7 @@ For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
 - `project list/view/issue-types`
 - `search <JQL>` — run JQL queries
 - `issue list/create/view/update/edit/delete`
+- `issue fields` — list create-meta fields (required flag, type, allowed values)
 - `issue assign/transition`
 - `issue comment add/list/update/delete`
 - `issue attachment upload/list/download/delete`
@@ -75,6 +76,19 @@ For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
 ```bash
 atla jira search 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC'
 ```
+
+### Discover required fields before creating an issue
+```bash
+atla jira issue fields --project PROJ --type Bug --required-only
+```
+
+Use `issue fields` before `issue create` when a project has required custom fields.
+The output shows each field's ID (for `--field`), type, and allowed values.
+
+For **string** type fields, wrap the value as a JSON string:
+`--field 'customfield_10166="5.1.0"'` — not `--field customfield_10166=5.1.0`
+
+Plain values without quotes are auto-wrapped as `{"name":"..."}`, which the API rejects for string fields.
 
 ### Create a Jira issue
 ```bash

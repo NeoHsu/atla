@@ -93,7 +93,7 @@ atla jira issue delete <KEY> [--delete-subtasks] [--yes]
 
 ### Assign an issue
 ```
-atla jira issue assign <KEY> [--to me|ACCOUNT_ID|NAME] [--account-id] [--unassign]
+atla jira issue assign <KEY> <--to me|ACCOUNT_ID|NAME | --unassign> [--account-id]
 ```
 Examples:
 ```bash
@@ -111,6 +111,18 @@ Use `--no-input` in CI.
 ```bash
 atla jira issue transition PROJ-123 --to Done
 atla jira issue transition PROJ-123 --to 'In Review' --field resolution='{"name":"Done"}'
+```
+
+### List issue create-meta fields
+```
+atla jira issue fields --project KEY --type TYPE [--required-only]
+```
+Returns each field's ID, name, required flag, type, and allowed values.
+Use this before `issue create` to discover what `--field` values are needed.
+
+```bash
+atla jira issue fields --project PROJ --type Bug --required-only
+atla jira issue fields --project PROJ --type Bug -o json
 ```
 
 ---
@@ -323,6 +335,20 @@ atla jira search 'project = PROJ' --fields summary,status,customfield_10016
 Available on `create`, `update`, `transition`. Sets arbitrary Jira fields.
 
 - Raw JSON: `--field customfield_12345='{"value":"Ready"}'`
-- Plain values auto-wrap: `--field priority=Highest` becomes `{"name":"Highest"}`
+- Plain values auto-wrap: `--field priority=Highest` becomes `{"name":"Highest"}` — correct for option/priority fields
 - `assignee=ID` becomes `{"accountId":"ID"}`
 - `parent=PROJ-1` becomes `{"key":"PROJ-1"}`
+- **String fields must use JSON string syntax**: `--field 'customfield_10166="5.1.0"'`
+  A plain value like `5.1.0` is auto-wrapped as `{"name":"5.1.0"}`, which the API rejects for `string` type fields.
+  Check the `type` column of `atla jira issue fields` to know when this applies.
+
+Workflow: use `issue fields --required-only` first, then `issue create` with the required `--field` values:
+```bash
+atla jira issue fields --project PROJ --type Bug --required-only
+atla jira issue create --project PROJ --type Bug --summary "Crash on login" \
+  --field 'components=[{"id":"10582"}]' \
+  --field 'customfield_10108={"id":"10022"}' \
+  --field 'priority={"id":"10002"}' \
+  --field 'customfield_10166="5.1.0"' \
+  --field 'versions=[{"id":"13135"}]'
+```

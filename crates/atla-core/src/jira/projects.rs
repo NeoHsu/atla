@@ -1,6 +1,6 @@
 use super::JiraClient;
 use super::models::{JiraIssueType, JiraProject, JiraProjectPage, JiraProjectSearch};
-use super::util::{generated_error, limit_i32};
+use super::util::{generated_error, generated_error_with_body, limit_i32};
 use crate::client::ApiError;
 
 impl JiraClient {
@@ -23,13 +23,16 @@ impl JiraClient {
     }
 
     pub async fn get_project(&self, project_id_or_key: &str) -> Result<JiraProject, ApiError> {
-        self.generated
+        match self
+            .generated
             .get_project()
             .project_id_or_key(project_id_or_key)
             .send()
             .await
-            .map(|rv| JiraProject::from(rv.into_inner()))
-            .map_err(generated_error)
+        {
+            Ok(rv) => Ok(JiraProject::from(rv.into_inner())),
+            Err(e) => Err(generated_error_with_body(e).await),
+        }
     }
 
     pub async fn list_issue_types(

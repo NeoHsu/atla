@@ -86,7 +86,7 @@ cargo install --git https://github.com/NeoHsu/atla atla
 | Jira | Projects | `list`, `view`, `issue-types` |
 | Jira | Search | JQL search with table, JSON, CSV, and key output |
 | Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` |
-| Jira | Issue fields | Summary, description, arbitrary JSON fields, labels |
+| Jira | Issue fields | `fields` — list create-meta fields with required flag, type, and allowed values |
 | Jira | Assignment | `assign --to me`, account ID, or user query |
 | Jira | Transitions | List or apply transitions, with interactive selection when possible |
 | Jira | Comments | `comment add`, `comment list`, `comment update`, `comment delete` |
@@ -168,6 +168,7 @@ atla jira issue assign PROJ-123 --to me
 atla jira issue transition PROJ-123 --to Done
 atla jira issue comment add PROJ-123 "Ready for review"
 atla jira issue delete PROJ-123 --yes
+atla jira issue fields --project PROJ --type Bug --required-only
 atla jira board list --project PROJ
 atla jira sprint active --board 84
 ```
@@ -187,7 +188,7 @@ atla confluence page comment add 67890 "Looks good"
 atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
 atla confluence search "type=page AND space=DEV"
 atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
-atla confluence attachment download 13579 --output ./diagram.png
+atla confluence attachment download 13579 --save-to ./diagram.png
 ```
 
 Confluence v2 remains the primary generated client. Confluence search,

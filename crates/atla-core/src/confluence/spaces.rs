@@ -74,13 +74,16 @@ impl ConfluenceClient {
             ));
         }
 
-        self.generated
+        match self
+            .generated
             .create_space()
             .body(space.to_generated())
             .send()
             .await
-            .map_err(generated_error)
-            .map(|rv| ConfluenceSpace::from(rv.into_inner()))
+        {
+            Ok(rv) => Ok(ConfluenceSpace::from(rv.into_inner())),
+            Err(e) => Err(generated_error_with_body(e).await),
+        }
     }
 
     pub async fn update_space(
@@ -93,14 +96,17 @@ impl ConfluenceClient {
             ));
         }
 
-        let _space = self
+        let _space = match self
             .generated_v1
             .update_space()
             .space_key(&space.key)
             .body(space.to_v1_update_request())
             .send()
             .await
-            .map_err(generated_v1_error)?;
+        {
+            Ok(rv) => rv,
+            Err(e) => return Err(generated_v1_error_with_body(e).await),
+        };
 
         self.get_space_by_key(&space.key).await?.ok_or_else(|| {
             ApiError::Decode(format!(

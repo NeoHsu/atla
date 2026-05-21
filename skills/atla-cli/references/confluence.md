@@ -183,6 +183,7 @@ atla confluence blog label remove <BLOG_ID> <LABEL>
 ```
 atla confluence blog comment list <BLOG_ID> [--limit N=25]
 atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
+atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
 ```
@@ -221,7 +222,7 @@ atla confluence attachment upload <PAGE_ID> <FILE> [--comment TEXT] [--minor-edi
 
 ### Download an attachment
 ```
-atla confluence attachment download <ATTACHMENT_ID> [-o PATH]
+atla confluence attachment download <ATTACHMENT_ID> [--save-to FILE]
 ```
 
 ### Delete an attachment

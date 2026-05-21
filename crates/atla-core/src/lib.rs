@@ -24,12 +24,13 @@ pub use confluence::{
 };
 pub use jira::{
     JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage,
-    JiraBoardSearch, JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue, JiraGithubCommit,
-    JiraGithubPullRequest, JiraIssue, JiraIssueAssign, JiraIssueCreate, JiraIssueLabelUpdate,
-    JiraIssueLink, JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch, JiraIssueSearchPage,
-    JiraIssueType, JiraIssueUpdate, JiraLinkedIssue, JiraProject, JiraProjectPage,
-    JiraProjectSearch, JiraSprint, JiraSprintCreate, JiraSprintPage, JiraSprintSearch,
-    JiraSprintUpdate, JiraStatus, JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate,
-    JiraWorklogPage, default_issue_fields,
+    JiraBoardSearch, JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue,
+    JiraFieldAllowedValue, JiraGithubCommit, JiraGithubPullRequest, JiraIssue, JiraIssueAssign,
+    JiraIssueCreate, JiraIssueField, JiraIssueFieldsQuery, JiraIssueLabelUpdate, JiraIssueLink,
+    JiraIssueLinkCreate, JiraIssueList, JiraIssueSearch, JiraIssueSearchPage, JiraIssueType,
+    JiraIssueUpdate, JiraLinkedIssue, JiraProject, JiraProjectPage, JiraProjectSearch, JiraSprint,
+    JiraSprintCreate, JiraSprintPage, JiraSprintSearch, JiraSprintUpdate, JiraStatus,
+    JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
+    default_issue_fields,
 };
 pub use profile::{AtlaConfig, ConfigStore, Profile};

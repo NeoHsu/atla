@@ -183,7 +183,7 @@ pub(crate) fn extract_api_error_body(body: &str) -> String {
     }
 
     if body.len() > 500 {
-        format!("{}…", &body[..500])
+        format!("{}…", &body[..body.floor_char_boundary(500)])
     } else {
         body.to_owned()
     }

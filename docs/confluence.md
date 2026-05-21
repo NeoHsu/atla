@@ -535,13 +535,13 @@ atla confluence attachment upload 123456 ./diagrams/sso-flow.png   --comment 'Up
 **Syntax**
 
 ```bash
-atla confluence attachment download <ATTACHMENT_ID> [-o PATH]
+atla confluence attachment download <ATTACHMENT_ID> [--save-to FILE]
 ```
 
 **Example**
 
 ```bash
-atla confluence attachment download 987654 -o ./downloads/sso-flow.png
+atla confluence attachment download 987654 --save-to ./downloads/sso-flow.png
 ```
 
 ### Delete an attachment
