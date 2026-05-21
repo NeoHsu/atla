@@ -4,7 +4,10 @@ use atla_core::JiraIssueLinkCreate;
 use crate::cli::{GlobalArgs, IssueLinkAction};
 use crate::context::AppContext;
 
-use super::format::{print_deleted, print_issue_links, print_issue_update};
+use super::format::{
+    print_deleted, print_github_commits, print_github_pull_requests, print_issue_links,
+    print_issue_update,
+};
 
 pub(super) async fn run_issue_link(
     action: IssueLinkAction,
@@ -66,6 +69,53 @@ pub(super) async fn run_issue_link(
                 )
             })?;
             print_issue_links(&links, global)?;
+        }
+        IssueLinkAction::GithubLinks { key } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/rest/dev-status/1.0/issue/detail?issueId={{id}}&applicationType=GitHub&dataType=pullrequest using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let prs = client
+                .list_github_pull_requests(&key)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to fetch GitHub pull requests for `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+            print_github_pull_requests(&prs, global)?;
+        }
+        IssueLinkAction::GithubCommits { key } => {
+            let ctx = AppContext::load(global)?;
+            let profile_name = ctx.profile_name();
+            let profile = ctx.profile();
+
+            if global.dry_run {
+                println!(
+                    "Would GET {}/rest/dev-status/1.0/issue/detail?issueId={{id}}&applicationType={{auto}}&dataType=repository using profile `{profile_name}`",
+                    profile.instance.trim_end_matches('/')
+                );
+                return Ok(());
+            }
+
+            let client = ctx.jira_client()?;
+            let commits = client.list_github_commits(&key).await.with_context(|| {
+                format!(
+                    "failed to fetch GitHub commits for `{key}` from {}",
+                    client.instance_url()
+                )
+            })?;
+            print_github_commits(&commits, global)?;
         }
         IssueLinkAction::Remove { link_id, yes } => {
             let ctx = AppContext::load(global)?;

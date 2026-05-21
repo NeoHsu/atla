@@ -432,6 +432,28 @@ pub struct JiraIssueLink {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JiraGithubPullRequest {
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub status: Option<String>,
+    pub author: Option<String>,
+    pub source_branch: Option<String>,
+    pub destination_branch: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JiraGithubCommit {
+    pub id: Option<String>,
+    pub message: Option<String>,
+    pub url: Option<String>,
+    pub author: Option<String>,
+    pub repository: Option<String>,
+    pub repository_url: Option<String>,
+    pub timestamp: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JiraAttachment {
     #[serde(default, deserialize_with = "deserialize_string_or_number")]

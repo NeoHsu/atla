@@ -16,6 +16,13 @@ atla stores configuration in a TOML file at `~/.config/atla/config.toml`. Use th
 | Configuration | `~/.config/atla/config.toml` | `ATLA_CONFIG` |
 | Credentials | `~/.config/atla/credentials.toml` | `ATLA_CREDENTIALS` |
 
+Path resolution order (highest priority first):
+
+1. `ATLA_CONFIG` / `ATLA_CREDENTIALS` environment variable
+2. `$XDG_CONFIG_HOME/atla/config.toml` (if `XDG_CONFIG_HOME` is set)
+3. `~/.config/atla/config.toml` (default on Linux and macOS)
+4. `%APPDATA%\atla\config.toml` (Windows only)
+
 Override examples:
 
 ```bash

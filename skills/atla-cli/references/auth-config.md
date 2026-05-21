@@ -124,6 +124,7 @@ atla mine --output json --limit 25
 | `ATLA_API_TOKEN` | Alternative token variable | unset |
 | `ATLA_CONFIG` | Config file path | `~/.config/atla/config.toml` |
 | `ATLA_CREDENTIALS` | Credentials file path | `~/.config/atla/credentials.toml` |
+| `XDG_CONFIG_HOME` | XDG base config directory (Linux & macOS) | `~/.config` |
 
 ---
 

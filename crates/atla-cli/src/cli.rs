@@ -191,6 +191,9 @@ pub enum IssueAction {
         web: bool,
         #[arg(long)]
         fields: Option<String>,
+        /// Also fetch GitHub pull requests and commits from the development panel
+        #[arg(long)]
+        with_github: bool,
     },
     Delete {
         key: String,
@@ -312,6 +315,14 @@ pub enum IssueLinkAction {
         link_id: String,
         #[arg(long)]
         yes: bool,
+    },
+    /// List GitHub pull requests linked via the Jira development panel
+    GithubLinks {
+        key: String,
+    },
+    /// List GitHub commits linked via the Jira development panel
+    GithubCommits {
+        key: String,
     },
 }
 

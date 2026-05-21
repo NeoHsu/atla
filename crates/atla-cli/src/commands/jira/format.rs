@@ -1,9 +1,9 @@
 use anyhow::Context;
 use atla_core::{
     JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage, JiraComment, JiraCommentPage,
-    JiraCreatedIssue, JiraIssue, JiraIssueLabelUpdate, JiraIssueLink, JiraIssueType, JiraProject,
-    JiraSprint, JiraSprintPage, JiraTransition, JiraUser, JiraWorklog, JiraWorklogPage,
-    markdown::adf_to_markdown,
+    JiraCreatedIssue, JiraGithubCommit, JiraGithubPullRequest, JiraIssue, JiraIssueLabelUpdate,
+    JiraIssueLink, JiraIssueType, JiraProject, JiraSprint, JiraSprintPage, JiraTransition,
+    JiraUser, JiraWorklog, JiraWorklogPage, markdown::adf_to_markdown,
 };
 use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
@@ -564,6 +564,89 @@ pub(super) fn print_issue_links(
                         .and_then(|issue| issue.summary.as_deref())
                         .unwrap_or("-")
                         .to_owned(),
+                ]
+            })
+            .collect(),
+        None,
+    )
+}
+
+pub(super) fn print_section_header(title: &str) {
+    println!("\n── {title} ──");
+}
+
+/// Emits a single combined JSON object when `--with-github` is used with `-o json`.
+pub(super) fn print_issue_with_github(
+    issue: &JiraIssue,
+    prs: &[JiraGithubPullRequest],
+    commits: &[JiraGithubCommit],
+) -> anyhow::Result<()> {
+    output::print_json(&serde_json::json!({
+        "issue": issue,
+        "pull_requests": prs,
+        "commits": commits,
+    }))
+}
+
+pub(super) fn print_github_pull_requests(
+    prs: &[JiraGithubPullRequest],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        prs,
+        prs.iter().filter_map(|pr| pr.url.clone()).collect(),
+        &[
+            "status",
+            "id",
+            "title",
+            "author",
+            "source",
+            "destination",
+            "url",
+        ],
+        prs.iter()
+            .map(|pr| {
+                vec![
+                    pr.status.as_deref().unwrap_or("-").to_owned(),
+                    pr.id.as_deref().unwrap_or("-").to_owned(),
+                    pr.title.as_deref().unwrap_or("-").to_owned(),
+                    pr.author.as_deref().unwrap_or("-").to_owned(),
+                    pr.source_branch.as_deref().unwrap_or("-").to_owned(),
+                    pr.destination_branch.as_deref().unwrap_or("-").to_owned(),
+                    pr.url.as_deref().unwrap_or("-").to_owned(),
+                ]
+            })
+            .collect(),
+        None,
+    )
+}
+
+pub(super) fn print_github_commits(
+    commits: &[JiraGithubCommit],
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    output::print_records(
+        global.output.unwrap_or(OutputFormat::Table),
+        commits,
+        commits.iter().filter_map(|c| c.url.clone()).collect(),
+        &["id", "author", "timestamp", "repository", "message", "url"],
+        commits
+            .iter()
+            .map(|c| {
+                vec![
+                    c.id.as_deref().unwrap_or("-").to_owned(),
+                    c.author.as_deref().unwrap_or("-").to_owned(),
+                    c.timestamp.as_deref().unwrap_or("-").to_owned(),
+                    c.repository.as_deref().unwrap_or("-").to_owned(),
+                    c.message
+                        .as_deref()
+                        .unwrap_or("-")
+                        .lines()
+                        .next()
+                        .unwrap_or("-")
+                        .to_owned(),
+                    c.url.as_deref().unwrap_or("-").to_owned(),
                 ]
             })
             .collect(),

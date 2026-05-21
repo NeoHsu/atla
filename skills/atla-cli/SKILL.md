@@ -65,7 +65,7 @@ For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
 - `page comment list/add/delete`
 - `blog list/view/create/update/delete`
 - `blog label list/add/remove`
-- `blog comment list/add`
+- `blog comment list/add/delete`
 - `search <CQL>` — run CQL queries
 - `attachment list/view/upload/download/delete`
 
@@ -107,6 +107,31 @@ atla confluence page create --space ENG --title "Meeting Notes" \
 ### Search Confluence
 ```bash
 atla confluence search 'type = page AND space = ENG AND label = runbook' --limit 25
+```
+
+## Confluence: Always Use Attachments, Never External URLs
+
+Confluence Cloud blocks externally referenced files (images, PDFs, etc.) via Content Security Policy. Any `<ri:url>` reference will silently fail to render without admin-level domain allowlisting — this applies to **all file types**, not just images.
+
+**Rule: if a file needs to appear in a page, upload it first, then reference it by filename.**
+
+```bash
+# 1. Download the file locally
+curl -sL -o /tmp/file.jpg "https://example.com/file.jpg"
+
+# 2. Upload as a page attachment
+atla confluence attachment upload PAGE_ID /tmp/file.jpg
+
+# 3. Reference by attachment name in Storage Format — never by URL
+# Images:  <ac:image><ri:attachment ri:filename="file.jpg"/></ac:image>
+# Files:   <ac:structured-macro ac:name="view-file">
+#             <ac:parameter ac:name="name"><ri:attachment ri:filename="file.pdf"/></ac:parameter>
+#           </ac:structured-macro>
+```
+
+If a page was already created with external URL references, fix it:
+```bash
+atla confluence page update PAGE_ID --body-file fixed.xml --representation storage --version N
 ```
 
 ## Safety Rules

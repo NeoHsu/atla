@@ -146,6 +146,7 @@ dependencies = [
  "chrono",
  "directories",
  "keyring",
+ "libc",
  "reqwest",
  "serde",
  "serde_json",

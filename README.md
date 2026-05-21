@@ -19,6 +19,15 @@ and machine-friendly output formats.
 | [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
 | [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
 
+## atla-cli Skill
+
+Install the bundled AI agent skill to enable `atla`-aware assistance — JQL/CQL
+patterns, all command flags, scripting idioms, and safety rules.
+
+```bash
+npx skills add NeoHsu/atla
+```
+
 ## Install
 
 Download a prebuilt binary from GitHub Releases, use the generated installer, or
@@ -68,56 +77,41 @@ From source:
 cargo install --git https://github.com/NeoHsu/atla atla
 ```
 
-## Current Status
-
-Phase 1 is ready for an initial binary release.
-
-| Area | Status | Notes |
-| --- | --- | --- |
-| Workspace and CLI | Stable | Cargo workspace, command tree, global output/profile flags. |
-| Authentication | Stable | Profile config in `~/.config/atla/config.toml`; tokens stored in OS keyring. |
-| Jira commands | Stable | Projects, search, issues, comments, assignment, transitions, boards, sprints. |
-| Confluence commands | Stable | Spaces, pages, blogs, search, attachments, page labels, page comments. |
-| Generated clients | Stable | Jira v3, Confluence v2, and scoped Confluence v1 clients are checked in. |
-| Release automation | Stable | GitHub Releases via cargo-dist. |
-| Spec refresh automation | Stable | Scheduled workflow opens PRs for Atlassian OpenAPI spec updates. |
-
 ## Feature Matrix
 
-| Product | Resource | Commands | Status |
-| --- | --- | --- | --- |
-| Core | Auth | `login`, `logout`, `status`, `switch` | Stable |
-| Core | Config | `set`, `get`, `list` | Stable |
-| Jira | Projects | `list`, `view` | Stable |
-| Jira | Search | JQL search with table, JSON, CSV, and key output | Stable |
-| Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` | Stable |
-| Jira | Issue fields | Summary, description, arbitrary JSON fields, labels | Stable |
-| Jira | Assignment | `assign --to me`, account ID, or user query | Stable |
-| Jira | Transitions | List or apply transitions, with interactive selection when possible | Stable |
-| Jira | Comments | `comment add`, `comment list` | Stable |
-| Jira | Boards | `board list` with project, type, and name filters | Stable |
-| Jira | Sprints | `sprint list`, `sprint active`, `sprint view` | Stable |
-| Confluence | Spaces | `list`, `view`, `create`, `update`, `delete` | Stable |
-| Confluence | Pages | `list`, `view`, `create`, `update`, `move`, `delete` | Stable |
-| Confluence | Page content | Storage, wiki, Atlas Doc Format input; storage, ADF, markdown view output | Stable |
-| Confluence | Page labels | `label list`, `label add`, `label remove` | Stable |
-| Confluence | Page comments | `comment add`, `comment list` | Stable |
-| Confluence | Blogs | `list`, `view`, `create`, `update`, `delete` | Stable |
-| Confluence | Search | CQL search through scoped v1 REST endpoint | Stable |
-| Confluence | Attachments | `list`, `view`, `upload`, `download`, `delete` | Stable |
-| Output | Formats | `table`, `json`, `csv`, `keys` | Stable |
-| Safety | Dry runs | Global `--dry-run` for mutating workflows | Stable |
+| Product | Resource | Commands |
+| --- | --- | --- |
+| Core | Auth | `login`, `logout`, `status`, `switch` |
+| Core | Config | `set`, `get`, `list` |
+| Jira | Projects | `list`, `view`, `issue-types` |
+| Jira | Search | JQL search with table, JSON, CSV, and key output |
+| Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` |
+| Jira | Issue fields | Summary, description, arbitrary JSON fields, labels |
+| Jira | Assignment | `assign --to me`, account ID, or user query |
+| Jira | Transitions | List or apply transitions, with interactive selection when possible |
+| Jira | Comments | `comment add`, `comment list`, `comment update`, `comment delete` |
+| Jira | Attachments | `attachment list`, `attachment upload`, `attachment download`, `attachment delete` |
+| Jira | Links | `link add`, `link list`, `link remove`, `link github-links`, `link github-commits` |
+| Jira | Worklogs | `worklog add`, `worklog list` |
+| Jira | Boards | `board list` with project, type, and name filters; `board view` |
+| Jira | Sprints | `sprint list`, `sprint active`, `sprint view`, `sprint create`, `sprint start`, `sprint close`, `sprint add`, `sprint remove`, `sprint issues` |
+| Confluence | Spaces | `list`, `view`, `create`, `update`, `delete` |
+| Confluence | Pages | `list`, `view`, `create`, `update`, `move`, `delete`, `children`, `copy` |
+| Confluence | Page content | Storage, wiki, Atlas Doc Format input; storage, ADF, markdown view output |
+| Confluence | Page labels | `label list`, `label add`, `label remove` |
+| Confluence | Page comments | `comment add`, `comment list`, `comment delete` |
+| Confluence | Blogs | `list`, `view`, `create`, `update`, `delete` |
+| Confluence | Blog labels | `label list`, `label add`, `label remove` |
+| Confluence | Blog comments | `comment add`, `comment list`, `comment delete` |
+| Confluence | Search | CQL search through scoped v1 REST endpoint |
+| Confluence | Attachments | `list`, `view`, `upload`, `download`, `delete` |
+| Output | Formats | `table`, `json`, `csv`, `keys` |
+| Safety | Dry runs | Global `--dry-run` for mutating workflows |
 
 ## Configuration
 
 `atla` stores profile configuration in `~/.config/atla/config.toml` by default.
 API tokens are stored through the OS keyring and are not written to config files.
-
-For isolated development runs, override the config path:
-
-```bash
-ATLA_CONFIG=/tmp/atla-config.toml cargo run -p atla -- config list
-```
 
 Initial auth:
 
@@ -216,18 +210,13 @@ scripts/update-specs.sh
 cargo check --workspace
 ```
 
-## Release
-
-Releases are built by cargo-dist. The release workflow runs on version tags such
-as `v0.1.0`, builds Linux, macOS, and Windows binaries, creates a GitHub
-Release with prebuilt binaries and installer scripts.
-
-Release checklist:
+Override config paths for isolated test runs:
 
 ```bash
-cargo test --workspace
-git tag v0.1.0
-git push origin v0.1.0
+ATLA_CONFIG=/tmp/atla-config.toml cargo run -p atla -- config list
 ```
 
-Releases are built by cargo-dist and published to GitHub Releases automatically.
+## Release
+
+Releases are automated via cargo-dist. Pushing a version tag builds Linux,
+macOS, and Windows binaries and publishes them to GitHub Releases.

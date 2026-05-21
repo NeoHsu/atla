@@ -456,6 +456,20 @@ atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
 atla confluence blog comment add 234567 'Publish after the maintenance window closes.'
 ```
 
+#### Delete a comment
+
+**Syntax**
+
+```bash
+atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
+```
+
+**Example**
+
+```bash
+atla confluence blog comment delete 234567 78910 --yes
+```
+
 ## Search
 
 ### Run a CQL search

@@ -156,7 +156,7 @@ atla jira search "assignee = currentUser() ORDER BY updated DESC"
 ### View a specific issue
 
 ```bash
-atla jira issue get PROJ-123
+atla jira issue view PROJ-123
 ```
 
 ### List Confluence spaces
@@ -165,10 +165,10 @@ atla jira issue get PROJ-123
 atla confluence space list
 ```
 
-### Get a Confluence page as JSON
+### View a Confluence page as JSON
 
 ```bash
-atla confluence page get 12345 --output json
+atla confluence page view 12345 --output json
 ```
 
 ### Use a different output format

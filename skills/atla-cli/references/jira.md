@@ -81,9 +81,10 @@ atla jira issue update PROJ-123 --labels add:urgent,remove:triage
 
 ### View an issue
 ```
-atla jira issue view <KEY> [--web] [--fields FIELDS]
+atla jira issue view <KEY> [--web] [--fields FIELDS] [--with-github]
 ```
 `--web` opens it in the browser. `--fields '*all'` fetches every field.
+`--with-github` appends GitHub pull requests and commits from the development panel (auto-detects integration type).
 
 ### Delete an issue
 ```
@@ -179,6 +180,34 @@ atla jira issue link list <KEY>
 ### Remove an issue link
 ```
 atla jira issue link remove <LINK_ID> [--yes]
+```
+
+### GitHub development links
+
+These commands read from Jira's internal dev-status API (`/rest/dev-status/1.0/issue/detail`), which powers the development panel in the Jira UI. The integration type is auto-detected from the summary endpoint — no manual configuration needed.
+
+**Integration compatibility:**
+- **Git Integration for Jira by GitKraken** (`oAuth-com.xiplink.jira.git.jira_git_plugin`) — surfaces both pull requests and commits; both `github-links` and `github-commits` work.
+- **GitHub for Jira** (Atlassian native) — pull request data available via `github-links`.
+
+#### List GitHub pull requests
+```
+atla jira issue link github-links <KEY>
+```
+Returns: status, PR id, author, source/destination branch, URL.
+```bash
+atla jira issue link github-links PROJ-123
+atla jira issue link github-links PROJ-123 -o json
+```
+
+#### List GitHub commits
+```
+atla jira issue link github-commits <KEY>
+```
+Returns: short SHA, author, timestamp, repository name, commit message (first line), URL.
+```bash
+atla jira issue link github-commits PROJ-123
+atla jira issue link github-commits PROJ-123 -o json | jq '.[].url'
 ```
 
 ---

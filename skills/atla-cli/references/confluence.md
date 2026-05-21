@@ -266,6 +266,43 @@ atla confluence attachment delete <ATTACHMENT_ID> [--purge] [--yes]
 
 ---
 
+## File Embedding: Always Use Attachments
+
+### Never reference files by external URL
+
+Confluence Cloud enforces a Content Security Policy (CSP) that prevents externally hosted files from rendering — images, PDFs, and any other embedded content included. `<ri:url>` references silently fail for all users and cannot be fixed without admin-level domain allowlisting. This is a platform constraint, not a permissions issue.
+
+**Always upload files as page attachments and reference them by filename.**
+
+### Upload → reference workflow
+
+```bash
+# Download the file
+curl -sL -o /tmp/file.jpg "https://..."
+
+# Upload to the target page
+atla confluence attachment upload PAGE_ID /tmp/file.jpg
+```
+
+Then reference in Storage Format:
+
+| Content type | Storage Format |
+|---|---|
+| Image | `<ac:image ac:align="center" ac:width="600"><ri:attachment ri:filename="file.jpg"/></ac:image>` |
+| File preview | `<ac:structured-macro ac:name="view-file"><ac:parameter ac:name="name"><ri:attachment ri:filename="file.pdf"/></ac:parameter></ac:structured-macro>` |
+| Download link | `<ac:link><ri:attachment ri:filename="file.zip"/><ac:plain-text-link-body><![CDATA[Download]]></ac:plain-text-link-body></ac:link>` |
+
+To reference an attachment on a *different* page, nest `ri:page` inside `ri:attachment`:
+```xml
+<ac:image>
+  <ri:attachment ri:filename="file.jpg">
+    <ri:page ri:content-title="Source Page Title" ri:space-key="SPACE"/>
+  </ri:attachment>
+</ac:image>
+```
+
+---
+
 ## API Notes
 
 `atla` primarily uses Confluence v2 API, falling back to scoped v1 REST endpoints where v2 lacks coverage:

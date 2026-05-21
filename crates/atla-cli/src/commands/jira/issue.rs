@@ -11,8 +11,9 @@ use super::attachment::run_issue_attachment;
 use super::format::{
     can_prompt, issue_fields_for_url, open_web_url, parse_fields, parse_issue_fields,
     parse_label_update, print_comment, print_comments, print_created_issue, print_deleted,
-    print_issue, print_issue_assign, print_issue_comments_section, print_issue_delete,
-    print_issue_update, print_issues, print_transition_update, read_optional_text,
+    print_github_commits, print_github_pull_requests, print_issue, print_issue_assign,
+    print_issue_comments_section, print_issue_delete, print_issue_update, print_issue_with_github,
+    print_issues, print_section_header, print_transition_update, read_optional_text,
     read_required_text, select_transition,
 };
 use super::link::run_issue_link;
@@ -172,7 +173,12 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
 
             print_issue_update(&issue.issue_id_or_key, global)?;
         }
-        IssueAction::View { key, web, fields } => {
+        IssueAction::View {
+            key,
+            web,
+            fields,
+            with_github,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -215,6 +221,25 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             }
 
             let client = ctx.jira_client()?;
+            let output_format = global.output.unwrap_or(crate::cli::OutputFormat::Table);
+
+            // Issue 2: for JSON + --with-github, fetch everything concurrently and
+            // emit a single combined JSON object instead of multiple separate payloads.
+            if with_github && output_format == crate::cli::OutputFormat::Json {
+                let (issue, prs, commits) = tokio::try_join!(
+                    client.get_issue(&key, fetch_fields),
+                    client.list_github_pull_requests(&key),
+                    client.list_github_commits(&key),
+                )
+                .with_context(|| {
+                    format!(
+                        "failed to fetch data for `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+                return print_issue_with_github(&issue, &prs, &commits);
+            }
+
             let issue = client
                 .get_issue(&key, fetch_fields)
                 .await
@@ -240,6 +265,30 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 if !comment_page.comments.is_empty() {
                     print_issue_comments_section(&comment_page, global)?;
                 }
+            }
+
+            if with_github {
+                let (prs, commits) = tokio::try_join!(
+                    client.list_github_pull_requests(&key),
+                    client.list_github_commits(&key),
+                )
+                .with_context(|| {
+                    format!(
+                        "failed to fetch GitHub data for `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
+
+                let is_table = global.output.is_none()
+                    || global.output == Some(crate::cli::OutputFormat::Table);
+                if is_table {
+                    print_section_header("GitHub Pull Requests");
+                }
+                print_github_pull_requests(&prs, global)?;
+                if is_table {
+                    print_section_header("GitHub Commits");
+                }
+                print_github_commits(&commits, global)?;
             }
         }
         IssueAction::Delete {

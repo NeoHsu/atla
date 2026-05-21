@@ -1,7 +1,20 @@
 use serde::Deserialize;
 
 use super::JiraClient;
-use super::models::{JiraIssueLink, JiraIssueLinkCreate, JiraLinkedIssue};
+
+/// Allowlist of known Jira dev-status applicationType keys that back GitHub data.
+/// Includes both Atlassian-native GitHub apps and third-party integrations
+/// (e.g. GitKraken / BigBrassBand) that can manage GitHub repositories.
+/// Keys are stored lowercase; comparisons are case-insensitive.
+const GITHUB_APP_TYPE_KEYS: &[&str] = &[
+    "github",
+    "github enterprise",
+    // GitKraken / Git Integration for Jira (BigBrassBand)
+    "oauth-com.xiplink.jira.git.jira_git_plugin",
+];
+use super::models::{
+    JiraGithubCommit, JiraGithubPullRequest, JiraIssueLink, JiraIssueLinkCreate, JiraLinkedIssue,
+};
 use super::util::generated_error;
 use crate::client::{ApiError, read_json};
 
@@ -39,6 +52,135 @@ impl JiraClient {
             .collect())
     }
 
+    pub async fn list_github_pull_requests(
+        &self,
+        issue_id_or_key: &str,
+    ) -> Result<Vec<JiraGithubPullRequest>, ApiError> {
+        let issue_id = self.resolve_issue_numeric_id(issue_id_or_key).await?;
+        let app_types = self.dev_status_pr_app_types(&issue_id).await?;
+
+        // Issue 6: only query known GitHub-backed integrations (allowlist)
+        let github_types: Vec<String> = app_types
+            .into_iter()
+            .filter(|t| {
+                let lower = t.to_ascii_lowercase();
+                GITHUB_APP_TYPE_KEYS.iter().any(|k| lower == *k)
+            })
+            .collect();
+
+        // Issue 4: no linked GitHub PRs — return empty instead of guessing
+        if github_types.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut prs = Vec::new();
+        for app_type in github_types {
+            // Issue 1: percent-encode the applicationType value
+            let encoded = percent_encode_query_value(&app_type);
+            let path = format!(
+                "/rest/dev-status/1.0/issue/detail?issueId={issue_id}&applicationType={encoded}&dataType=pullrequest"
+            );
+            let response: DevStatusDetailResponse = read_json(self.raw_client.get(&path)).await?;
+            prs.extend(
+                response
+                    .detail
+                    .into_iter()
+                    .flat_map(|repo| repo.pull_requests)
+                    .map(|pr| JiraGithubPullRequest {
+                        id: pr.id,
+                        title: pr.title,
+                        url: pr.url,
+                        status: pr.status,
+                        author: pr.author.and_then(|a| a.name),
+                        source_branch: pr.source.and_then(|s| s.branch_name()),
+                        destination_branch: pr.destination.and_then(|d| d.branch_name()),
+                    }),
+            );
+        }
+        Ok(prs)
+    }
+
+    pub async fn list_github_commits(
+        &self,
+        issue_id_or_key: &str,
+    ) -> Result<Vec<JiraGithubCommit>, ApiError> {
+        let issue_id = self.resolve_issue_numeric_id(issue_id_or_key).await?;
+        let app_types = self.dev_status_repo_app_types(&issue_id).await?;
+
+        // Issue 6: only query known GitHub-backed integrations (allowlist)
+        let github_types: Vec<String> = app_types
+            .into_iter()
+            .filter(|t| {
+                let lower = t.to_ascii_lowercase();
+                GITHUB_APP_TYPE_KEYS.iter().any(|k| lower == *k)
+            })
+            .collect();
+
+        // Issue 4: no linked GitHub commits — return empty instead of guessing
+        if github_types.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut commits = Vec::new();
+        for app_type in github_types {
+            // Issue 1: percent-encode the applicationType value
+            let encoded = percent_encode_query_value(&app_type);
+            let path = format!(
+                "/rest/dev-status/1.0/issue/detail?issueId={issue_id}&applicationType={encoded}&dataType=repository"
+            );
+            let response: DevStatusRepoDetailResponse =
+                read_json(self.raw_client.get(&path)).await?;
+            for repo_group in response.detail {
+                for repo in repo_group.repositories {
+                    for commit in repo.commits {
+                        commits.push(JiraGithubCommit {
+                            id: commit.display_id,
+                            message: commit.message,
+                            url: commit.url,
+                            author: commit.author.and_then(|a| a.name),
+                            repository: repo.name.clone(),
+                            repository_url: repo.url.clone(),
+                            timestamp: commit.author_timestamp,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(commits)
+    }
+
+    async fn resolve_issue_numeric_id(&self, issue_id_or_key: &str) -> Result<String, ApiError> {
+        let issue = self
+            .get_issue(issue_id_or_key, Some(vec!["id".to_owned()]))
+            .await?;
+        issue
+            .id
+            .ok_or_else(|| ApiError::Decode(format!("issue `{issue_id_or_key}` has no numeric id")))
+    }
+
+    async fn dev_status_summary(&self, issue_id: &str) -> Result<DevStatusSummary, ApiError> {
+        let path = format!("/rest/dev-status/1.0/issue/summary?issueId={issue_id}");
+        read_json(self.raw_client.get(&path)).await
+    }
+
+    async fn dev_status_pr_app_types(&self, issue_id: &str) -> Result<Vec<String>, ApiError> {
+        let summary = self.dev_status_summary(issue_id).await?;
+        Ok(summary
+            .summary
+            .pullrequest
+            .map(|pr| pr.by_instance_type.into_keys().collect())
+            .unwrap_or_default())
+    }
+
+    async fn dev_status_repo_app_types(&self, issue_id: &str) -> Result<Vec<String>, ApiError> {
+        let summary = self.dev_status_summary(issue_id).await?;
+        Ok(summary
+            .summary
+            .repository
+            .map(|r| r.by_instance_type.into_keys().collect())
+            .unwrap_or_default())
+    }
+
     pub async fn delete_issue_link(&self, link_id: &str) -> Result<(), ApiError> {
         self.generated
             .delete_issue_link()
@@ -57,6 +199,104 @@ impl JiraClient {
                 .unwrap_or(user_input)
                 .to_owned(),
         )
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusSummary {
+    summary: DevStatusSummaryBody,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevStatusSummaryBody {
+    pullrequest: Option<DevStatusSummarySection>,
+    repository: Option<DevStatusSummarySection>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusSummarySection {
+    #[serde(default)]
+    by_instance_type: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusDetailResponse {
+    #[serde(default)]
+    detail: Vec<DevStatusPrGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusPrGroup {
+    #[serde(default)]
+    pull_requests: Vec<DevStatusPr>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusRepoDetailResponse {
+    #[serde(default)]
+    detail: Vec<DevStatusRepoGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevStatusRepoGroup {
+    #[serde(default)]
+    repositories: Vec<DevStatusRepository>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevStatusRepository {
+    name: Option<String>,
+    url: Option<String>,
+    #[serde(default)]
+    commits: Vec<DevStatusCommit>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusCommit {
+    display_id: Option<String>,
+    message: Option<String>,
+    url: Option<String>,
+    author: Option<DevStatusAuthor>,
+    author_timestamp: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DevStatusPr {
+    id: Option<String>,
+    title: Option<String>,
+    url: Option<String>,
+    status: Option<String>,
+    author: Option<DevStatusAuthor>,
+    source: Option<DevStatusRef>,
+    destination: Option<DevStatusRef>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevStatusAuthor {
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DevStatusRef {
+    branch: Option<serde_json::Value>,
+}
+
+impl DevStatusRef {
+    fn branch_name(self) -> Option<String> {
+        match self.branch? {
+            serde_json::Value::String(s) => Some(s),
+            serde_json::Value::Object(obj) => {
+                obj.get("name").and_then(|v| v.as_str()).map(str::to_owned)
+            }
+            _ => None,
+        }
     }
 }
 
@@ -128,6 +368,22 @@ fn jira_linked_issue_from_value(value: &serde_json::Value) -> JiraLinkedIssue {
             .and_then(serde_json::Value::as_str)
             .map(str::to_owned),
     }
+}
+
+fn percent_encode_query_value(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => {
+                use std::fmt::Write;
+                write!(out, "%{byte:02X}").unwrap();
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

@@ -12,13 +12,18 @@ atla-confluence-v1-api = { path = "../atla-confluence-v1-api" }
 atla-jira-api = { path = "../atla-jira-api" }
 base64.workspace = true
 chrono.workspace = true
-directories.workspace = true
 keyring.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 reqwest.workspace = true
+
+[target.'cfg(not(unix))'.dependencies]
+directories = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [dev-dependencies]
 tempfile.workspace = true

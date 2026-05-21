@@ -3,7 +3,6 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_SERVICE: &str = "atla";
@@ -115,8 +114,10 @@ impl FileCredentialStore {
             return Ok(PathBuf::from(path));
         }
 
-        let base_dirs = BaseDirs::new().ok_or(AuthError::ConfigDirUnavailable)?;
-        Ok(base_dirs.config_dir().join("atla").join("credentials.toml"))
+        Ok(xdg_config_dir()
+            .ok_or(AuthError::ConfigDirUnavailable)?
+            .join("atla")
+            .join("credentials.toml"))
     }
 
     pub fn default_store() -> Result<Self, AuthError> {
@@ -216,4 +217,41 @@ fn restrict_file_permissions(path: &Path) -> Result<(), AuthError> {
 #[cfg(not(unix))]
 fn restrict_file_permissions(_path: &Path) -> Result<(), AuthError> {
     Ok(())
+}
+
+fn xdg_config_dir() -> Option<PathBuf> {
+    #[cfg(unix)]
+    {
+        if let Some(xdg) = env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
+            return Some(PathBuf::from(xdg));
+        }
+        if let Some(home) = env::var_os("HOME").filter(|v| !v.is_empty()) {
+            return Some(PathBuf::from(home).join(".config"));
+        }
+        home_dir_from_passwd().map(|h| h.join(".config"))
+    }
+    #[cfg(not(unix))]
+    {
+        directories::BaseDirs::new().map(|d| d.config_dir().to_path_buf())
+    }
+}
+
+#[cfg(unix)]
+fn home_dir_from_passwd() -> Option<PathBuf> {
+    use std::ffi::CStr;
+    // Safety: getpwuid(getuid()) returns a pointer valid until the next
+    // getpwent/getpwuid call on this thread; we copy the path immediately.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() {
+            return None;
+        }
+        if (*pw).pw_dir.is_null() {
+            return None;
+        }
+        CStr::from_ptr((*pw).pw_dir)
+            .to_str()
+            .ok()
+            .map(PathBuf::from)
+    }
 }

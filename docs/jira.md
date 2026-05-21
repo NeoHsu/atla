@@ -120,7 +120,7 @@ atla jira issue update PROJ-123 --summary 'Add SSO support to admin login'   --l
 **Syntax**
 
 ```bash
-atla jira issue view <KEY> [--web] [--fields FIELDS]
+atla jira issue view <KEY> [--web] [--fields FIELDS] [--with-github]
 ```
 
 **Examples**
@@ -128,7 +128,10 @@ atla jira issue view <KEY> [--web] [--fields FIELDS]
 ```bash
 atla jira issue view PROJ-123
 atla jira issue view PROJ-123 --web
+atla jira issue view PROJ-123 --with-github
 ```
+
+`--with-github` fetches GitHub pull requests and commits linked via the development panel and appends them to the output. See [GitHub Development Links](#github-development-links) for details.
 
 ### Delete an issue
 
@@ -338,6 +341,50 @@ atla jira issue link remove <LINK_ID> [--yes]
 ```bash
 atla jira issue link remove 10500 --yes
 ```
+
+### GitHub Development Links
+
+These commands fetch development data from Jira's internal dev-status API (`/rest/dev-status/1.0/issue/detail`). The API is not publicly documented by Atlassian, but is used internally by the Jira UI to render the development panel.
+
+> **Integration note:** The available data depends on which Git integration your Jira instance uses:
+> - **Git Integration for Jira by GitKraken** (`oAuth-com.xiplink.jira.git.jira_git_plugin`) — surfaces both pull requests and commits. Both `github-links` and `github-commits` work.
+> - **GitHub for Jira** (Atlassian's native app) — surfaces pull requests directly.
+>
+> Both `github-links` and `github-commits` auto-detect the active integration from the summary endpoint so no manual configuration is needed.
+
+#### List GitHub pull requests
+
+**Syntax**
+
+```bash
+atla jira issue link github-links <KEY>
+```
+
+**Example**
+
+```bash
+atla jira issue link github-links PROJ-123
+atla jira issue link github-links PROJ-123 -o json
+```
+
+Returns: `status`, `id`, `title`, `author`, `source` branch, `destination` branch, `url`.
+
+#### List GitHub commits
+
+**Syntax**
+
+```bash
+atla jira issue link github-commits <KEY>
+```
+
+**Example**
+
+```bash
+atla jira issue link github-commits PROJ-123
+atla jira issue link github-commits PROJ-123 -o json | jq '.[].url'
+```
+
+Returns: `id` (short SHA), `author`, `timestamp`, `repository`, `message` (first line), `url`.
 
 ### Worklogs
 

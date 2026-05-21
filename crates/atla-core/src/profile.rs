@@ -3,7 +3,6 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 
 use crate::{CredentialRef, CredentialStorage};
@@ -266,8 +265,10 @@ impl ConfigStore {
             return Ok(PathBuf::from(path));
         }
 
-        let base_dirs = BaseDirs::new().ok_or(ProfileError::ConfigDirUnavailable)?;
-        Ok(base_dirs.config_dir().join("atla").join("config.toml"))
+        Ok(xdg_config_dir()
+            .ok_or(ProfileError::ConfigDirUnavailable)?
+            .join("atla")
+            .join("config.toml"))
     }
 
     pub fn default_store() -> Result<Self, ProfileError> {
@@ -317,6 +318,41 @@ pub enum ProfileError {
     Encode(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+}
+
+fn xdg_config_dir() -> Option<PathBuf> {
+    #[cfg(unix)]
+    {
+        if let Some(xdg) = env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()) {
+            return Some(PathBuf::from(xdg));
+        }
+        if let Some(home) = env::var_os("HOME").filter(|v| !v.is_empty()) {
+            return Some(PathBuf::from(home).join(".config"));
+        }
+        home_dir_from_passwd().map(|h| h.join(".config"))
+    }
+    #[cfg(not(unix))]
+    {
+        directories::BaseDirs::new().map(|d| d.config_dir().to_path_buf())
+    }
+}
+
+#[cfg(unix)]
+fn home_dir_from_passwd() -> Option<PathBuf> {
+    use std::ffi::CStr;
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() {
+            return None;
+        }
+        if (*pw).pw_dir.is_null() {
+            return None;
+        }
+        CStr::from_ptr((*pw).pw_dir)
+            .to_str()
+            .ok()
+            .map(PathBuf::from)
+    }
 }
 
 fn normalized_key(key: &str) -> String {
