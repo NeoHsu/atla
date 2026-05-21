@@ -611,6 +611,21 @@ fn add_mark(node: &mut Value, mark: Value) {
     if object.get("type").and_then(Value::as_str) != Some("text") {
         return;
     }
+    // ADF: the `code` mark is exclusive — it cannot coexist with any other mark.
+    // Don't add any mark to a node that already has `code`, and don't add `code`
+    // to a node that already has other marks.
+    let is_code_mark = mark.get("type").and_then(Value::as_str) == Some("code");
+    if let Some(Value::Array(existing)) = object.get("marks") {
+        if existing
+            .iter()
+            .any(|m| m.get("type").and_then(Value::as_str) == Some("code"))
+        {
+            return;
+        }
+        if is_code_mark && !existing.is_empty() {
+            return;
+        }
+    }
     match object.get_mut("marks") {
         Some(Value::Array(marks)) => marks.push(mark),
         _ => {
@@ -1295,6 +1310,21 @@ mod tests {
                 {
                     errors.push(format!("{path}: text node must be non-empty"));
                 }
+                "text" => {
+                    if let Some(Value::Array(marks)) = object.get("marks") {
+                        let has_code = marks
+                            .iter()
+                            .any(|m| m.get("type").and_then(Value::as_str) == Some("code"));
+                        let has_other = marks
+                            .iter()
+                            .any(|m| m.get("type").and_then(Value::as_str) != Some("code"));
+                        if has_code && has_other {
+                            errors.push(format!(
+                                "{path}: text node has `code` mark combined with other marks (ADF violation)"
+                            ));
+                        }
+                    }
+                }
                 "inlineCard" => {
                     if object
                         .get("attrs")
@@ -1762,5 +1792,100 @@ cargo test
         assert_eq!(first_item_content[1]["type"], "orderedList");
         let nested = first_item_content[1]["content"].as_array().unwrap();
         assert_eq!(nested.len(), 2);
+    }
+
+    #[test]
+    fn code_mark_exclusivity_in_nested_inline_markdown() {
+        // Confirmed broken patterns: bold/italic/strike wrapping inline code
+        // After the fix these must produce valid ADF (no code+other mark combos).
+
+        // strong wrapping code: **see `config.yaml`**
+        let adf = markdown_to_adf("**see `config.yaml`**");
+        let content = &adf["content"][0]["content"];
+        assert_eq!(content[0]["text"], "see ", "strong-prefix text");
+        assert_eq!(content[0]["marks"], json!([{"type": "strong"}]));
+        assert_eq!(content[1]["text"], "config.yaml", "code span text");
+        assert_eq!(
+            content[1]["marks"],
+            json!([{"type": "code"}]),
+            "code span must have only code mark"
+        );
+        assert!(
+            targeted_schema_errors(&adf).is_empty(),
+            "strong+code: {:#?}",
+            targeted_schema_errors(&adf)
+        );
+
+        // em wrapping code: *run `make test`*
+        let adf = markdown_to_adf("*run `make test`*");
+        let content = &adf["content"][0]["content"];
+        assert_eq!(
+            content[1]["marks"],
+            json!([{"type": "code"}]),
+            "em+code: code span must keep only code mark"
+        );
+        assert!(
+            targeted_schema_errors(&adf).is_empty(),
+            "em+code: {:#?}",
+            targeted_schema_errors(&adf)
+        );
+
+        // strike wrapping code: ~~old `value`~~
+        let adf = markdown_to_adf("~~old `value`~~");
+        let content = &adf["content"][0]["content"];
+        assert_eq!(
+            content[1]["marks"],
+            json!([{"type": "code"}]),
+            "strike+code: code span must keep only code mark"
+        );
+        assert!(
+            targeted_schema_errors(&adf).is_empty(),
+            "strike+code: {:#?}",
+            targeted_schema_errors(&adf)
+        );
+
+        // link containing code: [click `here`](https://example.com)
+        let adf = markdown_to_adf("[click `here`](https://example.com)");
+        let content = &adf["content"][0]["content"];
+        // "click " gets link mark; "here" keeps only code mark (not link)
+        assert_eq!(
+            content[1]["marks"],
+            json!([{"type": "code"}]),
+            "link+code: code span must not get link mark"
+        );
+        assert!(
+            targeted_schema_errors(&adf).is_empty(),
+            "link+code: {:#?}",
+            targeted_schema_errors(&adf)
+        );
+
+        // code inside list item: - **fix `foo`**
+        let adf = markdown_to_adf("- **fix `foo`**");
+        assert!(
+            targeted_schema_errors(&adf).is_empty(),
+            "list item strong+code: {:#?}",
+            targeted_schema_errors(&adf)
+        );
+        let list_inline = &adf["content"][0]["content"][0]["content"][0]["content"];
+        assert_eq!(
+            list_inline[1]["marks"],
+            json!([{"type": "code"}]),
+            "list item: code span must keep only code mark"
+        );
+
+        // code inside table cell: | **see `x`** |
+        let adf = markdown_to_adf("| **see `x`** |\n| --- |");
+        assert!(
+            targeted_schema_errors(&adf).is_empty(),
+            "table cell strong+code: {:#?}",
+            targeted_schema_errors(&adf)
+        );
+
+        // code literal text: `**not bold**` — bold delimiters inside backticks are literal text
+        let adf = markdown_to_adf("`**not bold**`");
+        let content = &adf["content"][0]["content"];
+        assert_eq!(content[0]["text"], "**not bold**", "code span text must be literal");
+        assert_eq!(content[0]["marks"], json!([{"type": "code"}]));
+        assert!(targeted_schema_errors(&adf).is_empty());
     }
 }
