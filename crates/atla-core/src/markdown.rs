@@ -1884,7 +1884,10 @@ cargo test
         // code literal text: `**not bold**` — bold delimiters inside backticks are literal text
         let adf = markdown_to_adf("`**not bold**`");
         let content = &adf["content"][0]["content"];
-        assert_eq!(content[0]["text"], "**not bold**", "code span text must be literal");
+        assert_eq!(
+            content[0]["text"], "**not bold**",
+            "code span text must be literal"
+        );
         assert_eq!(content[0]["marks"], json!([{"type": "code"}]));
         assert!(targeted_schema_errors(&adf).is_empty());
     }
