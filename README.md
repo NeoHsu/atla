@@ -2,36 +2,19 @@
 
 Unified Atlassian CLI for Jira and Confluence.
 
-`atla` is a Rust CLI for day-to-day Atlassian Cloud work. It provides Jira and
-Confluence commands with profile-based authentication, human-friendly tables,
-and machine-friendly output formats.
+`atla` is a Rust single-binary CLI for day-to-day Atlassian Cloud work. It
+provides Jira and Confluence commands with profile-based authentication,
+human-friendly tables, and machine-friendly output formats.
 
-## Documentation
+## Why atla?
 
-| File | Description |
-| --- | --- |
-| [Getting Started](docs/getting-started.md) | Installation, first-time setup, shell completions, quick demo |
-| [Authentication](docs/authentication.md) | Auth commands, multi-profile management, token storage, env vars |
-| [Configuration](docs/configuration.md) | Config keys, aliases, config.toml schema, environment overrides |
-| [Jira](docs/jira.md) | Full Jira command reference: projects, issues, boards, sprints |
-| [Confluence](docs/confluence.md) | Full Confluence command reference: spaces, pages, blogs, attachments |
-| [Output Formats](docs/output-formats.md) | Global flags, output formats, scripting/CI patterns |
-| [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
-| [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
-
-## atla-cli Skill
-
-Install the bundled AI agent skill to enable `atla`-aware assistance — JQL/CQL
-patterns, all command flags, scripting idioms, and safety rules.
-
-```bash
-npx skills add NeoHsu/atla
-```
+- Work with Jira issues, boards, and sprints without leaving the terminal.
+- Read and update Confluence spaces, pages, blogs, labels, comments, and
+  attachments from scripts or interactive workflows.
+- Automate reporting and CI with `table`, `json`, `csv`, and `keys` output,
+  plus global `--dry-run` support for mutating commands.
 
 ## Install
-
-Download a prebuilt binary from GitHub Releases, use the generated installer, or
-install through mise after the first release is published.
 
 Installer script:
 
@@ -75,6 +58,38 @@ From source:
 
 ```bash
 cargo install --git https://github.com/NeoHsu/atla atla
+```
+
+## Common workflows
+
+```bash
+atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+atla jira search "assignee = currentUser() order by updated desc" --limit 10
+atla jira issue transition PROJ-123 --to Done --dry-run
+atla confluence page view 67890 --format markdown
+atla confluence search "type=page AND space=DEV" --output json
+```
+
+## Documentation
+
+| File | Description |
+| --- | --- |
+| [Getting Started](docs/getting-started.md) | Installation, first-time setup, shell completions, quick demo |
+| [Authentication](docs/authentication.md) | Auth commands, multi-profile management, token storage, env vars |
+| [Configuration](docs/configuration.md) | Config keys, aliases, config.toml schema, environment overrides |
+| [Jira](docs/jira.md) | Full Jira command reference: projects, issues, boards, sprints |
+| [Confluence](docs/confluence.md) | Full Confluence command reference: spaces, pages, blogs, attachments |
+| [Output Formats](docs/output-formats.md) | Global flags, output formats, scripting/CI patterns |
+| [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
+| [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
+
+## atla-cli Skill
+
+Install the bundled AI agent skill to enable `atla`-aware assistance — JQL/CQL
+patterns, all command flags, scripting idioms, and safety rules.
+
+```bash
+npx skills add NeoHsu/atla
 ```
 
 ## Feature Matrix
