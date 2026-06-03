@@ -7,6 +7,8 @@ Complete syntax and flags for all `atla confluence` commands. All commands accep
 `atla` follows Confluence v2 cursors (or v1 CQL `start`/`totalSize`) automatically until
 `N` items are collected or the server runs out. If `--limit` is reached but more matches
 exist, a `warning:` line goes to stderr (stdout stays clean for JSON/CSV/keys piping).
+Use `--all` (mutually exclusive with `--limit`) when you want every matching record
+without picking a number; the warning is suppressed.
 
 ---
 

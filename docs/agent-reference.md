@@ -123,13 +123,25 @@ If the limit is reached before the server runs out, a single warning line goes t
 warning: more issues match this query; increase --limit to fetch them (1000 returned)
 ```
 
-Affected commands: `jira project list`, `jira search`, `jira issue list`,
-`jira issue comment list`, `jira issue worklog list`, `jira board list`,
-`jira sprint list`, `jira sprint active`, `jira sprint issues`, `confluence space list`,
-`confluence page list`, `confluence page children`, `confluence blog list`,
-`confluence page comment list`, `confluence blog comment list`,
-`confluence page label list`, `confluence blog label list`,
-`confluence attachment list`, `confluence search`.
+#### `--all`
+
+For unbounded "fetch everything" runs, use `--all` instead of guessing `--limit`. It
+follows the cursor until the server is empty, ignores the `--limit` clamp, and
+suppresses the truncation warning. `--all` and `--limit` are mutually exclusive. Use
+`--all` deliberately on broad queries — it can fan out into many HTTP round trips.
+
+```bash
+atla jira issue list --jql "project=PROJ" --all --output keys
+atla confluence search 'type = page' --all --output json
+```
+
+Affected commands (both `--limit` and `--all` supported on each):
+`jira project list`, `jira search`, `jira issue list`, `jira issue comment list`,
+`jira issue worklog list`, `jira board list`, `jira sprint list`, `jira sprint active`,
+`jira sprint issues`, `confluence space list`, `confluence page list`,
+`confluence page children`, `confluence blog list`, `confluence page comment list`,
+`confluence blog comment list`, `confluence page label list`,
+`confluence blog label list`, `confluence attachment list`, `confluence search`.
 
 ## 4. Jira Commands
 

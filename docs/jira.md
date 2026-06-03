@@ -24,9 +24,27 @@ remains pipe-safe):
 warning: more issues match this query; increase --limit to fetch them (1000 returned)
 ```
 
-This applies to: `jira project list`, `jira search`, `jira issue list`, `jira issue comment list`,
-`jira issue worklog list`, `jira board list`, `jira sprint list`, `jira sprint active`, and
-`jira sprint issues`.
+### `--all`
+
+When you want every matching record without guessing an upper bound, use `--all`. It
+fetches until the server reports no more results, ignores the `--limit` clamp, and
+suppresses the truncation warning (you opted into the full fetch, so there is nothing
+to warn about):
+
+```bash
+atla jira issue list --jql "project = PROJ" --all --output keys > all-keys.txt
+atla jira board list --all --output json | jq '.values | length'
+```
+
+`--all` and `--limit` are mutually exclusive. Be aware that `--all` against a large
+result set will issue many HTTP requests (one per 100 items for JQL, one per 100 for
+agile / v2 endpoints), so use it deliberately on broad queries.
+
+### Affected commands
+
+`jira project list`, `jira search`, `jira issue list`, `jira issue comment list`,
+`jira issue worklog list`, `jira board list`, `jira sprint list`, `jira sprint active`,
+and `jira sprint issues`.
 
 ## Projects
 

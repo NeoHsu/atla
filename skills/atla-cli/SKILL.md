@@ -39,7 +39,7 @@ For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
 | `--no-input` | Disable interactive prompts (for scripts/CI) |
 | `--verbose` | Show HTTP request/response details |
 
-## Pagination and `--limit`
+## Pagination, `--limit`, and `--all`
 
 On list/search commands, `--limit N` is a max-results cap. `atla` paginates the
 underlying API automatically (Jira cursor or `startAt`, Confluence cursor or CQL
@@ -49,6 +49,12 @@ need to write batch loops in the shell.
 If `--limit` is reached but more matches exist server-side, a `warning: more X match
 this query; increase --limit to fetch them (N returned)` line is printed to **stderr**.
 Stdout stays clean, so `-o json/keys/csv` output is pipe-safe.
+
+When you want every matching record without picking a number, use `--all`. It runs
+until the server reports no more results and suppresses the truncation warning.
+`--all` and `--limit` are mutually exclusive. Prefer narrower JQL/CQL filters before
+reaching for `--all` on very broad queries — it can fan out into many HTTP round
+trips.
 
 ## Command Tree Overview
 

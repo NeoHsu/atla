@@ -6,7 +6,9 @@ Complete syntax and flags for all `atla jira` commands. All commands accept glob
 **Pagination.** `--limit N` is a hard cap on returned items, not a single-page hint —
 `atla` paginates the Jira API internally until `N` items are collected or the server
 runs out. If `--limit` is reached but more matches exist, a `warning:` line goes to
-stderr (stdout stays clean for JSON/CSV/keys piping).
+stderr (stdout stays clean for JSON/CSV/keys piping). Use `--all` (mutually exclusive
+with `--limit`) when you want every matching record without picking a number; the
+warning is suppressed.
 
 ---
 

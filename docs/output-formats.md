@@ -57,7 +57,7 @@ atla jira issue list --project PROJ --output keys
 atla confluence page list --space ENG --output keys
 ```
 
-## `--limit` and pagination
+## `--limit`, `--all`, and pagination
 
 List commands accept `--limit N` as a hard cap on returned items. `atla` paginates the
 underlying API automatically and accumulates up to `N` records before printing — `--limit`
@@ -83,6 +83,20 @@ To silence the warning in scripts that intentionally cap results, redirect stder
 ```bash
 atla jira issue list --project PROJ --limit 100 --output json 2>/dev/null
 ```
+
+### `--all`
+
+When you want every matching record and would rather not pick a number, use `--all`
+instead of `--limit`. It runs until the server reports no more results and **does not**
+emit the truncation warning (you opted into the full fetch):
+
+```bash
+atla jira search 'project = PROJ AND statusCategory != Done' --all --output keys
+atla confluence search 'type = page' --all --output json | jq '.results | length'
+```
+
+`--all` and `--limit` are mutually exclusive. A broad `--all` query can issue many HTTP
+round trips (one per 100 items), so prefer narrower JQL/CQL filters when possible.
 
 See [`jira.md`](./jira.md#pagination) and [`confluence.md`](./confluence.md#pagination) for
 the full list of paginating commands.

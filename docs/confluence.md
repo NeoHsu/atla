@@ -24,10 +24,27 @@ remains pipe-safe):
 warning: more pages match this query; increase --limit to fetch them (1000 returned)
 ```
 
-This applies to: `confluence space list`, `confluence page list`, `confluence page children`,
+### `--all`
+
+When you want every matching record without guessing an upper bound, use `--all`. It
+follows the cursor (or `start`/`totalSize`) until the server reports no more results,
+ignores the `--limit` clamp, and suppresses the truncation warning:
+
+```bash
+atla confluence search 'type = page AND space = ENG' --all --output keys > all-pages.txt
+atla confluence space list --all --output json | jq '.results | length'
+```
+
+`--all` and `--limit` are mutually exclusive. Be aware that `--all` against a large
+result set issues many HTTP requests (one per 100 items), so use it deliberately on
+broad queries.
+
+### Affected commands
+
+`confluence space list`, `confluence page list`, `confluence page children`,
 `confluence blog list`, `confluence page comment list`, `confluence blog comment list`,
-`confluence page label list`, `confluence blog label list`, `confluence attachment list`, and
-`confluence search`.
+`confluence page label list`, `confluence blog label list`, `confluence attachment list`,
+and `confluence search`.
 
 ## Spaces
 
