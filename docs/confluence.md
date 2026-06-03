@@ -16,28 +16,49 @@ the Confluence v2 cursor (or v1 CQL `start`/`totalSize`) internally and accumula
 `N` items before returning, so `--limit 1000` reliably returns 1000 results rather than
 the ~25/250 a single Confluence page would yield.
 
-If the server still has more matches when the limit is hit, a warning is printed to
-**stderr** (stdout is reserved for the records themselves, so `-o json/keys/csv` output
-remains pipe-safe):
+If the server still has more matches when the limit is hit, `atla` returns a `--page-token`
+for the next logical page instead of forcing you to increase `--limit`. In table output,
+the token is shown as a ready-to-copy command:
 
+```text
+More results available.
+Next page:
+  atla confluence page list --space-id 123 --limit 25 --page-token <TOKEN>
 ```
-warning: more pages match this query; increase --limit to fetch them (1000 returned)
+
+In JSON output, pagination metadata is included alongside the records:
+
+```json
+{
+  "results": [],
+  "pagination": {
+    "isLast": false,
+    "nextPageToken": "...",
+    "nextCommand": "atla confluence page list --space-id 123 --limit 25 --page-token ..."
+  }
+}
 ```
+
+For `csv` and `keys` output, records stay on stdout and the next-page hint is written to
+stderr so pipelines remain clean. `--page-token` is intentionally opaque; pass it back to
+the same command/query to continue. Tokens are validated against the command and query,
+and using one with a different query fails fast.
 
 ### `--all`
 
 When you want every matching record without guessing an upper bound, use `--all`. It
 follows the cursor (or `start`/`totalSize`) until the server reports no more results,
-ignores the `--limit` clamp, and suppresses the truncation warning:
+ignores the `--limit` clamp, and does not emit next-page metadata because it fetches until
+exhaustion:
 
 ```bash
 atla confluence search 'type = page AND space = ENG' --all --output keys > all-pages.txt
 atla confluence space list --all --output json | jq '.results | length'
 ```
 
-`--all` and `--limit` are mutually exclusive. Be aware that `--all` against a large
-result set issues many HTTP requests (one per 100 items), so use it deliberately on
-broad queries.
+`--all` is mutually exclusive with both `--limit` and `--page-token`. Be aware that
+`--all` against a large result set issues many HTTP requests (one per 100 items), so use
+it deliberately on broad queries.
 
 ### Affected commands
 
@@ -53,7 +74,7 @@ and `confluence search`.
 **Syntax**
 
 ```bash
-atla confluence space list [--key KEY] [--limit N=25]
+atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -129,7 +150,7 @@ atla confluence space delete ENGOPS --yes
 **Syntax**
 
 ```bash
-atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25]
+atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -159,7 +180,7 @@ atla confluence page view 123456 --web
 **Syntax**
 
 ```bash
-atla confluence page children <ID> [--depth N] [--limit N=25]
+atla confluence page children <ID> [--depth N] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -256,7 +277,7 @@ atla confluence page move 123456 --parent 654321
 **Syntax**
 
 ```bash
-atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25]
+atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -300,7 +321,7 @@ atla confluence page label remove 123456 urgent
 **Syntax**
 
 ```bash
-atla confluence page comment list <PAGE_ID> [--limit N=25]
+atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -346,7 +367,7 @@ atla confluence page comment delete 123456 78910 --yes
 **Syntax**
 
 ```bash
-atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25]
+atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -424,7 +445,7 @@ atla confluence blog delete 234567 --yes
 **Syntax**
 
 ```bash
-atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25]
+atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -468,7 +489,7 @@ atla confluence blog label remove 234567 engineering
 **Syntax**
 
 ```bash
-atla confluence blog comment list <BLOG_ID> [--limit N=25]
+atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -514,7 +535,7 @@ atla confluence blog comment delete 234567 78910 --yes
 **Syntax**
 
 ```bash
-atla confluence search <CQL> [--limit N=25]
+atla confluence search <CQL> [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**
@@ -530,7 +551,7 @@ atla confluence search 'type = page AND space = ENG AND title ~ "Runbook"' --lim
 **Syntax**
 
 ```bash
-atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25]
+atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25] [--page-token TOKEN]
 ```
 
 **Example**

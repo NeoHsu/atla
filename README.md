@@ -210,6 +210,22 @@ Confluence v2 remains the primary generated client. Confluence search,
 attachment upload, and page label mutation use scoped Confluence v1 REST
 endpoints where v2 does not expose the required operation.
 
+### Pagination
+
+List and search commands treat `--limit N` as the maximum number of records to return for
+that invocation. If more records exist, table output prints a ready-to-copy next command:
+
+```text
+More results available.
+Next page:
+  atla jira project list --limit 25 --page-token <TOKEN>
+```
+
+JSON output includes the same information under `pagination.nextPageToken` and
+`pagination.nextCommand`. The token is opaque and validated against the command/query that
+created it. Use `--all` instead of `--limit` when you intentionally want to fetch every
+matching record.
+
 ## Development
 
 ```bash

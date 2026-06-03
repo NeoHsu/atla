@@ -63,40 +63,56 @@ List commands accept `--limit N` as a hard cap on returned items. `atla` paginat
 underlying API automatically and accumulates up to `N` records before printing — `--limit`
 is **not** a single-page hint.
 
-When the requested `--limit` is reached but the server still has more matches, a warning
-is written to **stderr**:
+When the requested `--limit` is reached but the server still has more matches, `atla`
+prints or returns a next-page token. The next page uses the same `--limit` plus the
+opaque `--page-token` value:
 
-```
-warning: more issues match this query; increase --limit to fetch them (1000 returned)
+```text
+More results available.
+Next page:
+  atla jira issue list --project PROJ --limit 100 --page-token <TOKEN>
 ```
 
-Stdout is reserved for the records themselves, so `-o json`, `-o csv`, and `-o keys`
-output is unaffected by the warning. Pipelines stay clean:
+For `table` output, the next-page command appears as a footer. For `json`, pagination
+metadata is embedded in the object:
+
+```json
+{
+  "issues": [],
+  "pagination": {
+    "isLast": false,
+    "nextPageToken": "...",
+    "nextCommand": "atla jira search 'project = PROJ' --limit 50 --page-token ..."
+  }
+}
+```
+
+For `csv` and `keys`, stdout is reserved for records only; the next-page hint goes to
+stderr so pipelines stay clean:
 
 ```bash
-atla jira issue list --project PROJ --limit 5000 --output keys > keys.txt   # stdout
-# stderr line, if any, appears in your terminal but not in keys.txt
+atla jira issue list --project PROJ --limit 100 --output keys > keys.txt
+# next-page hint, if any, appears in your terminal but not in keys.txt
 ```
 
-To silence the warning in scripts that intentionally cap results, redirect stderr:
-
-```bash
-atla jira issue list --project PROJ --limit 100 --output json 2>/dev/null
-```
+`--page-token` is validated against the command and query that produced it. Reusing a token
+with different filters, JQL, CQL, fields, or content IDs fails fast instead of silently
+returning the wrong page.
 
 ### `--all`
 
 When you want every matching record and would rather not pick a number, use `--all`
 instead of `--limit`. It runs until the server reports no more results and **does not**
-emit the truncation warning (you opted into the full fetch):
+emit next-page metadata because it fetches until exhaustion:
 
 ```bash
 atla jira search 'project = PROJ AND statusCategory != Done' --all --output keys
 atla confluence search 'type = page' --all --output json | jq '.results | length'
 ```
 
-`--all` and `--limit` are mutually exclusive. A broad `--all` query can issue many HTTP
-round trips (one per 100 items), so prefer narrower JQL/CQL filters when possible.
+`--all` is mutually exclusive with both `--limit` and `--page-token`. A broad `--all`
+query can issue many HTTP round trips (one per 100 items), so prefer narrower JQL/CQL
+filters when possible.
 
 See [`jira.md`](./jira.md#pagination) and [`confluence.md`](./confluence.md#pagination) for
 the full list of paginating commands.
