@@ -88,9 +88,26 @@ atla confluence search "type=page AND space=DEV" --output json
 Install the bundled AI agent skill to enable `atla`-aware assistance — JQL/CQL
 patterns, all command flags, scripting idioms, and safety rules.
 
+From the published repository:
+
 ```bash
-npx skills add NeoHsu/atla
+npx skills add NeoHsu/atla --skill atla-cli
 ```
+
+From a local checkout of this repo, install the internal `skills/atla-cli` package with:
+
+```bash
+npx skills add . --skill atla-cli
+```
+
+For non-interactive setup across all supported agents, add `--agent '*' -y`:
+
+```bash
+npx skills add . --skill atla-cli --agent '*' -y
+```
+
+Use `--copy` if you want the installed skill to be a standalone copy instead of a symlink
+back to the repo checkout.
 
 ## Feature Matrix
 

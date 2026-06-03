@@ -9,6 +9,31 @@ description: Compact complete reference for AI agents and automation using atla.
 
 `atla` is a unified Atlassian Cloud CLI for Jira and Confluence, written in Rust. It provides profile-based authentication, machine-friendly and human-friendly output modes, global dry-run safety, and command coverage for Jira projects/issues/boards/sprints plus Confluence spaces/pages/blogs/search/comments/labels/attachments.
 
+### Install the bundled skill
+
+The repo contains an installable AI-agent skill at `skills/atla-cli`.
+
+From GitHub:
+
+```bash
+npx skills add NeoHsu/atla --skill atla-cli
+```
+
+From a local checkout of this repo:
+
+```bash
+npx skills add . --skill atla-cli
+```
+
+For non-interactive setup across all supported agents:
+
+```bash
+npx skills add . --skill atla-cli --agent '*' -y
+```
+
+Use `--copy` if you want the installed skill to be a standalone copy instead of a symlink
+back to the repo checkout.
+
 ## 2. Command Tree
 
 ### Core
