@@ -16,9 +16,12 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
         JiraResource::Project(command) => project::run_project(command, global).await?,
         JiraResource::Sprint(command) => sprint::run_sprint(command, global).await?,
         JiraResource::Board(command) => board::run_board(command, global).await?,
-        JiraResource::Search { jql, limit, fields } => {
-            search::run_search(jql, limit, fields, global).await?
-        }
+        JiraResource::Search {
+            jql,
+            limit,
+            all,
+            fields,
+        } => search::run_search(jql, limit, all, fields, global).await?,
     }
     Ok(())
 }

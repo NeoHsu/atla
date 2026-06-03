@@ -79,11 +79,12 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             space_id,
             title,
             limit,
+            all,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let limit = limit.clamp(1, 250);
+            let limit = if all { u32::MAX } else { limit.clamp(1, 250) };
 
             if global.dry_run {
                 if let Some(space) = &space {
@@ -124,11 +125,13 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(page.is_last, Some(false)),
-                page.results.len(),
-                "pages",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(page.is_last, Some(false)),
+                    page.results.len(),
+                    "pages",
+                );
+            }
 
             print_pages(&page.results, global)?;
         }
@@ -212,13 +215,18 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 print_page(&page, global)?;
             }
         }
-        PageAction::Children { id, depth, limit } => {
+        PageAction::Children {
+            id,
+            depth,
+            limit,
+            all,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
             let search = ConfluenceContentTreeSearch {
                 page_id: id,
-                limit: limit.clamp(1, 250),
+                limit: if all { u32::MAX } else { limit.clamp(1, 250) },
                 depth: depth.map(|depth| depth.clamp(1, 100)),
             };
 
@@ -251,11 +259,13 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(children.is_last, Some(false)),
-                children.results.len(),
-                "children",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(children.is_last, Some(false)),
+                    children.results.len(),
+                    "children",
+                );
+            }
 
             print_content_nodes(&children.results, global)?;
         }

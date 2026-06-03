@@ -9,6 +9,7 @@ use super::format::{issue_fields_for_url, parse_issue_fields, print_issues};
 pub(super) async fn run_search(
     jql: String,
     limit: u32,
+    all: bool,
     fields: Option<String>,
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
@@ -16,9 +17,10 @@ pub(super) async fn run_search(
     let profile_name = ctx.profile_name();
     let profile = ctx.profile();
     let requested_fields = parse_issue_fields(fields.as_deref())?;
+    let max_results = if all { u32::MAX } else { limit.clamp(1, 5000) };
     let search = JiraIssueSearch {
         jql,
-        max_results: limit.clamp(1, 5000),
+        max_results,
         fields: requested_fields.clone(),
     };
 
@@ -54,11 +56,13 @@ pub(super) async fn run_search(
         return Ok(());
     }
 
-    crate::output::warn_if_truncated(
-        matches!(page.is_last, Some(false)),
-        page.issues.len(),
-        "issues",
-    );
+    if !all {
+        crate::output::warn_if_truncated(
+            matches!(page.is_last, Some(false)),
+            page.issues.len(),
+            "issues",
+        );
+    }
 
     print_issues(&page.issues, global, requested_fields.as_deref())?;
     Ok(())

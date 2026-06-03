@@ -70,11 +70,12 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             space_id,
             title,
             limit,
+            all,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let limit = limit.clamp(1, 250);
+            let limit = if all { u32::MAX } else { limit.clamp(1, 250) };
 
             if global.dry_run {
                 if let Some(space) = &space {
@@ -115,11 +116,13 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(page.is_last, Some(false)),
-                page.results.len(),
-                "blog posts",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(page.is_last, Some(false)),
+                    page.results.len(),
+                    "blog posts",
+                );
+            }
 
             print_blog_posts(&page.results, global)?;
         }

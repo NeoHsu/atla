@@ -14,11 +14,12 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             board,
             state,
             limit,
+            all,
         } => {
-            run_sprint_list(board, state, limit, global).await?;
+            run_sprint_list(board, state, limit, all, global).await?;
         }
-        SprintAction::Active { board, limit } => {
-            run_sprint_list(board, Some("active".to_owned()), limit, global).await?;
+        SprintAction::Active { board, limit, all } => {
+            run_sprint_list(board, Some("active".to_owned()), limit, all, global).await?;
         }
         SprintAction::View { id } => {
             let ctx = AppContext::load(global)?;
@@ -213,11 +214,17 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
                 })?;
             print_sprint_issue_move(id, &issues, global)?;
         }
-        SprintAction::Issues { id, limit, fields } => {
+        SprintAction::Issues {
+            id,
+            limit,
+            all,
+            fields,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
             let requested_fields = parse_issue_fields(fields.as_deref())?;
+            let max_results = if all { u32::MAX } else { limit };
 
             if global.dry_run {
                 let url = format!(
@@ -230,7 +237,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
 
             let client = ctx.jira_client()?;
             let page = client
-                .get_sprint_issues(id, limit, requested_fields.clone())
+                .get_sprint_issues(id, max_results, requested_fields.clone())
                 .await
                 .with_context(|| {
                     format!(
@@ -239,11 +246,13 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
                     )
                 })?;
 
-            crate::output::warn_if_truncated(
-                matches!(page.is_last, Some(false)),
-                page.issues.len(),
-                "issues",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(page.is_last, Some(false)),
+                    page.issues.len(),
+                    "issues",
+                );
+            }
 
             print_issues(&page.issues, global, requested_fields.as_deref())?;
         }
@@ -256,15 +265,17 @@ pub(super) async fn run_sprint_list(
     board_id: u64,
     state: Option<String>,
     limit: u32,
+    all: bool,
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
     let ctx = AppContext::load(global)?;
     let profile_name = ctx.profile_name();
     let profile = ctx.profile();
+    let max_results = if all { u32::MAX } else { limit.clamp(1, 1000) };
     let search = JiraSprintSearch {
         board_id,
         start_at: 0,
-        max_results: limit.clamp(1, 1000),
+        max_results,
         state,
     };
 
@@ -292,11 +303,13 @@ pub(super) async fn run_sprint_list(
         )
     })?;
 
-    crate::output::warn_if_truncated(
-        matches!(page.is_last, Some(false)),
-        page.values.len(),
-        "sprints",
-    );
+    if !all {
+        crate::output::warn_if_truncated(
+            matches!(page.is_last, Some(false)),
+            page.values.len(),
+            "sprints",
+        );
+    }
 
     print_sprints(&page, global)?;
     Ok(())

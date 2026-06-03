@@ -28,19 +28,21 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             assignee,
             jql,
             limit,
+            all,
             fields,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
             let requested_fields = parse_issue_fields(fields.as_deref())?;
+            let max_results = if all { u32::MAX } else { limit.clamp(1, 5000) };
             let list = JiraIssueList {
                 project_key: project,
                 status,
                 issue_type,
                 assignee,
                 jql,
-                max_results: limit.clamp(1, 5000),
+                max_results,
                 fields: requested_fields.clone(),
             };
             let search = list
@@ -66,11 +68,13 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 format!("failed to list Jira issues from {}", client.instance_url())
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(page.is_last, Some(false)),
-                page.issues.len(),
-                "issues",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(page.is_last, Some(false)),
+                    page.issues.len(),
+                    "issues",
+                );
+            }
 
             print_issues(&page.issues, global, requested_fields.as_deref())?;
         }
@@ -494,15 +498,15 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
 
                 print_comment(&comment, global)?;
             }
-            IssueCommentAction::List { key, limit } => {
+            IssueCommentAction::List { key, limit, all } => {
                 let ctx = AppContext::load(global)?;
                 let profile_name = ctx.profile_name();
                 let profile = ctx.profile();
-                let limit = limit.clamp(1, 1000);
+                let max_results = if all { u32::MAX } else { limit.clamp(1, 1000) };
 
                 if global.dry_run {
                     let url = format!(
-                        "{}/rest/api/3/issue/{}/comment?startAt=0&maxResults={limit}",
+                        "{}/rest/api/3/issue/{}/comment?startAt=0&maxResults={max_results}",
                         profile.instance.trim_end_matches('/'),
                         key
                     );
@@ -511,19 +515,24 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 }
 
                 let client = ctx.jira_client()?;
-                let page = client.list_comments(&key, limit).await.with_context(|| {
-                    format!(
-                        "failed to list comments for Jira issue `{key}` from {}",
-                        client.instance_url()
-                    )
-                })?;
+                let page = client
+                    .list_comments(&key, max_results)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "failed to list comments for Jira issue `{key}` from {}",
+                            client.instance_url()
+                        )
+                    })?;
 
-                crate::output::warn_if_truncated(
-                    page.total
-                        .is_some_and(|total| (page.comments.len() as u32) < total),
-                    page.comments.len(),
-                    "comments",
-                );
+                if !all {
+                    crate::output::warn_if_truncated(
+                        page.total
+                            .is_some_and(|total| (page.comments.len() as u32) < total),
+                        page.comments.len(),
+                        "comments",
+                    );
+                }
 
                 print_comments(&page, global)?;
             }

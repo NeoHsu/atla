@@ -126,6 +126,9 @@ pub enum JiraResource {
         jql: String,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
         #[arg(long)]
         fields: Option<String>,
     },
@@ -152,6 +155,9 @@ pub enum IssueAction {
         jql: Option<String>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
         #[arg(long)]
         fields: Option<String>,
     },
@@ -268,6 +274,9 @@ pub enum IssueCommentAction {
         key: String,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Update {
         key: String,
@@ -351,6 +360,9 @@ pub enum IssueWorklogAction {
         key: String,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
 }
 
@@ -371,6 +383,9 @@ pub enum BoardAction {
         name: Option<String>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         id: u64,
@@ -392,12 +407,18 @@ pub enum SprintAction {
         state: Option<String>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Active {
         #[arg(long)]
         board: u64,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         id: u64,
@@ -438,6 +459,9 @@ pub enum SprintAction {
         id: u64,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
         #[arg(long)]
         fields: Option<String>,
     },
@@ -456,6 +480,9 @@ pub enum ProjectAction {
         query: Option<String>,
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         key: String,
@@ -480,6 +507,9 @@ pub enum ConfluenceResource {
         cql: String,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Attachment(AttachmentCommand),
 }
@@ -523,6 +553,9 @@ pub enum PageAction {
         title: Option<String>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         id: String,
@@ -539,6 +572,9 @@ pub enum PageAction {
         depth: Option<u32>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Copy {
         source_id: String,
@@ -604,6 +640,9 @@ pub enum PageLabelAction {
         prefix: Option<String>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Add {
         page_id: String,
@@ -621,6 +660,9 @@ pub enum PageCommentAction {
         page_id: String,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Add {
         page_id: String,
@@ -676,6 +718,9 @@ pub enum BlogAction {
         title: Option<String>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         id: String,
@@ -726,6 +771,9 @@ pub enum BlogLabelAction {
         prefix: Option<String>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Add {
         blog_id: String,
@@ -743,6 +791,9 @@ pub enum BlogCommentAction {
         blog_id: String,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     Add {
         blog_id: String,
@@ -776,6 +827,9 @@ pub enum SpaceAction {
         key: Option<String>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         key: String,
@@ -823,6 +877,9 @@ pub enum AttachmentAction {
         filename: Option<String>,
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
+        /// Fetch every matching record (overrides --limit; suppresses truncation warning)
+        #[arg(long, conflicts_with = "limit")]
+        all: bool,
     },
     View {
         attachment_id: String,

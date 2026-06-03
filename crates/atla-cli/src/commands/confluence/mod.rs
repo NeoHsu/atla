@@ -16,7 +16,9 @@ pub async fn run(command: ConfluenceCommand, global: &GlobalArgs) -> anyhow::Res
         ConfluenceResource::Page(command) => page::run_page(command, global).await?,
         ConfluenceResource::Space(command) => space::run_space(command, global).await?,
         ConfluenceResource::Blog(command) => blog::run_blog(command, global).await?,
-        ConfluenceResource::Search { cql, limit } => search::run_search(cql, limit, global).await?,
+        ConfluenceResource::Search { cql, limit, all } => {
+            search::run_search(cql, limit, all, global).await?
+        }
         ConfluenceResource::Attachment(command) => {
             attachment::run_attachment(command, global).await?
         }

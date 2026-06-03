@@ -17,6 +17,7 @@ pub(super) async fn run_attachment(
             page_id,
             filename,
             limit,
+            all,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
@@ -24,7 +25,7 @@ pub(super) async fn run_attachment(
             let search = ConfluenceAttachmentSearch {
                 page_id,
                 filename: filename.filter(|s| !s.is_empty()),
-                limit: limit.clamp(1, 250),
+                limit: if all { u32::MAX } else { limit.clamp(1, 250) },
             };
 
             if global.dry_run {
@@ -48,11 +49,13 @@ pub(super) async fn run_attachment(
                     )
                 })?;
 
-            crate::output::warn_if_truncated(
-                matches!(page.is_last, Some(false)),
-                page.results.len(),
-                "attachments",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(page.is_last, Some(false)),
+                    page.results.len(),
+                    "attachments",
+                );
+            }
 
             print_attachments(&page.results, global)?;
         }

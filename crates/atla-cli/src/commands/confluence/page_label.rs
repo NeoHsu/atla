@@ -15,6 +15,7 @@ pub(super) async fn run_page_label(
             page_id,
             prefix,
             limit,
+            all,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
@@ -22,7 +23,7 @@ pub(super) async fn run_page_label(
             let search = ConfluenceLabelSearch {
                 content_id: page_id,
                 prefix,
-                limit: limit.clamp(1, 250),
+                limit: if all { u32::MAX } else { limit.clamp(1, 250) },
             };
 
             if global.dry_run {
@@ -43,11 +44,13 @@ pub(super) async fn run_page_label(
                 )
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(labels.is_last, Some(false)),
-                labels.results.len(),
-                "labels",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(labels.is_last, Some(false)),
+                    labels.results.len(),
+                    "labels",
+                );
+            }
 
             print_labels(&labels, global)?;
         }

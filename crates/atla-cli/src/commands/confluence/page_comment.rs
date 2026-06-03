@@ -13,13 +13,17 @@ pub(super) async fn run_page_comment(
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
     match action {
-        PageCommentAction::List { page_id, limit } => {
+        PageCommentAction::List {
+            page_id,
+            limit,
+            all,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
             let search = ConfluenceCommentSearch {
                 content_id: page_id,
-                limit: limit.clamp(1, 250),
+                limit: if all { u32::MAX } else { limit.clamp(1, 250) },
             };
 
             if global.dry_run {
@@ -40,11 +44,13 @@ pub(super) async fn run_page_comment(
                 )
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(comments.is_last, Some(false)),
-                comments.results.len(),
-                "comments",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(comments.is_last, Some(false)),
+                    comments.results.len(),
+                    "comments",
+                );
+            }
 
             print_comments(&comments, global)?;
         }

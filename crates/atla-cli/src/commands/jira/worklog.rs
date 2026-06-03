@@ -47,36 +47,41 @@ pub(super) async fn run_issue_worklog(
                 })?;
             print_worklog(&worklog, global)?;
         }
-        IssueWorklogAction::List { key, limit } => {
+        IssueWorklogAction::List { key, limit, all } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let limit = limit.clamp(1, 1000);
+            let max_results = if all { u32::MAX } else { limit.clamp(1, 1000) };
 
             if global.dry_run {
                 println!(
                     "Would GET {}/rest/api/3/issue/{}/worklog?startAt=0&maxResults={} using profile `{profile_name}`",
                     profile.instance.trim_end_matches('/'),
                     key,
-                    limit
+                    max_results
                 );
                 return Ok(());
             }
 
             let client = ctx.jira_client()?;
-            let page = client.list_worklogs(&key, limit).await.with_context(|| {
-                format!(
-                    "failed to list worklogs for Jira issue `{key}` from {}",
-                    client.instance_url()
-                )
-            })?;
+            let page = client
+                .list_worklogs(&key, max_results)
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to list worklogs for Jira issue `{key}` from {}",
+                        client.instance_url()
+                    )
+                })?;
 
-            crate::output::warn_if_truncated(
-                page.total
-                    .is_some_and(|total| (page.worklogs.len() as u32) < total),
-                page.worklogs.len(),
-                "worklogs",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    page.total
+                        .is_some_and(|total| (page.worklogs.len() as u32) < total),
+                    page.worklogs.len(),
+                    "worklogs",
+                );
+            }
 
             print_worklogs(&page, global)?;
         }

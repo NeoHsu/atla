@@ -13,13 +13,15 @@ pub(super) async fn run_board(command: BoardCommand, global: &GlobalArgs) -> any
             board_type,
             name,
             limit,
+            all,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let max_results = if all { u32::MAX } else { limit.clamp(1, 1000) };
             let search = JiraBoardSearch {
                 start_at: 0,
-                max_results: limit.clamp(1, 1000),
+                max_results,
                 board_type,
                 name,
                 project_key_or_id: project.or_else(|| profile.default_project.clone()),
@@ -41,11 +43,13 @@ pub(super) async fn run_board(command: BoardCommand, global: &GlobalArgs) -> any
                 format!("failed to list Jira boards from {}", client.instance_url())
             })?;
 
-            crate::output::warn_if_truncated(
-                matches!(page.is_last, Some(false)),
-                page.values.len(),
-                "boards",
-            );
+            if !all {
+                crate::output::warn_if_truncated(
+                    matches!(page.is_last, Some(false)),
+                    page.values.len(),
+                    "boards",
+                );
+            }
 
             print_boards(&page, global)?;
         }
