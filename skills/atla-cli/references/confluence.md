@@ -9,7 +9,8 @@ the next logical page. Table output prints a ready-to-copy next command; JSON ou
 includes `pagination.nextPageToken` and `pagination.nextCommand`; CSV/keys keep stdout
 record-only and write the next-page hint to stderr. Pass `--page-token` back to the same
 command/query to continue. Use `--all` when you want every matching record; `--all` is
-mutually exclusive with both `--limit` and `--page-token`.
+mutually exclusive with both `--limit` and `--page-token`. All paginating syntaxes below
+also accept `--all` in place of `--limit`/`--page-token`.
 
 ---
 
@@ -53,10 +54,11 @@ atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=2
 
 ### View a page
 ```
-atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format]
+atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format] [--with-attachments]
 ```
 - `--format markdown` returns rendered Markdown
-- `--web` opens in browser
+- `--web` opens it in the browser
+- `--with-attachments` also fetches and prints page attachments
 - Combine with `--output json` for structured data
 
 ### List page children
@@ -156,7 +158,7 @@ atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=2
 
 ### View a blog post
 ```
-atla confluence blog view <ID>
+atla confluence blog view <ID> [--format markdown|storage|atlas-doc-format]
 ```
 
 ### Create a blog post
@@ -191,9 +193,9 @@ atla confluence blog label remove <BLOG_ID> <LABEL>
 ```
 atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN]
 atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
-atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
+atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
 ```
 
 ---
@@ -230,7 +232,7 @@ atla confluence attachment upload <PAGE_ID> <FILE> [--comment TEXT] [--minor-edi
 
 ### Download an attachment
 ```
-atla confluence attachment download <ATTACHMENT_ID> [--save-to FILE]
+atla confluence attachment download <ATTACHMENT_ID> [--save-to FILE | -f FILE]
 ```
 
 ### Delete an attachment

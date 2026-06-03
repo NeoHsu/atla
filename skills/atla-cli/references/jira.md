@@ -9,7 +9,8 @@ the next logical page. Table output prints a ready-to-copy next command; JSON ou
 includes `pagination.nextPageToken` and `pagination.nextCommand`; CSV/keys keep stdout
 record-only and write the next-page hint to stderr. Pass `--page-token` back to the same
 command/query to continue. Use `--all` when you want every matching record; `--all` is
-mutually exclusive with both `--limit` and `--page-token`.
+mutually exclusive with both `--limit` and `--page-token`. All paginating syntaxes below
+also accept `--all` in place of `--limit`/`--page-token`.
 
 ---
 
@@ -297,11 +298,13 @@ atla jira sprint close <ID>
 ### Add issues to a sprint
 ```
 atla jira sprint add <ID> --issues KEY,KEY,...
+# --issue is accepted as an alias for --issues
 ```
 
 ### Remove issues from a sprint
 ```
 atla jira sprint remove <ID> --issues KEY,KEY,...
+# --issue is accepted as an alias for --issues
 ```
 
 ### List sprint issues
