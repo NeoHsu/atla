@@ -3,12 +3,13 @@
 Complete syntax and flags for all `atla confluence` commands. All commands accept global flags:
 `-o/--output`, `--profile`, `--verbose`, `--dry-run`, `--no-input`.
 
-**Pagination.** `--limit N` is a hard cap on returned items, not a single-page hint —
-`atla` follows Confluence v2 cursors (or v1 CQL `start`/`totalSize`) automatically until
-`N` items are collected or the server runs out. If `--limit` is reached but more matches
-exist, a `warning:` line goes to stderr (stdout stays clean for JSON/CSV/keys piping).
-Use `--all` (mutually exclusive with `--limit`) when you want every matching record
-without picking a number; the warning is suppressed.
+**Pagination.** `--limit N` is a hard cap on returned items for the current invocation,
+not a single-page hint. If more matches exist, `atla` returns an opaque `--page-token` for
+the next logical page. Table output prints a ready-to-copy next command; JSON output
+includes `pagination.nextPageToken` and `pagination.nextCommand`; CSV/keys keep stdout
+record-only and write the next-page hint to stderr. Pass `--page-token` back to the same
+command/query to continue. Use `--all` when you want every matching record; `--all` is
+mutually exclusive with both `--limit` and `--page-token`.
 
 ---
 
@@ -16,7 +17,7 @@ without picking a number; the warning is suppressed.
 
 ### List spaces
 ```
-atla confluence space list [--key KEY] [--limit N=25]
+atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN]
 ```
 
 ### View a space
@@ -47,7 +48,7 @@ atla confluence space delete <KEY> [--yes]
 
 ### List pages
 ```
-atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25]
+atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
 ```
 
 ### View a page
@@ -60,7 +61,7 @@ atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-form
 
 ### List page children
 ```
-atla confluence page children <ID> [--depth N] [--limit N=25]
+atla confluence page children <ID> [--depth N] [--limit N=25] [--page-token TOKEN]
 ```
 
 ### Copy a page
@@ -109,7 +110,7 @@ atla confluence page move <ID> --parent NEW_PARENT_ID
 
 ### List labels
 ```
-atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25]
+atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
 ```
 
 ### Add labels
@@ -129,7 +130,7 @@ atla confluence page label remove <PAGE_ID> <LABEL>
 
 ### List comments
 ```
-atla confluence page comment list <PAGE_ID> [--limit N=25]
+atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN]
 ```
 
 ### Add a comment
@@ -150,7 +151,7 @@ atla confluence page comment delete <PAGE_ID> <COMMENT_ID> [--yes]
 
 ### List blog posts
 ```
-atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25]
+atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
 ```
 
 ### View a blog post
@@ -181,14 +182,14 @@ atla confluence blog delete <ID> [--purge] [--draft] [--yes]
 
 ### Blog labels
 ```
-atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25]
+atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
 atla confluence blog label add <BLOG_ID> LABEL [LABEL ...]
 atla confluence blog label remove <BLOG_ID> <LABEL>
 ```
 
 ### Blog comments
 ```
-atla confluence blog comment list <BLOG_ID> [--limit N=25]
+atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN]
 atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
 atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
                                   [--parent COMMENT_ID]
@@ -201,7 +202,7 @@ atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
 
 ### Run a CQL search
 ```
-atla confluence search <CQL> [--limit N=25]
+atla confluence search <CQL> [--limit N=25] [--page-token TOKEN]
 ```
 Example:
 ```bash
@@ -214,7 +215,7 @@ atla confluence search 'type = page AND space = ENG AND title ~ "Runbook"' --lim
 
 ### List attachments
 ```
-atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25]
+atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25] [--page-token TOKEN]
 ```
 
 ### View attachment metadata

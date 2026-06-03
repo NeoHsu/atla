@@ -39,21 +39,32 @@ For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
 | `--no-input` | Disable interactive prompts (for scripts/CI) |
 | `--verbose` | Show HTTP request/response details |
 
-## Pagination, `--limit`, and `--all`
+## Pagination, `--limit`, `--page-token`, and `--all`
 
-On list/search commands, `--limit N` is a max-results cap. `atla` paginates the
-underlying API automatically (Jira cursor or `startAt`, Confluence cursor or CQL
-`start`/`totalSize`) and accumulates up to `N` items before returning — there is no
-need to write batch loops in the shell.
+On list/search commands, `--limit N` is a max-results cap for the current invocation.
+`atla` paginates the underlying API automatically (Jira `nextPageToken`/`startAt`,
+Confluence cursor or CQL `start`/`totalSize`) and accumulates up to `N` items before
+returning — there is no need to write batch loops in the shell.
 
-If `--limit` is reached but more matches exist server-side, a `warning: more X match
-this query; increase --limit to fetch them (N returned)` line is printed to **stderr**.
-Stdout stays clean, so `-o json/keys/csv` output is pipe-safe.
+If `--limit` is reached but more matches exist server-side, `atla` exposes a next-page
+token. Table output prints a ready-to-copy command, JSON output includes a `pagination`
+object, and `keys`/`csv` keep stdout record-only while writing the next-page hint to
+stderr:
 
-When you want every matching record without picking a number, use `--all`. It runs
-until the server reports no more results and suppresses the truncation warning.
-`--all` and `--limit` are mutually exclusive. Prefer narrower JQL/CQL filters before
-reaching for `--all` on very broad queries — it can fan out into many HTTP round
+```text
+More results available.
+Next page:
+  atla jira search 'project = PROJ' --limit 50 --page-token <TOKEN>
+```
+
+Treat `--page-token` as opaque. Pass it back to the same command/query to continue; it is
+validated against the command and query and fails fast if reused with different filters,
+JQL/CQL, fields, or content IDs.
+
+When you want every matching record without picking a number, use `--all`. It runs until
+the server reports no more results and does not emit next-page metadata. `--all` is
+mutually exclusive with both `--limit` and `--page-token`. Prefer narrower JQL/CQL filters
+before reaching for `--all` on very broad queries — it can fan out into many HTTP round
 trips.
 
 ## Command Tree Overview

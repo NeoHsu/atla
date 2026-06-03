@@ -3,12 +3,13 @@
 Complete syntax and flags for all `atla jira` commands. All commands accept global flags:
 `-o/--output`, `--profile`, `--verbose`, `--dry-run`, `--no-input`.
 
-**Pagination.** `--limit N` is a hard cap on returned items, not a single-page hint —
-`atla` paginates the Jira API internally until `N` items are collected or the server
-runs out. If `--limit` is reached but more matches exist, a `warning:` line goes to
-stderr (stdout stays clean for JSON/CSV/keys piping). Use `--all` (mutually exclusive
-with `--limit`) when you want every matching record without picking a number; the
-warning is suppressed.
+**Pagination.** `--limit N` is a hard cap on returned items for the current invocation,
+not a single-page hint. If more matches exist, `atla` returns an opaque `--page-token` for
+the next logical page. Table output prints a ready-to-copy next command; JSON output
+includes `pagination.nextPageToken` and `pagination.nextCommand`; CSV/keys keep stdout
+record-only and write the next-page hint to stderr. Pass `--page-token` back to the same
+command/query to continue. Use `--all` when you want every matching record; `--all` is
+mutually exclusive with both `--limit` and `--page-token`.
 
 ---
 
@@ -16,7 +17,7 @@ warning is suppressed.
 
 ### List projects
 ```
-atla jira project list [--query TEXT] [--limit N=50]
+atla jira project list [--query TEXT] [--limit N=50] [--page-token TOKEN]
 ```
 Example: `atla jira project list --query platform --limit 25`
 
@@ -40,7 +41,7 @@ Use this before `issue create` to discover valid `--type` values.
 
 ### Run a JQL search
 ```
-atla jira search <JQL> [--limit N=50] [--fields FIELDS]
+atla jira search <JQL> [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
 ```
 Example:
 ```bash
@@ -55,7 +56,7 @@ atla jira search 'project = PROJ AND statusCategory != Done ORDER BY updated DES
 ### List issues
 ```
 atla jira issue list [--project KEY] [--status STATUS] [--type TYPE] [--assignee USER]
-                     [--jql JQL] [--limit N=50] [--fields FIELDS]
+                     [--jql JQL] [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
 ```
 Example: `atla jira issue list --project PROJ --status 'In Progress' --assignee me`
 
@@ -143,7 +144,7 @@ atla jira issue comment add <KEY> [BODY | --body TEXT | --body-file FILE]
 
 ### List comments
 ```
-atla jira issue comment list <KEY> [--limit N=25]
+atla jira issue comment list <KEY> [--limit N=25] [--page-token TOKEN]
 ```
 
 ### Update a comment
@@ -241,7 +242,7 @@ Example: `atla jira issue worklog add PROJ-123 --time 1h30m --comment 'Debugged 
 
 ### List worklogs
 ```
-atla jira issue worklog list <KEY> [--limit N=25]
+atla jira issue worklog list <KEY> [--limit N=25] [--page-token TOKEN]
 ```
 
 ---
@@ -250,7 +251,7 @@ atla jira issue worklog list <KEY> [--limit N=25]
 
 ### List boards
 ```
-atla jira board list [--project KEY] [--type TYPE] [--name NAME] [--limit N=50]
+atla jira board list [--project KEY] [--type TYPE] [--name NAME] [--limit N=50] [--page-token TOKEN]
 ```
 Example: `atla jira board list --project PROJ --type scrum`
 
@@ -265,12 +266,12 @@ atla jira board view <ID>
 
 ### List sprints
 ```
-atla jira sprint list --board ID [--state STATE] [--limit N=50]
+atla jira sprint list --board ID [--state STATE] [--limit N=50] [--page-token TOKEN]
 ```
 
 ### List active sprints
 ```
-atla jira sprint active --board ID [--limit N=50]
+atla jira sprint active --board ID [--limit N=50] [--page-token TOKEN]
 ```
 
 ### View a sprint
@@ -305,7 +306,7 @@ atla jira sprint remove <ID> --issues KEY,KEY,...
 
 ### List sprint issues
 ```
-atla jira sprint issues <ID> [--limit N=50] [--fields FIELDS]
+atla jira sprint issues <ID> [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
 ```
 
 ---
