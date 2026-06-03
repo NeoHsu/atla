@@ -10,11 +10,12 @@ use crate::context::AppContext;
 use super::attachment::run_issue_attachment;
 use super::format::{
     can_prompt, issue_fields_for_url, open_web_url, parse_fields, parse_issue_fields,
-    parse_label_update, print_comment, print_comments, print_created_issue, print_deleted,
-    print_github_commits, print_github_pull_requests, print_issue, print_issue_assign,
-    print_issue_comments_section, print_issue_delete, print_issue_fields, print_issue_update,
-    print_issue_with_github, print_issues, print_section_header, print_transition_update,
-    read_optional_text, read_required_text, select_transition,
+    parse_label_update, print_comment, print_comments, print_comments_with_footer,
+    print_created_issue, print_deleted, print_github_commits, print_github_pull_requests,
+    print_issue, print_issue_assign, print_issue_comments_section, print_issue_delete,
+    print_issue_fields, print_issue_update, print_issue_with_github, print_issues,
+    print_issues_with_footer, print_section_header, print_transition_update, read_optional_text,
+    read_required_text, select_transition,
 };
 use super::link::run_issue_link;
 use super::worklog::run_issue_worklog;
@@ -29,6 +30,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             jql,
             limit,
             all,
+            page_token,
             fields,
         } => {
             let ctx = AppContext::load(global)?;
@@ -45,9 +47,14 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 max_results,
                 fields: requested_fields.clone(),
             };
-            let search = list
+            let mut search = list
                 .to_search(profile.default_project.as_deref())
                 .context("failed to build Jira issue list query")?;
+            search.next_page_token = crate::pagination::decode_jira_jql_token(
+                page_token.as_deref(),
+                &search.jql,
+                requested_fields.as_deref(),
+            )?;
 
             if global.dry_run {
                 let url = format!(
@@ -68,15 +75,51 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 format!("failed to list Jira issues from {}", client.instance_url())
             })?;
 
-            if !all {
-                crate::output::warn_if_truncated(
-                    matches!(page.is_last, Some(false)),
-                    page.issues.len(),
-                    "issues",
-                );
-            }
+            let next_cli_token = if !all && matches!(page.is_last, Some(false)) {
+                crate::pagination::jira_jql_next_token(
+                    page.next_page_token.clone(),
+                    &search.jql,
+                    requested_fields.as_deref(),
+                )?
+            } else {
+                None
+            };
+            let next_command = next_cli_token.as_ref().map(|token| {
+                crate::pagination::jira_search_next_command(
+                    &search.jql,
+                    limit,
+                    requested_fields.as_deref(),
+                    token,
+                )
+            });
 
-            print_issues(&page.issues, global, requested_fields.as_deref())?;
+            match global.output.unwrap_or(crate::cli::OutputFormat::Table) {
+                crate::cli::OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                    "issues": page.issues,
+                    "pagination": {
+                        "isLast": page.is_last.unwrap_or(true),
+                        "nextPageToken": next_cli_token,
+                        "nextCommand": next_command,
+                    }
+                }))?,
+                crate::cli::OutputFormat::Table => {
+                    let footer = next_command
+                        .as_deref()
+                        .map(crate::pagination::next_page_footer);
+                    print_issues_with_footer(
+                        &page.issues,
+                        global,
+                        requested_fields.as_deref(),
+                        footer,
+                    )?;
+                }
+                crate::cli::OutputFormat::Csv | crate::cli::OutputFormat::Keys => {
+                    print_issues(&page.issues, global, requested_fields.as_deref())?;
+                    if let Some(command) = next_command {
+                        eprintln!("{}", crate::pagination::next_page_footer(&command));
+                    }
+                }
+            }
         }
         IssueAction::Create {
             project,
@@ -498,11 +541,23 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
 
                 print_comment(&comment, global)?;
             }
-            IssueCommentAction::List { key, limit, all } => {
+            IssueCommentAction::List {
+                key,
+                limit,
+                all,
+                page_token,
+            } => {
                 let ctx = AppContext::load(global)?;
                 let profile_name = ctx.profile_name();
                 let profile = ctx.profile();
                 let max_results = if all { u32::MAX } else { limit.clamp(1, 1000) };
+                let query_hash =
+                    crate::pagination::query_hash("jira.comment.list", &[("key", key.clone())]);
+                let start_at = crate::pagination::decode_jira_offset_token(
+                    page_token.as_deref(),
+                    "jira.comment.list",
+                    query_hash.clone(),
+                )?;
 
                 if global.dry_run {
                     let url = format!(
@@ -516,7 +571,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
 
                 let client = ctx.jira_client()?;
                 let page = client
-                    .list_comments(&key, max_results)
+                    .list_comments_from(&key, max_results, start_at)
                     .await
                     .with_context(|| {
                         format!(
@@ -525,16 +580,48 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                         )
                     })?;
 
-                if !all {
-                    crate::output::warn_if_truncated(
-                        page.total
-                            .is_some_and(|total| (page.comments.len() as u32) < total),
-                        page.comments.len(),
-                        "comments",
-                    );
+                let next_start = (!all
+                    && page.total.is_some_and(|total| {
+                        start_at + (page.comments.len() as u64) < total as u64
+                    }))
+                .then_some(start_at + page.comments.len() as u64);
+                let next_cli_token = crate::pagination::jira_offset_next_token(
+                    "jira.comment.list",
+                    next_start,
+                    query_hash,
+                )?;
+                let next_command = next_cli_token.as_ref().map(|token| {
+                    crate::pagination::next_command(
+                        vec![
+                            "atla".to_owned(),
+                            "jira".to_owned(),
+                            "issue".to_owned(),
+                            "comment".to_owned(),
+                            "list".to_owned(),
+                            crate::pagination::quote(&key),
+                        ],
+                        limit,
+                        token,
+                    )
+                });
+                match global.output.unwrap_or(crate::cli::OutputFormat::Table) {
+                    crate::cli::OutputFormat::Json => crate::output::print_json(
+                        &serde_json::json!({"comments": page.comments, "total": page.total, "pagination": {"isLast": next_cli_token.is_none(), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
+                    )?,
+                    crate::cli::OutputFormat::Table => print_comments_with_footer(
+                        &page,
+                        global,
+                        next_command
+                            .as_deref()
+                            .map(crate::pagination::next_page_footer),
+                    )?,
+                    crate::cli::OutputFormat::Csv | crate::cli::OutputFormat::Keys => {
+                        print_comments(&page, global)?;
+                        if let Some(command) = next_command {
+                            eprintln!("{}", crate::pagination::next_page_footer(&command));
+                        }
+                    }
                 }
-
-                print_comments(&page, global)?;
             }
             IssueCommentAction::Update {
                 key,

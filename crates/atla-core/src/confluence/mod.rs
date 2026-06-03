@@ -875,6 +875,7 @@ mod tests {
         let search = ConfluenceSearch {
             cql: "type = page".to_owned(),
             limit: u32::MAX,
+            start: 0,
         };
 
         assert_eq!(search.limit, u32::MAX);

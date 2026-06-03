@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod context;
 mod output;
+mod pagination;
 
 use clap::{CommandFactory, Parser};
 use cli::{Cli, Command};

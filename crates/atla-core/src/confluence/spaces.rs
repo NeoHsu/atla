@@ -11,7 +11,7 @@ impl ConfluenceClient {
     ) -> Result<ConfluenceSpacePage, ApiError> {
         let limit = search.limit.max(1);
         let mut collected: Vec<ConfluenceSpace> = Vec::new();
-        let mut cursor: Option<String> = None;
+        let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
         loop {
@@ -50,9 +50,11 @@ impl ConfluenceClient {
             collected.truncate(limit as usize);
         }
 
+        let next_cursor = next_link.as_deref().and_then(cursor_from_next_link);
         Ok(ConfluenceSpacePage {
             results: collected,
-            is_last: Some(next_link.is_none()),
+            is_last: Some(next_cursor.is_none()),
+            next_cursor,
         })
     }
 
@@ -61,6 +63,7 @@ impl ConfluenceClient {
             .list_spaces(&ConfluenceSpaceSearch {
                 key: Some(key.to_owned()),
                 limit: 1,
+                cursor: None,
             })
             .await?;
 

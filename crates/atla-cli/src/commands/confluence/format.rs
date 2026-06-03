@@ -172,6 +172,7 @@ pub(super) fn open_web_url(url: &str) -> anyhow::Result<()> {
 pub(super) fn print_search_results(
     results: &[ConfluenceSearchResult],
     global: &GlobalArgs,
+    footer: Option<String>,
 ) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
@@ -208,7 +209,7 @@ pub(super) fn print_search_results(
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
@@ -316,6 +317,14 @@ pub(super) fn print_attachments(
     attachments: &[ConfluenceAttachment],
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
+    print_attachments_with_footer(attachments, global, None)
+}
+
+pub(super) fn print_attachments_with_footer(
+    attachments: &[ConfluenceAttachment],
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         attachments,
@@ -351,7 +360,7 @@ pub(super) fn print_attachments(
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
@@ -406,6 +415,14 @@ pub(super) fn print_deleted(kind: &str, id: &str, global: &GlobalArgs) -> anyhow
 }
 
 pub(super) fn print_labels(page: &ConfluenceLabelPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    print_labels_with_footer(page, global, None)
+}
+
+pub(super) fn print_labels_with_footer(
+    page: &ConfluenceLabelPage,
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
@@ -424,13 +441,21 @@ pub(super) fn print_labels(page: &ConfluenceLabelPage, global: &GlobalArgs) -> a
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
 pub(super) fn print_comments(
     page: &ConfluenceCommentPage,
     global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    print_comments_with_footer(page, global, None)
+}
+
+pub(super) fn print_comments_with_footer(
+    page: &ConfluenceCommentPage,
+    global: &GlobalArgs,
+    footer: Option<String>,
 ) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
@@ -457,7 +482,7 @@ pub(super) fn print_comments(
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
@@ -469,6 +494,7 @@ pub(super) fn print_comment(
         &ConfluenceCommentPage {
             results: vec![comment.clone()],
             is_last: None,
+            next_cursor: None,
         },
         global,
     )
@@ -485,6 +511,14 @@ pub(super) fn comment_version(comment: &ConfluenceComment) -> Option<String> {
 pub(super) fn print_content_nodes(
     nodes: &[ConfluenceContentNode],
     global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    print_content_nodes_with_footer(nodes, global, None)
+}
+
+pub(super) fn print_content_nodes_with_footer(
+    nodes: &[ConfluenceContentNode],
+    global: &GlobalArgs,
+    footer: Option<String>,
 ) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
@@ -519,11 +553,19 @@ pub(super) fn print_content_nodes(
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
 pub(super) fn print_pages(pages: &[ConfluencePage], global: &GlobalArgs) -> anyhow::Result<()> {
+    print_pages_with_footer(pages, global, None)
+}
+
+pub(super) fn print_pages_with_footer(
+    pages: &[ConfluencePage],
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         pages,
@@ -542,7 +584,7 @@ pub(super) fn print_pages(pages: &[ConfluencePage], global: &GlobalArgs) -> anyh
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
@@ -617,6 +659,14 @@ pub(super) fn print_blog_posts(
     posts: &[ConfluenceBlogPost],
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
+    print_blog_posts_with_footer(posts, global, None)
+}
+
+pub(super) fn print_blog_posts_with_footer(
+    posts: &[ConfluenceBlogPost],
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         posts,
@@ -634,7 +684,7 @@ pub(super) fn print_blog_posts(
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 
@@ -684,6 +734,14 @@ pub(super) fn blog_post_version(post: &ConfluenceBlogPost) -> Option<String> {
 }
 
 pub(super) fn print_spaces(spaces: &[ConfluenceSpace], global: &GlobalArgs) -> anyhow::Result<()> {
+    print_spaces_with_footer(spaces, global, None)
+}
+
+pub(super) fn print_spaces_with_footer(
+    spaces: &[ConfluenceSpace],
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         spaces,
@@ -705,7 +763,7 @@ pub(super) fn print_spaces(spaces: &[ConfluenceSpace], global: &GlobalArgs) -> a
                 ]
             })
             .collect(),
-        None,
+        footer,
     )
 }
 

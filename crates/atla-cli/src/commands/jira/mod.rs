@@ -20,8 +20,9 @@ pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()
             jql,
             limit,
             all,
+            page_token,
             fields,
-        } => search::run_search(jql, limit, all, fields, global).await?,
+        } => search::run_search(jql, limit, all, page_token, fields, global).await?,
     }
     Ok(())
 }

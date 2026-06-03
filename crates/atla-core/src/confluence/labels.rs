@@ -12,7 +12,7 @@ impl ConfluenceClient {
         let content_id = parse_i64_id(&search.content_id)?;
         let limit = search.limit.max(1);
         let mut collected: Vec<ConfluenceLabel> = Vec::new();
-        let mut cursor: Option<String> = None;
+        let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
         loop {
@@ -52,9 +52,11 @@ impl ConfluenceClient {
             collected.truncate(limit as usize);
         }
 
+        let next_cursor = next_link.as_deref().and_then(cursor_from_next_link);
         Ok(ConfluenceLabelPage {
             results: collected,
-            is_last: Some(next_link.is_none()),
+            is_last: Some(next_cursor.is_none()),
+            next_cursor,
         })
     }
 
@@ -65,7 +67,7 @@ impl ConfluenceClient {
         let content_id = parse_i64_id(&search.content_id)?;
         let limit = search.limit.max(1);
         let mut collected: Vec<ConfluenceLabel> = Vec::new();
-        let mut cursor: Option<String> = None;
+        let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
         loop {
@@ -105,9 +107,11 @@ impl ConfluenceClient {
             collected.truncate(limit as usize);
         }
 
+        let next_cursor = next_link.as_deref().and_then(cursor_from_next_link);
         Ok(ConfluenceLabelPage {
             results: collected,
-            is_last: Some(next_link.is_none()),
+            is_last: Some(next_cursor.is_none()),
+            next_cursor,
         })
     }
 

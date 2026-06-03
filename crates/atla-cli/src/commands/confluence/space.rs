@@ -1,20 +1,37 @@
 use anyhow::Context;
 use atla_core::{ConfluenceSpaceCreate, ConfluenceSpaceSearch, ConfluenceSpaceUpdate};
 
-use crate::cli::{GlobalArgs, SpaceAction, SpaceCommand};
+use crate::cli::{GlobalArgs, OutputFormat, SpaceAction, SpaceCommand};
 use crate::context::AppContext;
 
-use super::format::{print_deleted, print_space, print_spaces, read_body};
+use super::format::{
+    print_deleted, print_space, print_spaces, print_spaces_with_footer, read_body,
+};
 
 pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     match command.action {
-        SpaceAction::List { key, limit, all } => {
+        SpaceAction::List {
+            key,
+            limit,
+            all,
+            page_token,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let query_hash = crate::pagination::query_hash(
+                "confluence.space.list",
+                &[("key", key.clone().unwrap_or_default())],
+            );
+            let cursor = crate::pagination::decode_confluence_cursor_token(
+                page_token.as_deref(),
+                "confluence.space.list",
+                query_hash.clone(),
+            )?;
             let search = ConfluenceSpaceSearch {
                 key,
                 limit: if all { u32::MAX } else { limit.clamp(1, 250) },
+                cursor,
             };
 
             if global.dry_run {
@@ -38,15 +55,47 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
                 )
             })?;
 
-            if !all {
-                crate::output::warn_if_truncated(
-                    matches!(page.is_last, Some(false)),
-                    page.results.len(),
-                    "spaces",
-                );
+            let next_cli_token = if !all && matches!(page.is_last, Some(false)) {
+                crate::pagination::confluence_cursor_next_token(
+                    "confluence.space.list",
+                    page.next_cursor.clone(),
+                    query_hash,
+                )?
+            } else {
+                None
+            };
+            let next_command = next_cli_token.as_ref().map(|token| {
+                let mut parts = vec![
+                    "atla".to_owned(),
+                    "confluence".to_owned(),
+                    "space".to_owned(),
+                    "list".to_owned(),
+                ];
+                if let Some(key) = &search.key {
+                    parts.push("--key".to_owned());
+                    parts.push(crate::pagination::quote(key));
+                }
+                crate::pagination::next_command(parts, limit, token)
+            });
+            match global.output.unwrap_or(OutputFormat::Table) {
+                OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                    "results": page.results,
+                    "pagination": { "isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command }
+                }))?,
+                OutputFormat::Table => print_spaces_with_footer(
+                    &page.results,
+                    global,
+                    next_command
+                        .as_deref()
+                        .map(crate::pagination::next_page_footer),
+                )?,
+                OutputFormat::Csv | OutputFormat::Keys => {
+                    print_spaces(&page.results, global)?;
+                    if let Some(command) = next_command {
+                        eprintln!("{}", crate::pagination::next_page_footer(&command));
+                    }
+                }
             }
-
-            print_spaces(&page.results, global)?;
         }
         SpaceAction::View { key } => {
             let ctx = AppContext::load(global)?;

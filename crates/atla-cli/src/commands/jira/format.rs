@@ -17,6 +17,15 @@ pub(super) fn print_projects(
     total: Option<u64>,
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
+    print_projects_with_footer(projects, total, global, None)
+}
+
+pub(super) fn print_projects_with_footer(
+    projects: &[JiraProject],
+    total: Option<u64>,
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         projects,
@@ -44,7 +53,9 @@ pub(super) fn print_projects(
                 ]
             })
             .collect(),
-        total.map(|total| format!("Showing {} of {total} projects.", projects.len())),
+        footer.or_else(|| {
+            total.map(|total| format!("Showing {} of {total} projects.", projects.len()))
+        }),
     )
 }
 
@@ -52,6 +63,15 @@ pub(super) fn print_issues(
     issues: &[JiraIssue],
     global: &GlobalArgs,
     requested_fields: Option<&[String]>,
+) -> anyhow::Result<()> {
+    print_issues_with_footer(issues, global, requested_fields, None)
+}
+
+pub(super) fn print_issues_with_footer(
+    issues: &[JiraIssue],
+    global: &GlobalArgs,
+    requested_fields: Option<&[String]>,
+    footer: Option<String>,
 ) -> anyhow::Result<()> {
     // When explicit --fields are given, show exactly those (key is always included for
     // identification). When no --fields, show the default set.
@@ -105,7 +125,7 @@ pub(super) fn print_issues(
             .collect(),
         &header_refs,
         rows,
-        None,
+        footer,
     )
 }
 
@@ -436,6 +456,14 @@ pub(super) fn print_transition_update(
 }
 
 pub(super) fn print_comments(page: &JiraCommentPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    print_comments_with_footer(page, global, None)
+}
+
+pub(super) fn print_comments_with_footer(
+    page: &JiraCommentPage,
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
@@ -464,8 +492,10 @@ pub(super) fn print_comments(page: &JiraCommentPage, global: &GlobalArgs) -> any
                 ]
             })
             .collect(),
-        page.total
-            .map(|total| format!("Showing {} of {total} comments.", page.comments.len())),
+        footer.or_else(|| {
+            page.total
+                .map(|total| format!("Showing {} of {total} comments.", page.comments.len()))
+        }),
     )
 }
 
@@ -655,6 +685,14 @@ pub(super) fn print_github_commits(
 }
 
 pub(super) fn print_worklogs(page: &JiraWorklogPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    print_worklogs_with_footer(page, global, None)
+}
+
+pub(super) fn print_worklogs_with_footer(
+    page: &JiraWorklogPage,
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
@@ -687,8 +725,10 @@ pub(super) fn print_worklogs(page: &JiraWorklogPage, global: &GlobalArgs) -> any
                 ]
             })
             .collect(),
-        page.total
-            .map(|total| format!("Showing {} of {total} worklogs.", page.worklogs.len())),
+        footer.or_else(|| {
+            page.total
+                .map(|total| format!("Showing {} of {total} worklogs.", page.worklogs.len()))
+        }),
     )
 }
 
@@ -847,6 +887,14 @@ pub(super) fn print_attachments(
 }
 
 pub(super) fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    print_boards_with_footer(page, global, None)
+}
+
+pub(super) fn print_boards_with_footer(
+    page: &JiraBoardPage,
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
@@ -866,8 +914,10 @@ pub(super) fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow:
                 ]
             })
             .collect(),
-        page.total
-            .map(|total| format!("Showing {} of {total} boards.", page.values.len())),
+        footer.or_else(|| {
+            page.total
+                .map(|total| format!("Showing {} of {total} boards.", page.values.len()))
+        }),
     )
 }
 
@@ -907,6 +957,14 @@ pub(super) fn print_board(board: &JiraBoard, global: &GlobalArgs) -> anyhow::Res
 }
 
 pub(super) fn print_sprints(page: &JiraSprintPage, global: &GlobalArgs) -> anyhow::Result<()> {
+    print_sprints_with_footer(page, global, None)
+}
+
+pub(super) fn print_sprints_with_footer(
+    page: &JiraSprintPage,
+    global: &GlobalArgs,
+    footer: Option<String>,
+) -> anyhow::Result<()> {
     output::print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
@@ -942,8 +1000,10 @@ pub(super) fn print_sprints(page: &JiraSprintPage, global: &GlobalArgs) -> anyho
                 ]
             })
             .collect(),
-        page.total
-            .map(|total| format!("Showing {} of {total} sprints.", page.values.len())),
+        footer.or_else(|| {
+            page.total
+                .map(|total| format!("Showing {} of {total} sprints.", page.values.len()))
+        }),
     )
 }
 

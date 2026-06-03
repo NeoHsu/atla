@@ -11,7 +11,7 @@ impl ConfluenceClient {
     ) -> Result<ConfluenceSearchPage, ApiError> {
         let limit = search.limit.max(1);
         let mut collected: Vec<ConfluenceSearchResult> = Vec::new();
-        let mut start: i32 = 0;
+        let mut start: i32 = limit_i32(search.start);
         let mut last_total: Option<u64> = None;
 
         loop {
@@ -51,7 +51,11 @@ impl ConfluenceClient {
             }
         }
 
-        let exhausted = last_total.is_some_and(|total| collected.len() as u64 >= total);
+        let next_start = u32::try_from(start).ok().filter(|_| {
+            last_total.is_none_or(|total| (start as u64) < total)
+                && (collected.len() as u32) >= limit
+        });
+        let exhausted = next_start.is_none();
         if collected.len() > limit as usize {
             collected.truncate(limit as usize);
         }
@@ -61,6 +65,7 @@ impl ConfluenceClient {
             size: Some(0),
             total_size: last_total,
             is_last: Some(exhausted),
+            next_start,
         })
     }
 }

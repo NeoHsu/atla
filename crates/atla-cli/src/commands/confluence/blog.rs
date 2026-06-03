@@ -1,14 +1,15 @@
 use anyhow::Context;
 use atla_core::{ConfluenceBlogPostCreate, ConfluenceBlogPostSearch, ConfluenceBlogPostUpdate};
 
-use crate::cli::{BlogAction, BlogCommand, GlobalArgs};
+use crate::cli::{BlogAction, BlogCommand, GlobalArgs, OutputFormat};
 use crate::context::AppContext;
 
 use super::blog_comment::run_blog_comment;
 use super::blog_label::run_blog_label;
 use super::format::{
-    confluence_body_representation, print_blog_post, print_blog_posts, print_deleted, read_body,
-    resolve_required_space_id, resolve_space_id, status_from_draft,
+    confluence_body_representation, print_blog_post, print_blog_posts,
+    print_blog_posts_with_footer, print_deleted, read_body, resolve_required_space_id,
+    resolve_space_id, status_from_draft,
 };
 
 pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<()> {
@@ -71,6 +72,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             title,
             limit,
             all,
+            page_token,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
@@ -104,10 +106,23 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
 
             let client = ctx.confluence_client()?;
             let resolved_space_id = resolve_space_id(&client, space.as_deref(), space_id).await?;
+            let query_hash = crate::pagination::query_hash(
+                "confluence.blog.list",
+                &[
+                    ("spaceId", resolved_space_id.clone().unwrap_or_default()),
+                    ("title", title.clone().unwrap_or_default()),
+                ],
+            );
+            let cursor = crate::pagination::decode_confluence_cursor_token(
+                page_token.as_deref(),
+                "confluence.blog.list",
+                query_hash.clone(),
+            )?;
             let search = ConfluenceBlogPostSearch {
                 space_id: resolved_space_id,
                 title,
                 limit,
+                cursor,
             };
             let page = client.list_blog_posts(&search).await.with_context(|| {
                 format!(
@@ -116,15 +131,51 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
-            if !all {
-                crate::output::warn_if_truncated(
-                    matches!(page.is_last, Some(false)),
-                    page.results.len(),
-                    "blog posts",
-                );
+            let next_cli_token = if !all && matches!(page.is_last, Some(false)) {
+                crate::pagination::confluence_cursor_next_token(
+                    "confluence.blog.list",
+                    page.next_cursor.clone(),
+                    query_hash,
+                )?
+            } else {
+                None
+            };
+            let next_command = next_cli_token.as_ref().map(|token| {
+                let mut parts = vec![
+                    "atla".to_owned(),
+                    "confluence".to_owned(),
+                    "blog".to_owned(),
+                    "list".to_owned(),
+                ];
+                if let Some(space_id) = &search.space_id {
+                    parts.push("--space-id".to_owned());
+                    parts.push(crate::pagination::quote(space_id));
+                }
+                if let Some(title) = &search.title {
+                    parts.push("--title".to_owned());
+                    parts.push(crate::pagination::quote(title));
+                }
+                crate::pagination::next_command(parts, limit, token)
+            });
+            match global.output.unwrap_or(OutputFormat::Table) {
+                OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                    "results": page.results,
+                    "pagination": { "isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command }
+                }))?,
+                OutputFormat::Table => print_blog_posts_with_footer(
+                    &page.results,
+                    global,
+                    next_command
+                        .as_deref()
+                        .map(crate::pagination::next_page_footer),
+                )?,
+                OutputFormat::Csv | OutputFormat::Keys => {
+                    print_blog_posts(&page.results, global)?;
+                    if let Some(command) = next_command {
+                        eprintln!("{}", crate::pagination::next_page_footer(&command));
+                    }
+                }
             }
-
-            print_blog_posts(&page.results, global)?;
         }
         BlogAction::View { id, .. } => {
             let ctx = AppContext::load(global)?;

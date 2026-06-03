@@ -8,18 +8,6 @@ pub fn print_json<T: Serialize + ?Sized>(value: &T) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Emits a stderr warning when a paginated API call returned fewer items than
-/// what the server still has available. `truncated` is `true` when more results
-/// exist beyond the returned page (i.e. the caller's `--limit` was reached
-/// before the server ran out).
-pub fn warn_if_truncated(truncated: bool, returned: usize, what: &str) {
-    if truncated {
-        eprintln!(
-            "warning: more {what} match this query; increase --limit to fetch them ({returned} returned)"
-        );
-    }
-}
-
 pub fn print_records<T: Serialize + ?Sized>(
     format: OutputFormat,
     json: &T,

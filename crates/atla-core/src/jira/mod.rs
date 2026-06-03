@@ -270,6 +270,7 @@ mod tests {
             jql: "project = PROJ".to_owned(),
             max_results: 10,
             fields: Some(vec!["summary".to_owned(), "attachment".to_owned()]),
+            next_page_token: None,
         };
 
         assert_eq!(

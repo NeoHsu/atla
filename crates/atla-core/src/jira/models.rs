@@ -28,6 +28,7 @@ pub struct JiraIssueSearch {
     pub jql: String,
     pub max_results: u32,
     pub fields: Option<Vec<String>>,
+    pub next_page_token: Option<String>,
 }
 
 impl JiraIssueSearch {
@@ -59,6 +60,7 @@ impl JiraIssueList {
                 jql: final_jql,
                 max_results: self.max_results,
                 fields: self.fields.clone(),
+                next_page_token: None,
             });
         }
 
@@ -91,6 +93,7 @@ impl JiraIssueList {
             jql: format!("{} ORDER BY updated DESC", clauses.join(" AND ")),
             max_results: self.max_results,
             fields: self.fields.clone(),
+            next_page_token: None,
         })
     }
 }

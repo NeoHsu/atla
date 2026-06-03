@@ -1,11 +1,12 @@
 use anyhow::Context;
 use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch};
 
-use crate::cli::{GlobalArgs, PageCommentAction};
+use crate::cli::{GlobalArgs, OutputFormat, PageCommentAction};
 use crate::context::AppContext;
 
 use super::format::{
-    prepare_required_body, print_comment, print_comments, print_deleted, read_body,
+    prepare_required_body, print_comment, print_comments, print_comments_with_footer,
+    print_deleted, read_body,
 };
 
 pub(super) async fn run_page_comment(
@@ -17,13 +18,24 @@ pub(super) async fn run_page_comment(
             page_id,
             limit,
             all,
+            page_token,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let query_hash = crate::pagination::query_hash(
+                "confluence.page.comment.list",
+                &[("pageId", page_id.clone())],
+            );
+            let cursor = crate::pagination::decode_confluence_cursor_token(
+                page_token.as_deref(),
+                "confluence.page.comment.list",
+                query_hash.clone(),
+            )?;
             let search = ConfluenceCommentSearch {
                 content_id: page_id,
                 limit: if all { u32::MAX } else { limit.clamp(1, 250) },
+                cursor,
             };
 
             if global.dry_run {
@@ -44,15 +56,47 @@ pub(super) async fn run_page_comment(
                 )
             })?;
 
-            if !all {
-                crate::output::warn_if_truncated(
-                    matches!(comments.is_last, Some(false)),
-                    comments.results.len(),
-                    "comments",
-                );
+            let next_cli_token = if !all && matches!(comments.is_last, Some(false)) {
+                crate::pagination::confluence_cursor_next_token(
+                    "confluence.page.comment.list",
+                    comments.next_cursor.clone(),
+                    query_hash,
+                )?
+            } else {
+                None
+            };
+            let next_command = next_cli_token.as_ref().map(|token| {
+                crate::pagination::next_command(
+                    vec![
+                        "atla".to_owned(),
+                        "confluence".to_owned(),
+                        "page".to_owned(),
+                        "comment".to_owned(),
+                        "list".to_owned(),
+                        crate::pagination::quote(&search.content_id),
+                    ],
+                    limit,
+                    token,
+                )
+            });
+            match global.output.unwrap_or(OutputFormat::Table) {
+                OutputFormat::Json => crate::output::print_json(
+                    &serde_json::json!({"results": comments.results, "pagination": {"isLast": comments.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
+                )?,
+                OutputFormat::Table => print_comments_with_footer(
+                    &comments,
+                    global,
+                    next_command
+                        .as_deref()
+                        .map(crate::pagination::next_page_footer),
+                )?,
+                OutputFormat::Csv | OutputFormat::Keys => {
+                    print_comments(&comments, global)?;
+                    if let Some(command) = next_command {
+                        eprintln!("{}", crate::pagination::next_page_footer(&command));
+                    }
+                }
             }
-
-            print_comments(&comments, global)?;
         }
         PageCommentAction::Add {
             page_id,

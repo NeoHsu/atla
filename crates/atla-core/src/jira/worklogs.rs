@@ -37,9 +37,20 @@ impl JiraClient {
         issue_id_or_key: &str,
         max_results: u32,
     ) -> Result<JiraWorklogPage, ApiError> {
+        self.list_worklogs_from(issue_id_or_key, max_results, 0)
+            .await
+    }
+
+    pub async fn list_worklogs_from(
+        &self,
+        issue_id_or_key: &str,
+        max_results: u32,
+        start_at: u64,
+    ) -> Result<JiraWorklogPage, ApiError> {
         let max_results = max_results.max(1);
         let mut collected: Vec<JiraWorklog> = Vec::new();
-        let mut start_at: u64 = 0;
+        let initial_start_at = start_at;
+        let mut start_at: u64 = start_at;
         let mut last_total: Option<u32> = None;
 
         loop {
@@ -81,7 +92,7 @@ impl JiraClient {
         }
 
         Ok(JiraWorklogPage {
-            start_at: 0,
+            start_at: initial_start_at.min(u32::MAX as u64) as u32,
             max_results,
             total: last_total,
             worklogs: collected,

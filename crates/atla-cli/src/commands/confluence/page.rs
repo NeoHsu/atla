@@ -4,14 +4,15 @@ use atla_core::{
     ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate,
 };
 
-use crate::cli::{ContentViewFormat, GlobalArgs, PageAction, PageCommand};
+use crate::cli::{ContentViewFormat, GlobalArgs, OutputFormat, PageAction, PageCommand};
 use crate::context::AppContext;
 
 use super::format::{
     open_web_url, prepare_optional_body, prepare_required_body, print_attachments,
-    print_content_nodes, print_page, print_page_body, print_page_body_markdown,
-    print_page_with_attachments, print_pages, read_body, resolve_required_space_id,
-    resolve_space_id, status_from_draft, view_format_body_representation,
+    print_content_nodes, print_content_nodes_with_footer, print_page, print_page_body,
+    print_page_body_markdown, print_page_with_attachments, print_pages, print_pages_with_footer,
+    read_body, resolve_required_space_id, resolve_space_id, status_from_draft,
+    view_format_body_representation,
 };
 use super::page_comment::run_page_comment;
 use super::page_label::run_page_label;
@@ -80,6 +81,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             title,
             limit,
             all,
+            page_token,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
@@ -113,10 +115,16 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
 
             let client = ctx.confluence_client()?;
             let resolved_space_id = resolve_space_id(&client, space.as_deref(), space_id).await?;
+            let cursor = crate::pagination::decode_confluence_page_token(
+                page_token.as_deref(),
+                resolved_space_id.as_deref(),
+                title.as_deref(),
+            )?;
             let search = ConfluencePageSearch {
                 space_id: resolved_space_id,
                 title,
                 limit,
+                cursor,
             };
             let page = client.list_pages(&search).await.with_context(|| {
                 format!(
@@ -125,15 +133,46 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
-            if !all {
-                crate::output::warn_if_truncated(
-                    matches!(page.is_last, Some(false)),
-                    page.results.len(),
-                    "pages",
-                );
-            }
+            let next_cli_token = if !all && matches!(page.is_last, Some(false)) {
+                crate::pagination::confluence_page_next_token(
+                    page.next_cursor.clone(),
+                    search.space_id.as_deref(),
+                    search.title.as_deref(),
+                )?
+            } else {
+                None
+            };
+            let next_command = next_cli_token.as_ref().map(|token| {
+                crate::pagination::confluence_page_next_command(
+                    search.space_id.as_deref(),
+                    search.title.as_deref(),
+                    limit,
+                    token,
+                )
+            });
 
-            print_pages(&page.results, global)?;
+            match global.output.unwrap_or(crate::cli::OutputFormat::Table) {
+                crate::cli::OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                    "results": page.results,
+                    "pagination": {
+                        "isLast": page.is_last.unwrap_or(true),
+                        "nextPageToken": next_cli_token,
+                        "nextCommand": next_command,
+                    }
+                }))?,
+                crate::cli::OutputFormat::Table => {
+                    let footer = next_command
+                        .as_deref()
+                        .map(crate::pagination::next_page_footer);
+                    print_pages_with_footer(&page.results, global, footer)?;
+                }
+                crate::cli::OutputFormat::Csv | crate::cli::OutputFormat::Keys => {
+                    print_pages(&page.results, global)?;
+                    if let Some(command) = next_command {
+                        eprintln!("{}", crate::pagination::next_page_footer(&command));
+                    }
+                }
+            }
         }
         PageAction::View {
             id,
@@ -188,6 +227,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     page_id: id.clone(),
                     filename: None,
                     limit: 250,
+                    cursor: None,
                 };
                 let attachments = client
                     .list_page_attachments(&search)
@@ -220,14 +260,29 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             depth,
             limit,
             all,
+            page_token,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            let depth = depth.map(|depth| depth.clamp(1, 100));
+            let query_hash = crate::pagination::query_hash(
+                "confluence.page.children",
+                &[
+                    ("pageId", id.clone()),
+                    ("depth", depth.map(|d| d.to_string()).unwrap_or_default()),
+                ],
+            );
+            let cursor = crate::pagination::decode_confluence_cursor_token(
+                page_token.as_deref(),
+                "confluence.page.children",
+                query_hash.clone(),
+            )?;
             let search = ConfluenceContentTreeSearch {
                 page_id: id,
                 limit: if all { u32::MAX } else { limit.clamp(1, 250) },
-                depth: depth.map(|depth| depth.clamp(1, 100)),
+                depth,
+                cursor,
             };
 
             if global.dry_run {
@@ -259,15 +314,48 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
-            if !all {
-                crate::output::warn_if_truncated(
-                    matches!(children.is_last, Some(false)),
-                    children.results.len(),
-                    "children",
-                );
+            let next_cli_token = if !all && matches!(children.is_last, Some(false)) {
+                crate::pagination::confluence_cursor_next_token(
+                    "confluence.page.children",
+                    children.next_cursor.clone(),
+                    query_hash,
+                )?
+            } else {
+                None
+            };
+            let next_command = next_cli_token.as_ref().map(|token| {
+                let mut parts = vec![
+                    "atla".to_owned(),
+                    "confluence".to_owned(),
+                    "page".to_owned(),
+                    "children".to_owned(),
+                    crate::pagination::quote(&search.page_id),
+                ];
+                if let Some(depth) = search.depth {
+                    parts.push("--depth".to_owned());
+                    parts.push(depth.to_string());
+                }
+                crate::pagination::next_command(parts, limit, token)
+            });
+            match global.output.unwrap_or(OutputFormat::Table) {
+                OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                    "results": children.results,
+                    "pagination": {"isLast": children.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}
+                }))?,
+                OutputFormat::Table => print_content_nodes_with_footer(
+                    &children.results,
+                    global,
+                    next_command
+                        .as_deref()
+                        .map(crate::pagination::next_page_footer),
+                )?,
+                OutputFormat::Csv | OutputFormat::Keys => {
+                    print_content_nodes(&children.results, global)?;
+                    if let Some(command) = next_command {
+                        eprintln!("{}", crate::pagination::next_page_footer(&command));
+                    }
+                }
             }
-
-            print_content_nodes(&children.results, global)?;
         }
         PageAction::Copy {
             source_id,

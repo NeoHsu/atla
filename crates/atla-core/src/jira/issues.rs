@@ -76,7 +76,7 @@ impl JiraClient {
     ) -> Result<JiraIssueSearchPage, ApiError> {
         let fields = search.issue_fields();
         let mut collected: Vec<JiraIssue> = Vec::new();
-        let mut next_page_token: Option<String> = None;
+        let mut next_page_token: Option<String> = search.next_page_token.clone();
         let mut server_is_last: Option<bool> = Some(true);
 
         while (collected.len() as u32) < search.max_results {

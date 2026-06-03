@@ -127,8 +127,11 @@ pub enum JiraResource {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
         #[arg(long)]
         fields: Option<String>,
     },
@@ -156,8 +159,11 @@ pub enum IssueAction {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
         #[arg(long)]
         fields: Option<String>,
     },
@@ -275,8 +281,11 @@ pub enum IssueCommentAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Update {
         key: String,
@@ -361,8 +370,11 @@ pub enum IssueWorklogAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
 }
 
@@ -384,8 +396,11 @@ pub enum BoardAction {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         id: u64,
@@ -408,8 +423,11 @@ pub enum SprintAction {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Active {
         #[arg(long)]
@@ -417,8 +435,11 @@ pub enum SprintAction {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         id: u64,
@@ -460,8 +481,11 @@ pub enum SprintAction {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
         #[arg(long)]
         fields: Option<String>,
     },
@@ -481,8 +505,11 @@ pub enum ProjectAction {
         #[arg(long, default_value_t = 50, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         key: String,
@@ -508,8 +535,11 @@ pub enum ConfluenceResource {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Attachment(AttachmentCommand),
 }
@@ -554,8 +584,11 @@ pub enum PageAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         id: String,
@@ -573,8 +606,11 @@ pub enum PageAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Copy {
         source_id: String,
@@ -641,8 +677,11 @@ pub enum PageLabelAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Add {
         page_id: String,
@@ -661,8 +700,11 @@ pub enum PageCommentAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Add {
         page_id: String,
@@ -719,8 +761,11 @@ pub enum BlogAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         id: String,
@@ -772,8 +817,11 @@ pub enum BlogLabelAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Add {
         blog_id: String,
@@ -792,8 +840,11 @@ pub enum BlogCommentAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     Add {
         blog_id: String,
@@ -828,8 +879,11 @@ pub enum SpaceAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         key: String,
@@ -878,8 +932,11 @@ pub enum AttachmentAction {
         #[arg(long, default_value_t = 25, value_parser = clap::value_parser!(u32).range(1..))]
         limit: u32,
         /// Fetch every matching record (overrides --limit; suppresses truncation warning)
-        #[arg(long, conflicts_with = "limit")]
+        #[arg(long, conflicts_with = "limit", conflicts_with = "page_token")]
         all: bool,
+        /// Continue from a token printed by a previous page
+        #[arg(long)]
+        page_token: Option<String>,
     },
     View {
         attachment_id: String,

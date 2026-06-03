@@ -85,10 +85,22 @@ impl JiraClient {
         max_results: u32,
         fields: Option<Vec<String>>,
     ) -> Result<JiraIssueSearchPage, ApiError> {
+        self.get_sprint_issues_from(sprint_id, max_results, fields, 0)
+            .await
+    }
+
+    pub async fn get_sprint_issues_from(
+        &self,
+        sprint_id: u64,
+        max_results: u32,
+        fields: Option<Vec<String>>,
+        start_at: u64,
+    ) -> Result<JiraIssueSearchPage, ApiError> {
         let fields_str = issue_fields(fields.as_deref()).join(",");
         let max_results = max_results.max(1);
         let mut collected: Vec<JiraIssue> = Vec::new();
-        let mut start_at: u64 = 0;
+        let initial_start_at = start_at;
+        let mut start_at: u64 = start_at;
         let mut last_total: Option<u64> = None;
 
         loop {
@@ -126,14 +138,19 @@ impl JiraClient {
             }
         }
 
-        let exhausted = last_total.is_some_and(|total| collected.len() as u64 >= total);
+        let next_start = initial_start_at + collected.len() as u64;
+        let exhausted = last_total.is_some_and(|total| next_start >= total);
         if collected.len() > max_results as usize {
             collected.truncate(max_results as usize);
         }
 
         Ok(JiraIssueSearchPage {
             is_last: Some(exhausted),
-            next_page_token: None,
+            next_page_token: if exhausted {
+                None
+            } else {
+                Some(next_start.to_string())
+            },
             issues: collected,
         })
     }

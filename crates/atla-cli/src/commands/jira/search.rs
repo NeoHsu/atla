@@ -4,12 +4,15 @@ use atla_core::JiraIssueSearch;
 use crate::cli::{GlobalArgs, OutputFormat};
 use crate::context::AppContext;
 
-use super::format::{issue_fields_for_url, parse_issue_fields, print_issues};
+use super::format::{
+    issue_fields_for_url, parse_issue_fields, print_issues, print_issues_with_footer,
+};
 
 pub(super) async fn run_search(
     jql: String,
     limit: u32,
     all: bool,
+    page_token: Option<String>,
     fields: Option<String>,
     global: &GlobalArgs,
 ) -> anyhow::Result<()> {
@@ -18,10 +21,16 @@ pub(super) async fn run_search(
     let profile = ctx.profile();
     let requested_fields = parse_issue_fields(fields.as_deref())?;
     let max_results = if all { u32::MAX } else { limit.clamp(1, 5000) };
+    let next_page_token = crate::pagination::decode_jira_jql_token(
+        page_token.as_deref(),
+        &jql,
+        requested_fields.as_deref(),
+    )?;
     let search = JiraIssueSearch {
         jql,
         max_results,
         fields: requested_fields.clone(),
+        next_page_token,
     };
 
     if global.dry_run {
@@ -56,14 +65,45 @@ pub(super) async fn run_search(
         return Ok(());
     }
 
-    if !all {
-        crate::output::warn_if_truncated(
-            matches!(page.is_last, Some(false)),
-            page.issues.len(),
-            "issues",
-        );
-    }
+    let next_cli_token = if !all && matches!(page.is_last, Some(false)) {
+        crate::pagination::jira_jql_next_token(
+            page.next_page_token.clone(),
+            &search.jql,
+            requested_fields.as_deref(),
+        )?
+    } else {
+        None
+    };
+    let next_command = next_cli_token.as_ref().map(|token| {
+        crate::pagination::jira_search_next_command(
+            &search.jql,
+            limit,
+            requested_fields.as_deref(),
+            token,
+        )
+    });
 
-    print_issues(&page.issues, global, requested_fields.as_deref())?;
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+            "issues": page.issues,
+            "pagination": {
+                "isLast": page.is_last.unwrap_or(true),
+                "nextPageToken": next_cli_token,
+                "nextCommand": next_command,
+            }
+        }))?,
+        OutputFormat::Table => {
+            let footer = next_command
+                .as_deref()
+                .map(crate::pagination::next_page_footer);
+            print_issues_with_footer(&page.issues, global, requested_fields.as_deref(), footer)?;
+        }
+        OutputFormat::Csv | OutputFormat::Keys => {
+            print_issues(&page.issues, global, requested_fields.as_deref())?;
+            if let Some(command) = next_command {
+                eprintln!("{}", crate::pagination::next_page_footer(&command));
+            }
+        }
+    }
     Ok(())
 }
