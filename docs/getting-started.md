@@ -101,7 +101,32 @@ atla config set profiles.work.default-project PROJ
 atla config set profiles.work.default-space DEV
 ```
 
-### 5. Create a useful alias
+### 5. Install the bundled agent skill
+
+If you use an AI coding assistant, install the bundled `atla-cli` skill so the agent knows
+current `atla` commands, flags, pagination behavior, JQL/CQL patterns, and safety rules.
+
+From GitHub:
+
+```bash
+npx skills add NeoHsu/atla --skill atla-cli
+```
+
+From a local checkout of this repo:
+
+```bash
+npx skills add . --skill atla-cli
+```
+
+For non-interactive setup across all supported agents:
+
+```bash
+npx skills add . --skill atla-cli --agent '*' -y
+```
+
+Use `--copy` if you want a standalone installed copy instead of a symlink back to the repo.
+
+### 6. Create a useful alias
 
 ```bash
 atla config set aliases.mine "jira search 'assignee = currentUser() order by updated desc'"
@@ -197,3 +222,4 @@ These flags work with any command:
 
 - [Authentication](./authentication.md) — manage profiles, tokens, and storage strategies
 - [Configuration](./configuration.md) — config keys, aliases, and multi-environment setup
+- [Agent Reference](./agent-reference.md) — skill installation and automation-focused command reference
