@@ -54,6 +54,7 @@ impl ConfluenceClient {
                 .into_iter()
                 .map(ConfluenceAttachment::from)
                 .collect(),
+            is_last: None,
         })
     }
 
@@ -61,22 +62,52 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceAttachmentSearch,
     ) -> Result<ConfluenceAttachmentPage, ApiError> {
-        let mut request = self
-            .generated
-            .get_page_attachments()
-            .id(parse_i64_id(&search.page_id)?)
-            .limit(limit_non_zero(search.limit)?);
-        if let Some(filename) = &search.filename {
-            request = request.filename(filename.clone());
+        let page_id = parse_i64_id(&search.page_id)?;
+        let limit = search.limit.max(1);
+        let mut collected: Vec<ConfluenceAttachment> = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut next_link: Option<String> = None;
+
+        loop {
+            let remaining = (limit as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
+
+            let mut req = self
+                .generated
+                .get_page_attachments()
+                .id(page_id)
+                .limit(limit_non_zero(page_size)?);
+            if let Some(filename) = &search.filename {
+                req = req.filename(filename.clone());
+            }
+            if let Some(cursor) = &cursor {
+                req = req.cursor(cursor.clone());
+            }
+            let raw = req.send().await.map_err(generated_error)?.into_inner();
+
+            let received = raw.results.len();
+            collected.extend(raw.results.into_iter().map(ConfluenceAttachment::from));
+            next_link = raw.links.as_ref().and_then(|l| l.next.clone());
+
+            if received == 0 {
+                break;
+            }
+            cursor = match next_link.as_deref().and_then(cursor_from_next_link) {
+                Some(c) => Some(c),
+                None => break,
+            };
         }
-        let page = request.send().await.map_err(generated_error)?.into_inner();
+
+        if collected.len() > limit as usize {
+            collected.truncate(limit as usize);
+        }
 
         Ok(ConfluenceAttachmentPage {
-            results: page
-                .results
-                .into_iter()
-                .map(ConfluenceAttachment::from)
-                .collect(),
+            results: collected,
+            is_last: Some(next_link.is_none()),
         })
     }
 

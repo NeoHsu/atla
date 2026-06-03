@@ -5,6 +5,33 @@ pub(super) fn limit_i32(limit: u32) -> i32 {
     limit.min(i32::MAX as u32) as i32
 }
 
+/// Per-request page cap for Jira list endpoints that share the classic
+/// startAt/maxResults model. Larger user limits are reached by paginating.
+pub(super) const JIRA_LIST_PAGE_CAP: u32 = 100;
+
+/// Decides whether to issue another offset-paginated request.
+///
+/// Stops when no items were returned, when the server flagged this as the
+/// last page, when we have collected enough to satisfy `max_results`, or when
+/// `total` has been reached. Returns the next `start_at` to use otherwise.
+pub(super) fn next_offset(
+    collected: u64,
+    max_results: u64,
+    received: u64,
+    is_last: Option<bool>,
+    total: Option<u64>,
+    start_at: u64,
+) -> Option<u64> {
+    if received == 0 || collected >= max_results || matches!(is_last, Some(true)) {
+        return None;
+    }
+    let next = start_at.checked_add(received)?;
+    if total.is_some_and(|total| next >= total) {
+        return None;
+    }
+    Some(next)
+}
+
 pub(super) fn generated_error(error: atla_jira_api::Error<()>) -> ApiError {
     match error {
         atla_jira_api::Error::InvalidRequest(msg) => ApiError::Decode(msg),

@@ -1,6 +1,8 @@
 use super::JiraClient;
 use super::models::{JiraIssueType, JiraProject, JiraProjectPage, JiraProjectSearch};
-use super::util::{generated_error, generated_error_with_body, limit_i32};
+use super::util::{
+    JIRA_LIST_PAGE_CAP, generated_error, generated_error_with_body, limit_i32, next_offset,
+};
 use crate::client::ApiError;
 
 impl JiraClient {
@@ -8,18 +10,65 @@ impl JiraClient {
         &self,
         search: &JiraProjectSearch,
     ) -> Result<JiraProjectPage, ApiError> {
-        let mut builder = self
-            .generated
-            .search_projects()
-            .start_at(search.start_at.min(i64::MAX as u64) as i64)
-            .max_results(limit_i32(search.max_results));
+        let max_results = search.max_results.max(1);
+        let mut collected: Vec<JiraProject> = Vec::new();
+        let mut start_at = search.start_at;
+        let mut last_is_last: Option<bool> = Some(true);
+        let mut last_total: Option<u64> = None;
 
-        if let Some(query) = &search.query {
-            builder = builder.query(query.clone());
+        loop {
+            let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(JIRA_LIST_PAGE_CAP as u64) as u32;
+
+            let mut builder = self
+                .generated
+                .search_projects()
+                .start_at(start_at.min(i64::MAX as u64) as i64)
+                .max_results(limit_i32(page_size));
+            if let Some(query) = &search.query {
+                builder = builder.query(query.clone());
+            }
+
+            let page: JiraProjectPage = builder
+                .send()
+                .await
+                .map_err(generated_error)?
+                .into_inner()
+                .into();
+            let received = page.values.len() as u64;
+            last_is_last = page.is_last;
+            last_total = page.total;
+            collected.extend(page.values);
+
+            match next_offset(
+                collected.len() as u64,
+                max_results as u64,
+                received,
+                last_is_last,
+                last_total,
+                start_at,
+            ) {
+                Some(next) => start_at = next,
+                None => break,
+            }
         }
 
-        let page = builder.send().await.map_err(generated_error)?;
-        Ok(page.into_inner().into())
+        let exhausted = matches!(last_is_last, Some(true))
+            || last_total.is_some_and(|total| collected.len() as u64 >= total);
+        if collected.len() > max_results as usize {
+            collected.truncate(max_results as usize);
+        }
+
+        Ok(JiraProjectPage {
+            start_at: search.start_at,
+            max_results,
+            total: last_total,
+            is_last: Some(exhausted),
+            values: collected,
+        })
     }
 
     pub async fn get_project(&self, project_id_or_key: &str) -> Result<JiraProject, ApiError> {

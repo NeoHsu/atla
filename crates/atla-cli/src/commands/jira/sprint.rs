@@ -238,6 +238,13 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
                         client.instance_url()
                     )
                 })?;
+
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.issues.len(),
+                "issues",
+            );
+
             print_issues(&page.issues, global, requested_fields.as_deref())?;
         }
     }
@@ -284,6 +291,12 @@ pub(super) async fn run_sprint_list(
             client.instance_url()
         )
     })?;
+
+    crate::output::warn_if_truncated(
+        matches!(page.is_last, Some(false)),
+        page.values.len(),
+        "sprints",
+    );
 
     print_sprints(&page, global)?;
     Ok(())

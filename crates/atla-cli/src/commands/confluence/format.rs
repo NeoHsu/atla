@@ -468,6 +468,7 @@ pub(super) fn print_comment(
     print_comments(
         &ConfluenceCommentPage {
             results: vec![comment.clone()],
+            is_last: None,
         },
         global,
     )

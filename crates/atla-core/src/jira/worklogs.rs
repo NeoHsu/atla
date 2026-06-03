@@ -1,6 +1,6 @@
 use super::JiraClient;
 use super::models::{JiraWorklog, JiraWorklogCreate, JiraWorklogPage};
-use super::util::limit_i32;
+use super::util::{JIRA_LIST_PAGE_CAP, limit_i32, next_offset};
 use crate::client::{ApiError, read_json};
 
 impl JiraClient {
@@ -37,15 +37,55 @@ impl JiraClient {
         issue_id_or_key: &str,
         max_results: u32,
     ) -> Result<JiraWorklogPage, ApiError> {
-        read_json(
-            self.raw_client
-                .get(&format!("/rest/api/3/issue/{issue_id_or_key}/worklog"))
-                .query(&[
-                    ("startAt", "0"),
-                    ("maxResults", &limit_i32(max_results).to_string()),
-                ]),
-        )
-        .await
+        let max_results = max_results.max(1);
+        let mut collected: Vec<JiraWorklog> = Vec::new();
+        let mut start_at: u64 = 0;
+        let mut last_total: Option<u32> = None;
+
+        loop {
+            let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(JIRA_LIST_PAGE_CAP as u64) as u32;
+
+            let page: JiraWorklogPage = read_json(
+                self.raw_client
+                    .get(&format!("/rest/api/3/issue/{issue_id_or_key}/worklog"))
+                    .query(&[
+                        ("startAt", &start_at.min(i64::MAX as u64).to_string()),
+                        ("maxResults", &limit_i32(page_size).to_string()),
+                    ]),
+            )
+            .await?;
+
+            let received = page.worklogs.len() as u64;
+            last_total = page.total;
+            collected.extend(page.worklogs);
+
+            match next_offset(
+                collected.len() as u64,
+                max_results as u64,
+                received,
+                None,
+                last_total.map(u64::from),
+                start_at,
+            ) {
+                Some(next) => start_at = next,
+                None => break,
+            }
+        }
+
+        if collected.len() > max_results as usize {
+            collected.truncate(max_results as usize);
+        }
+
+        Ok(JiraWorklogPage {
+            start_at: 0,
+            max_results,
+            total: last_total,
+            worklogs: collected,
+        })
     }
 }
 

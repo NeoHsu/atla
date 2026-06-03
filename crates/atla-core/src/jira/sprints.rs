@@ -2,10 +2,10 @@ use chrono::Utc;
 
 use super::JiraClient;
 use super::models::{
-    JiraIssueSearchPage, JiraSprint, JiraSprintCreate, JiraSprintPage, JiraSprintSearch,
+    JiraIssue, JiraIssueSearchPage, JiraSprint, JiraSprintCreate, JiraSprintPage, JiraSprintSearch,
     JiraSprintUpdate,
 };
-use super::util::{issue_fields, limit_i32};
+use super::util::{JIRA_LIST_PAGE_CAP, issue_fields, limit_i32, next_offset};
 use crate::client::{ApiError, read_empty, read_json};
 
 impl JiraClient {
@@ -13,18 +13,62 @@ impl JiraClient {
         &self,
         search: &JiraSprintSearch,
     ) -> Result<JiraSprintPage, ApiError> {
-        let mut request = self
-            .raw_client
-            .get(&format!("/rest/agile/1.0/board/{}/sprint", search.board_id))
-            .query(&[
-                ("startAt", search.start_at.min(i64::MAX as u64).to_string()),
-                ("maxResults", limit_i32(search.max_results).to_string()),
-            ]);
-        if let Some(state) = &search.state {
-            request = request.query(&[("state", state.as_str())]);
+        let max_results = search.max_results.max(1);
+        let mut collected: Vec<JiraSprint> = Vec::new();
+        let mut start_at = search.start_at;
+        let mut last_is_last: Option<bool> = Some(true);
+        let mut last_total: Option<u64> = None;
+
+        loop {
+            let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(JIRA_LIST_PAGE_CAP as u64) as u32;
+
+            let mut request = self
+                .raw_client
+                .get(&format!("/rest/agile/1.0/board/{}/sprint", search.board_id))
+                .query(&[
+                    ("startAt", start_at.min(i64::MAX as u64).to_string()),
+                    ("maxResults", limit_i32(page_size).to_string()),
+                ]);
+            if let Some(state) = &search.state {
+                request = request.query(&[("state", state.as_str())]);
+            }
+
+            let page: JiraSprintPage = read_json(request).await?;
+            let received = page.values.len() as u64;
+            last_is_last = page.is_last;
+            last_total = page.total;
+            collected.extend(page.values);
+
+            match next_offset(
+                collected.len() as u64,
+                max_results as u64,
+                received,
+                last_is_last,
+                last_total,
+                start_at,
+            ) {
+                Some(next) => start_at = next,
+                None => break,
+            }
         }
 
-        read_json(request).await
+        let exhausted = matches!(last_is_last, Some(true))
+            || last_total.is_some_and(|total| collected.len() as u64 >= total);
+        if collected.len() > max_results as usize {
+            collected.truncate(max_results as usize);
+        }
+
+        Ok(JiraSprintPage {
+            start_at: search.start_at,
+            max_results,
+            total: last_total,
+            is_last: Some(exhausted),
+            values: collected,
+        })
     }
 
     pub async fn get_sprint(&self, sprint_id: u64) -> Result<JiraSprint, ApiError> {
@@ -42,15 +86,56 @@ impl JiraClient {
         fields: Option<Vec<String>>,
     ) -> Result<JiraIssueSearchPage, ApiError> {
         let fields_str = issue_fields(fields.as_deref()).join(",");
-        read_json(
-            self.raw_client
-                .get(&format!("/rest/agile/1.0/sprint/{sprint_id}/issue"))
-                .query(&[
-                    ("maxResults", &limit_i32(max_results).to_string()),
-                    ("fields", &fields_str),
-                ]),
-        )
-        .await
+        let max_results = max_results.max(1);
+        let mut collected: Vec<JiraIssue> = Vec::new();
+        let mut start_at: u64 = 0;
+        let mut last_total: Option<u64> = None;
+
+        loop {
+            let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(JIRA_LIST_PAGE_CAP as u64) as u32;
+
+            let page: SprintIssuesPage = read_json(
+                self.raw_client
+                    .get(&format!("/rest/agile/1.0/sprint/{sprint_id}/issue"))
+                    .query(&[
+                        ("startAt", &start_at.min(i64::MAX as u64).to_string()),
+                        ("maxResults", &limit_i32(page_size).to_string()),
+                        ("fields", &fields_str),
+                    ]),
+            )
+            .await?;
+
+            let received = page.issues.len() as u64;
+            last_total = page.total;
+            collected.extend(page.issues);
+
+            match next_offset(
+                collected.len() as u64,
+                max_results as u64,
+                received,
+                None,
+                last_total,
+                start_at,
+            ) {
+                Some(next) => start_at = next,
+                None => break,
+            }
+        }
+
+        let exhausted = last_total.is_some_and(|total| collected.len() as u64 >= total);
+        if collected.len() > max_results as usize {
+            collected.truncate(max_results as usize);
+        }
+
+        Ok(JiraIssueSearchPage {
+            is_last: Some(exhausted),
+            next_page_token: None,
+            issues: collected,
+        })
     }
 
     pub async fn create_sprint(&self, sprint: &JiraSprintCreate) -> Result<JiraSprint, ApiError> {
@@ -134,4 +219,16 @@ impl JiraClient {
         )
         .await
     }
+}
+
+/// Wire-level shape returned by `/rest/agile/1.0/sprint/{id}/issue`. Captures
+/// `total` so the paginator can detect exhaustion (this endpoint does not emit
+/// `isLast`).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SprintIssuesPage {
+    #[serde(default)]
+    total: Option<u64>,
+    #[serde(default)]
+    issues: Vec<JiraIssue>,
 }

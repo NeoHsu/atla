@@ -54,6 +54,12 @@ pub(super) async fn run_search(
         return Ok(());
     }
 
+    crate::output::warn_if_truncated(
+        matches!(page.is_last, Some(false)),
+        page.issues.len(),
+        "issues",
+    );
+
     print_issues(&page.issues, global, requested_fields.as_deref())?;
     Ok(())
 }

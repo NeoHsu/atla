@@ -9,20 +9,50 @@ impl ConfluenceClient {
         &self,
         search: &ConfluencePageSearch,
     ) -> Result<ConfluencePagePage, ApiError> {
-        let mut request = self
-            .generated
-            .get_pages()
-            .limit(limit_non_zero(search.limit)?);
-        if let Some(space_id) = optional_i64_vec(search.space_id.as_deref())? {
-            request = request.space_id(space_id);
+        let limit = search.limit.max(1);
+        let mut collected: Vec<ConfluencePage> = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut next_link: Option<String> = None;
+
+        loop {
+            let remaining = (limit as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
+
+            let mut request = self.generated.get_pages().limit(limit_non_zero(page_size)?);
+            if let Some(space_id) = optional_i64_vec(search.space_id.as_deref())? {
+                request = request.space_id(space_id);
+            }
+            if let Some(title) = &search.title {
+                request = request.title(title.clone());
+            }
+            if let Some(cursor) = &cursor {
+                request = request.cursor(cursor.clone());
+            }
+            let page = request.send().await.map_err(generated_error)?.into_inner();
+
+            let received = page.results.len();
+            collected.extend(page.results.into_iter().map(ConfluencePage::from));
+            next_link = page.links.as_ref().and_then(|links| links.next.clone());
+
+            if received == 0 {
+                break;
+            }
+            cursor = match next_link.as_deref().and_then(cursor_from_next_link) {
+                Some(c) => Some(c),
+                None => break,
+            };
         }
-        if let Some(title) = &search.title {
-            request = request.title(title.clone());
+
+        if collected.len() > limit as usize {
+            collected.truncate(limit as usize);
         }
-        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(ConfluencePagePage {
-            results: page.results.into_iter().map(ConfluencePage::from).collect(),
+            results: collected,
+            is_last: Some(next_link.is_none()),
         })
     }
 
@@ -31,43 +61,77 @@ impl ConfluenceClient {
         search: &ConfluenceContentTreeSearch,
     ) -> Result<ConfluenceContentTreePage, ApiError> {
         let id = parse_i64_id(&search.page_id)?;
-        if let Some(depth) = search.depth {
-            let page = self
-                .generated
-                .get_page_descendants()
-                .id(id)
-                .limit(limit_non_zero(search.limit)?)
-                .depth(limit_non_zero(depth)?)
-                .send()
-                .await
-                .map_err(generated_error)?
-                .into_inner();
+        let limit = search.limit.max(1);
+        let mut collected: Vec<ConfluenceContentNode> = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut next_link: Option<String> = None;
 
-            return Ok(ConfluenceContentTreePage {
-                results: page
+        loop {
+            let remaining = (limit as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
+
+            let (nodes, links) = if let Some(depth) = search.depth {
+                let page = {
+                    let mut req = self
+                        .generated
+                        .get_page_descendants()
+                        .id(id)
+                        .limit(limit_non_zero(page_size)?)
+                        .depth(limit_non_zero(depth)?);
+                    if let Some(cursor) = &cursor {
+                        req = req.cursor(cursor.clone());
+                    }
+                    req.send().await.map_err(generated_error)?.into_inner()
+                };
+                let nodes: Vec<ConfluenceContentNode> = page
                     .results
                     .into_iter()
                     .map(ConfluenceContentNode::from)
-                    .collect(),
-            });
+                    .collect();
+                (nodes, page.links)
+            } else {
+                let page = {
+                    let mut req = self
+                        .generated
+                        .get_page_direct_children()
+                        .id(id)
+                        .limit(limit_non_zero(page_size)?);
+                    if let Some(cursor) = &cursor {
+                        req = req.cursor(cursor.clone());
+                    }
+                    req.send().await.map_err(generated_error)?.into_inner()
+                };
+                let nodes: Vec<ConfluenceContentNode> = page
+                    .results
+                    .into_iter()
+                    .map(ConfluenceContentNode::from)
+                    .collect();
+                (nodes, page.links)
+            };
+
+            let received = nodes.len();
+            collected.extend(nodes);
+            next_link = links.as_ref().and_then(|l| l.next.clone());
+
+            if received == 0 {
+                break;
+            }
+            cursor = match next_link.as_deref().and_then(cursor_from_next_link) {
+                Some(c) => Some(c),
+                None => break,
+            };
         }
 
-        let page = self
-            .generated
-            .get_page_direct_children()
-            .id(id)
-            .limit(limit_non_zero(search.limit)?)
-            .send()
-            .await
-            .map_err(generated_error)?
-            .into_inner();
+        if collected.len() > limit as usize {
+            collected.truncate(limit as usize);
+        }
 
         Ok(ConfluenceContentTreePage {
-            results: page
-                .results
-                .into_iter()
-                .map(ConfluenceContentNode::from)
-                .collect(),
+            results: collected,
+            is_last: Some(next_link.is_none()),
         })
     }
 

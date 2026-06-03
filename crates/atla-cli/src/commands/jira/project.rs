@@ -44,6 +44,12 @@ pub(super) async fn run_project(
                 )
             })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.values.len(),
+                "projects",
+            );
+
             print_projects(&page.values, page.total, global)?;
         }
         ProjectAction::View { key } => {

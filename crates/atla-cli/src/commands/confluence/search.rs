@@ -33,5 +33,11 @@ pub(super) async fn run_search(cql: String, limit: u32, global: &GlobalArgs) -> 
         )
     })?;
 
+    crate::output::warn_if_truncated(
+        matches!(page.is_last, Some(false)),
+        page.results.len(),
+        "results",
+    );
+
     print_search_results(&page.results, global)
 }

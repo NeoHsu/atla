@@ -39,6 +39,13 @@ pub(super) async fn run_blog_comment(
                     client.instance_url()
                 )
             })?;
+
+            crate::output::warn_if_truncated(
+                matches!(comments.is_last, Some(false)),
+                comments.results.len(),
+                "comments",
+            );
+
             print_comments(&comments, global)?;
         }
         BlogCommentAction::Add {

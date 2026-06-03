@@ -9,24 +9,53 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceBlogPostSearch,
     ) -> Result<ConfluenceBlogPostPage, ApiError> {
-        let mut request = self
-            .generated
-            .get_blog_posts()
-            .limit(limit_non_zero(search.limit)?);
-        if let Some(space_id) = optional_i64_vec(search.space_id.as_deref())? {
-            request = request.space_id(space_id);
+        let limit = search.limit.max(1);
+        let mut collected: Vec<ConfluenceBlogPost> = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut next_link: Option<String> = None;
+
+        loop {
+            let remaining = (limit as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
+
+            let mut request = self
+                .generated
+                .get_blog_posts()
+                .limit(limit_non_zero(page_size)?);
+            if let Some(space_id) = optional_i64_vec(search.space_id.as_deref())? {
+                request = request.space_id(space_id);
+            }
+            if let Some(title) = &search.title {
+                request = request.title(title.clone());
+            }
+            if let Some(cursor) = &cursor {
+                request = request.cursor(cursor.clone());
+            }
+            let page = request.send().await.map_err(generated_error)?.into_inner();
+
+            let received = page.results.len();
+            collected.extend(page.results.into_iter().map(ConfluenceBlogPost::from));
+            next_link = page.links.as_ref().and_then(|l| l.next.clone());
+
+            if received == 0 {
+                break;
+            }
+            cursor = match next_link.as_deref().and_then(cursor_from_next_link) {
+                Some(c) => Some(c),
+                None => break,
+            };
         }
-        if let Some(title) = &search.title {
-            request = request.title(title.clone());
+
+        if collected.len() > limit as usize {
+            collected.truncate(limit as usize);
         }
-        let page = request.send().await.map_err(generated_error)?.into_inner();
 
         Ok(ConfluenceBlogPostPage {
-            results: page
-                .results
-                .into_iter()
-                .map(ConfluenceBlogPost::from)
-                .collect(),
+            results: collected,
+            is_last: Some(next_link.is_none()),
         })
     }
 

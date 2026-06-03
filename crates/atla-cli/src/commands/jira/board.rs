@@ -41,6 +41,12 @@ pub(super) async fn run_board(command: BoardCommand, global: &GlobalArgs) -> any
                 format!("failed to list Jira boards from {}", client.instance_url())
             })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.values.len(),
+                "boards",
+            );
+
             print_boards(&page, global)?;
         }
         BoardAction::View { id } => {

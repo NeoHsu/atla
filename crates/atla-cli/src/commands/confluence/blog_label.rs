@@ -42,6 +42,13 @@ pub(super) async fn run_blog_label(
                     client.instance_url()
                 )
             })?;
+
+            crate::output::warn_if_truncated(
+                matches!(labels.is_last, Some(false)),
+                labels.results.len(),
+                "labels",
+            );
+
             print_labels(&labels, global)?;
         }
         BlogLabelAction::Add { blog_id, labels } => {

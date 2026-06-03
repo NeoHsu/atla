@@ -38,6 +38,12 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
                 )
             })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.results.len(),
+                "spaces",
+            );
+
             print_spaces(&page.results, global)?;
         }
         SpaceAction::View { key } => {

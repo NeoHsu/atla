@@ -66,6 +66,12 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 format!("failed to list Jira issues from {}", client.instance_url())
             })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.issues.len(),
+                "issues",
+            );
+
             print_issues(&page.issues, global, requested_fields.as_deref())?;
         }
         IssueAction::Create {
@@ -511,6 +517,13 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                         client.instance_url()
                     )
                 })?;
+
+                crate::output::warn_if_truncated(
+                    page.total
+                        .is_some_and(|total| (page.comments.len() as u32) < total),
+                    page.comments.len(),
+                    "comments",
+                );
 
                 print_comments(&page, global)?;
             }

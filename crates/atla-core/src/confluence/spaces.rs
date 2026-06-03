@@ -9,21 +9,50 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceSpaceSearch,
     ) -> Result<ConfluenceSpacePage, ApiError> {
-        let mut request = self
-            .generated
-            .get_spaces()
-            .limit(limit_non_zero(search.limit)?);
-        if let Some(key) = &search.key {
-            request = request.keys(vec![key.clone()]);
+        let limit = search.limit.max(1);
+        let mut collected: Vec<ConfluenceSpace> = Vec::new();
+        let mut cursor: Option<String> = None;
+        let mut next_link: Option<String> = None;
+
+        loop {
+            let remaining = (limit as u64).saturating_sub(collected.len() as u64);
+            if remaining == 0 {
+                break;
+            }
+            let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
+
+            let mut request = self
+                .generated
+                .get_spaces()
+                .limit(limit_non_zero(page_size)?);
+            if let Some(key) = &search.key {
+                request = request.keys(vec![key.clone()]);
+            }
+            if let Some(cursor) = &cursor {
+                request = request.cursor(cursor.clone());
+            }
+            let page = request.send().await.map_err(generated_error)?.into_inner();
+
+            let received = page.results.len();
+            collected.extend(page.results.into_iter().map(ConfluenceSpace::from));
+            next_link = page.links.as_ref().and_then(|l| l.next.clone());
+
+            if received == 0 {
+                break;
+            }
+            cursor = match next_link.as_deref().and_then(cursor_from_next_link) {
+                Some(c) => Some(c),
+                None => break,
+            };
         }
-        let page = request.send().await.map_err(generated_error)?.into_inner();
+
+        if collected.len() > limit as usize {
+            collected.truncate(limit as usize);
+        }
 
         Ok(ConfluenceSpacePage {
-            results: page
-                .results
-                .into_iter()
-                .map(ConfluenceSpace::from)
-                .collect(),
+            results: collected,
+            is_last: Some(next_link.is_none()),
         })
     }
 

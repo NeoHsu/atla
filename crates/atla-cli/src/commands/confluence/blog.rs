@@ -115,6 +115,12 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.results.len(),
+                "blog posts",
+            );
+
             print_blog_posts(&page.results, global)?;
         }
         BlogAction::View { id, .. } => {

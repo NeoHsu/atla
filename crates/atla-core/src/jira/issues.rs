@@ -9,6 +9,10 @@ use super::models::{
 use super::util::{generated_error, generated_error_with_body, issue_fields, limit_i32};
 use crate::client::{ApiError, read_empty, read_json};
 
+/// Per-request maximum for `GET /rest/api/3/search/jql`. The server silently
+/// caps `maxResults` to this value, so larger callers must paginate to reach it.
+const JIRA_JQL_SEARCH_PAGE_CAP: u32 = 100;
+
 impl JiraClient {
     pub async fn create_issue(
         &self,
@@ -70,16 +74,49 @@ impl JiraClient {
         &self,
         search: &JiraIssueSearch,
     ) -> Result<JiraIssueSearchPage, ApiError> {
-        let builder = self
-            .generated
-            .search_and_reconsile_issues_using_jql()
-            .jql(&search.jql)
-            .max_results(limit_i32(search.max_results))
-            .fields(search.issue_fields());
+        let fields = search.issue_fields();
+        let mut collected: Vec<JiraIssue> = Vec::new();
+        let mut next_page_token: Option<String> = None;
+        let mut server_is_last: Option<bool> = Some(true);
 
-        let page = builder.send().await.map_err(generated_error)?;
+        while (collected.len() as u32) < search.max_results {
+            let remaining = search.max_results - collected.len() as u32;
+            let page_size = remaining.min(JIRA_JQL_SEARCH_PAGE_CAP);
 
-        Ok(JiraIssueSearchPage::from(page.into_inner()))
+            let mut builder = self
+                .generated
+                .search_and_reconsile_issues_using_jql()
+                .jql(&search.jql)
+                .max_results(limit_i32(page_size))
+                .fields(fields.clone());
+            if let Some(token) = &next_page_token {
+                builder = builder.next_page_token(token.clone());
+            }
+
+            let mut page = JiraIssueSearchPage::from(
+                builder.send().await.map_err(generated_error)?.into_inner(),
+            );
+
+            let received = page.issues.len();
+            server_is_last = page.is_last;
+            next_page_token = page.next_page_token.take();
+            collected.append(&mut page.issues);
+
+            if received == 0 || matches!(server_is_last, Some(true)) || next_page_token.is_none() {
+                break;
+            }
+        }
+
+        if (collected.len() as u32) > search.max_results {
+            collected.truncate(search.max_results as usize);
+        }
+
+        let exhausted = matches!(server_is_last, Some(true)) || next_page_token.is_none();
+        Ok(JiraIssueSearchPage {
+            is_last: Some(exhausted),
+            next_page_token: if exhausted { None } else { next_page_token },
+            issues: collected,
+        })
     }
 
     pub async fn get_issue(

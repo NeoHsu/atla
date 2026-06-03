@@ -124,6 +124,12 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 )
             })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.results.len(),
+                "pages",
+            );
+
             print_pages(&page.results, global)?;
         }
         PageAction::View {
@@ -244,6 +250,12 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     client.instance_url()
                 )
             })?;
+
+            crate::output::warn_if_truncated(
+                matches!(children.is_last, Some(false)),
+                children.results.len(),
+                "children",
+            );
 
             print_content_nodes(&children.results, global)?;
         }

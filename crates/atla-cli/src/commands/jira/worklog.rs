@@ -70,6 +70,14 @@ pub(super) async fn run_issue_worklog(
                     client.instance_url()
                 )
             })?;
+
+            crate::output::warn_if_truncated(
+                page.total
+                    .is_some_and(|total| (page.worklogs.len() as u32) < total),
+                page.worklogs.len(),
+                "worklogs",
+            );
+
             print_worklogs(&page, global)?;
         }
     }

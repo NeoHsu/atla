@@ -251,6 +251,11 @@ impl Default for ConfluenceSpaceSearch {
 pub struct ConfluenceSpacePage {
     #[serde(default)]
     pub results: Vec<ConfluenceSpace>,
+    /// `true` when the server confirmed no more results follow. `false` when the
+    /// caller's `limit` was reached but more results may exist server-side.
+    /// `None` when the API did not report pagination state.
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -348,6 +353,8 @@ impl Default for ConfluencePageSearch {
 pub struct ConfluencePagePage {
     #[serde(default)]
     pub results: Vec<ConfluencePage>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -362,6 +369,8 @@ pub struct ConfluenceContentTreeSearch {
 pub struct ConfluenceContentTreePage {
     #[serde(default)]
     pub results: Vec<ConfluenceContentNode>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -423,6 +432,8 @@ impl Default for ConfluenceBlogPostSearch {
 pub struct ConfluenceBlogPostPage {
     #[serde(default)]
     pub results: Vec<ConfluenceBlogPost>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -451,6 +462,8 @@ pub struct ConfluenceSearchPage {
     pub results: Vec<ConfluenceSearchResult>,
     pub size: Option<u64>,
     pub total_size: Option<u64>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -499,6 +512,8 @@ pub struct ConfluenceLabelSearch {
 pub struct ConfluenceLabelPage {
     #[serde(default)]
     pub results: Vec<ConfluenceLabel>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -564,6 +579,8 @@ impl ConfluenceCommentCreate {
 pub struct ConfluenceCommentPage {
     #[serde(default)]
     pub results: Vec<ConfluenceComment>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -584,6 +601,8 @@ pub struct ConfluenceComment {
 pub struct ConfluenceAttachmentPage {
     #[serde(default)]
     pub results: Vec<ConfluenceAttachment>,
+    #[serde(default)]
+    pub is_last: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -876,6 +895,7 @@ impl From<generated_types::MultiEntityResultLabel> for ConfluenceLabelPage {
                 .into_iter()
                 .map(|label| label_from_json(&label))
                 .collect(),
+            is_last: None,
         }
     }
 }
@@ -897,6 +917,7 @@ impl From<generated_v1_types::LabelArray> for ConfluenceLabelPage {
                 .into_iter()
                 .map(|label| label_from_json(&label))
                 .collect(),
+            is_last: None,
         }
     }
 }
@@ -918,6 +939,7 @@ impl From<generated_types::MultiEntityResultPageCommentModel> for ConfluenceComm
                 .into_iter()
                 .map(|comment| comment_from_json(&comment))
                 .collect(),
+            is_last: None,
         }
     }
 }
@@ -933,6 +955,7 @@ impl From<generated_types::MultiEntityResultBlogPostCommentModel> for Confluence
                 .into_iter()
                 .map(|comment| comment_from_json(&comment))
                 .collect(),
+            is_last: None,
         }
     }
 }
@@ -968,6 +991,7 @@ impl From<generated_v1_types::SearchPageResponseSearchResult> for ConfluenceSear
                 .collect(),
             size: optional_i32(&value, &["size"]).map(|n| n as u64),
             total_size: optional_i32(&value, &["totalSize"]).map(|n| n as u64),
+            is_last: None,
         }
     }
 }

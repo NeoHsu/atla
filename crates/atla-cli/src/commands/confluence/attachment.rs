@@ -48,6 +48,12 @@ pub(super) async fn run_attachment(
                     )
                 })?;
 
+            crate::output::warn_if_truncated(
+                matches!(page.is_last, Some(false)),
+                page.results.len(),
+                "attachments",
+            );
+
             print_attachments(&page.results, global)?;
         }
         AttachmentAction::View { attachment_id } => {
