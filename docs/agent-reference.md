@@ -109,6 +109,28 @@ description: Compact complete reference for AI agents and automation using atla.
 | `--dry-run` | boolean | `false` | Prints the request and skips mutation |
 | `--no-input` | boolean | `false` | Disables prompts and interactive selection |
 
+### Pagination
+
+Every `--limit N` flag is a "max-results" cap. `atla` paginates the underlying API
+internally (Jira `startAt`/`nextPageToken`, Confluence v2 cursor / v1 CQL `start`) until
+`N` items are collected or the server signals exhaustion. Agents can pass `--limit 5000`
+without writing their own batch loop.
+
+If the limit is reached before the server runs out, a single warning line goes to
+**stderr** (stdout stays clean for `-o json/keys/csv` pipelines):
+
+```
+warning: more issues match this query; increase --limit to fetch them (1000 returned)
+```
+
+Affected commands: `jira project list`, `jira search`, `jira issue list`,
+`jira issue comment list`, `jira issue worklog list`, `jira board list`,
+`jira sprint list`, `jira sprint active`, `jira sprint issues`, `confluence space list`,
+`confluence page list`, `confluence page children`, `confluence blog list`,
+`confluence page comment list`, `confluence blog comment list`,
+`confluence page label list`, `confluence blog label list`,
+`confluence attachment list`, `confluence search`.
+
 ## 4. Jira Commands
 
 | Command | Args | Flags | Description | Example |

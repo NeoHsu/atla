@@ -57,6 +57,36 @@ atla jira issue list --project PROJ --output keys
 atla confluence page list --space ENG --output keys
 ```
 
+## `--limit` and pagination
+
+List commands accept `--limit N` as a hard cap on returned items. `atla` paginates the
+underlying API automatically and accumulates up to `N` records before printing — `--limit`
+is **not** a single-page hint.
+
+When the requested `--limit` is reached but the server still has more matches, a warning
+is written to **stderr**:
+
+```
+warning: more issues match this query; increase --limit to fetch them (1000 returned)
+```
+
+Stdout is reserved for the records themselves, so `-o json`, `-o csv`, and `-o keys`
+output is unaffected by the warning. Pipelines stay clean:
+
+```bash
+atla jira issue list --project PROJ --limit 5000 --output keys > keys.txt   # stdout
+# stderr line, if any, appears in your terminal but not in keys.txt
+```
+
+To silence the warning in scripts that intentionally cap results, redirect stderr:
+
+```bash
+atla jira issue list --project PROJ --limit 100 --output json 2>/dev/null
+```
+
+See [`jira.md`](./jira.md#pagination) and [`confluence.md`](./confluence.md#pagination) for
+the full list of paginating commands.
+
 ## Piping and command-line tooling
 
 ### JSON + `jq`

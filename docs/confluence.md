@@ -9,6 +9,26 @@ description: Complete Confluence command reference for atla.
 All commands also accept the global flags described in [`output-formats.md`](./output-formats.md):
 `-o, --output`, `--profile`, `--verbose`, `--dry-run`, and `--no-input`.
 
+## Pagination
+
+Every `--limit N` flag is a "max-results" cap, not a single-page hint. `atla` paginates
+the Confluence v2 cursor (or v1 CQL `start`/`totalSize`) internally and accumulates up to
+`N` items before returning, so `--limit 1000` reliably returns 1000 results rather than
+the ~25/250 a single Confluence page would yield.
+
+If the server still has more matches when the limit is hit, a warning is printed to
+**stderr** (stdout is reserved for the records themselves, so `-o json/keys/csv` output
+remains pipe-safe):
+
+```
+warning: more pages match this query; increase --limit to fetch them (1000 returned)
+```
+
+This applies to: `confluence space list`, `confluence page list`, `confluence page children`,
+`confluence blog list`, `confluence page comment list`, `confluence blog comment list`,
+`confluence page label list`, `confluence blog label list`, `confluence attachment list`, and
+`confluence search`.
+
 ## Spaces
 
 ### List spaces

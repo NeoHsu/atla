@@ -39,6 +39,17 @@ For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
 | `--no-input` | Disable interactive prompts (for scripts/CI) |
 | `--verbose` | Show HTTP request/response details |
 
+## Pagination and `--limit`
+
+On list/search commands, `--limit N` is a max-results cap. `atla` paginates the
+underlying API automatically (Jira cursor or `startAt`, Confluence cursor or CQL
+`start`/`totalSize`) and accumulates up to `N` items before returning — there is no
+need to write batch loops in the shell.
+
+If `--limit` is reached but more matches exist server-side, a `warning: more X match
+this query; increase --limit to fetch them (N returned)` line is printed to **stderr**.
+Stdout stays clean, so `-o json/keys/csv` output is pipe-safe.
+
 ## Command Tree Overview
 
 ### Core

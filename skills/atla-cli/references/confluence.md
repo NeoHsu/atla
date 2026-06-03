@@ -3,6 +3,11 @@
 Complete syntax and flags for all `atla confluence` commands. All commands accept global flags:
 `-o/--output`, `--profile`, `--verbose`, `--dry-run`, `--no-input`.
 
+**Pagination.** `--limit N` is a hard cap on returned items, not a single-page hint —
+`atla` follows Confluence v2 cursors (or v1 CQL `start`/`totalSize`) automatically until
+`N` items are collected or the server runs out. If `--limit` is reached but more matches
+exist, a `warning:` line goes to stderr (stdout stays clean for JSON/CSV/keys piping).
+
 ---
 
 ## Spaces

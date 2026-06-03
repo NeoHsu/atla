@@ -9,6 +9,25 @@ description: Complete Jira command reference for atla.
 All commands also accept the global flags described in [`output-formats.md`](./output-formats.md):
 `-o, --output`, `--profile`, `--verbose`, `--dry-run`, and `--no-input`.
 
+## Pagination
+
+Every `--limit N` flag is a "max-results" cap, not a single-page hint. `atla` paginates
+the underlying Atlassian API internally and accumulates up to `N` items before returning,
+so `--limit 5000` reliably returns 5000 results (subject to data volume) rather than the
+~100 a single Jira page would yield.
+
+If the server still has more matches when the limit is hit, a warning is printed to
+**stderr** (stdout is reserved for the records themselves, so `-o json/keys/csv` output
+remains pipe-safe):
+
+```
+warning: more issues match this query; increase --limit to fetch them (1000 returned)
+```
+
+This applies to: `jira project list`, `jira search`, `jira issue list`, `jira issue comment list`,
+`jira issue worklog list`, `jira board list`, `jira sprint list`, `jira sprint active`, and
+`jira sprint issues`.
+
 ## Projects
 
 ### List projects
