@@ -80,9 +80,9 @@ trips.
 - `issue list/create/view/update/edit/delete`
 - `issue fields` — list create-meta fields (required flag, type, allowed values)
 - `issue assign/transition`
-- `issue comment add/list/update/delete`
+- `issue comment add/list/update/delete` (supports `--attachment` and `--attachment-mode`)
 - `issue attachment upload/list/download/delete`
-- `issue link add/list/remove`
+- `issue link add/list/remove` (and `github-links` / `github-commits`)
 - `issue worklog add/list`
 - `board list/view`
 - `sprint list/active/view/create/start/close/add/remove/issues`
@@ -91,7 +91,7 @@ trips.
 - `space list/view/create/update/delete`
 - `page list/view/children/copy/create/update/move/delete`
 - `page label list/add/remove`
-- `page comment list/add/delete`
+- `page comment list/add/delete` (supports markdown options and page attachment references)
 - `blog list/view/create/update/delete`
 - `blog label list/add/remove`
 - `blog comment list/add/delete`
@@ -129,6 +129,14 @@ atla jira issue create --project PROJ --type Task --summary "Fix login bug" \
 atla jira issue transition PROJ-123 --to Done
 ```
 
+### Comment with attachments
+```bash
+atla jira issue comment add PROJ-123 --body 'Please check logs' \
+  --attachment ./error.log --attachment-mode link
+atla confluence page comment add 123456 --body 'Screenshot attached' \
+  --attachment ./screenshot.png --attachment-mode auto
+```
+
 ### Batch transition with keys output
 ```bash
 atla jira issue list --project PROJ --status 'To Do' --output keys \
@@ -144,7 +152,12 @@ atla confluence page view 123456 --format markdown
 ```bash
 atla confluence page create --space ENG --title "Meeting Notes" \
   --body-file notes.md --representation markdown
+
+# Add numbered rows support in Markdown tables
+atla confluence page create --space ENG --title "Release Notes" \
+  --body-file release-notes.md --representation markdown --numbered-table-rows
 ```
+
 
 ### Search Confluence
 ```bash
