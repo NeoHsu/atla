@@ -83,6 +83,18 @@ atla config get <key>
 atla config list [--output json|table|csv|keys]
 ```
 
+### Shell Completion
+```bash
+# Generate completion script for supported shells
+atla completion <shell>
+
+# Examples
+atla completion bash > ~/.local/share/bash-completion/completions/atla
+atla completion zsh > ~/.zsh/completions/_atla
+atla completion fish > ~/.config/fish/completions/atla.fish
+atla completion powershell | Out-File -Encoding utf8 atla-completion.ps1
+```
+
 ### Key Reference
 
 | Key | Description | Example |
