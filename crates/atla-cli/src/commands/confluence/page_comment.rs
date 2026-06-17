@@ -1,12 +1,12 @@
 use anyhow::Context;
-use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch, markdown::MarkdownToAdfOptions};
+use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch};
 
 use crate::cli::{GlobalArgs, OutputFormat, PageCommentAction};
 use crate::context::AppContext;
 
 use super::format::{
-    prepare_required_body_with_options, print_comment, print_comments, print_comments_with_footer,
-    print_deleted, read_body,
+    markdown_to_adf_options_for_body, prepare_required_body_with_options, print_comment,
+    print_comments, print_comments_with_footer, print_deleted, read_body,
 };
 
 pub(super) async fn run_page_comment(
@@ -105,18 +105,12 @@ pub(super) async fn run_page_comment(
             parent,
             representation,
             numbered_table_rows,
+            mentions,
+            resolve_mentions,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let (body, representation) = prepare_required_body_with_options(
-                read_body(body, body_file.as_deref())?,
-                representation,
-                MarkdownToAdfOptions {
-                    numbered_table_rows,
-                },
-                "missing comment body",
-            )?;
 
             if global.dry_run {
                 println!(
@@ -125,6 +119,28 @@ pub(super) async fn run_page_comment(
                 );
                 return Ok(());
             }
+
+            let body = read_body(body, body_file.as_deref())?;
+            let jira_client = if resolve_mentions {
+                Some(ctx.jira_client()?)
+            } else {
+                None
+            };
+            let markdown_options = markdown_to_adf_options_for_body(
+                body.as_deref(),
+                representation,
+                numbered_table_rows,
+                &mentions,
+                resolve_mentions,
+                jira_client.as_ref(),
+            )
+            .await?;
+            let (body, representation) = prepare_required_body_with_options(
+                body,
+                representation,
+                markdown_options,
+                "missing comment body",
+            )?;
 
             let client = ctx.confluence_client()?;
             let comment = client

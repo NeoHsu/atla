@@ -45,7 +45,7 @@ pub enum AuthStorage {
     File,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum BodyRepresentation {
     Storage,
     Wiki,
@@ -570,6 +570,12 @@ pub enum PageAction {
         /// Enable Confluence numbered rows for Markdown tables (requires --representation markdown).
         #[arg(long)]
         numbered_table_rows: bool,
+        /// Convert mapped Markdown mentions to ADF mentions; pass NAME=ACCOUNT_ID.
+        #[arg(long = "mention", value_name = "NAME=ACCOUNT_ID")]
+        mentions: Vec<String>,
+        /// Resolve Markdown mentions by searching Atlassian users (requires --representation markdown).
+        #[arg(long)]
+        resolve_mentions: bool,
         #[arg(long)]
         draft: bool,
         #[arg(long)]
@@ -646,6 +652,12 @@ pub enum PageAction {
         /// Enable Confluence numbered rows for Markdown tables (requires --representation markdown).
         #[arg(long)]
         numbered_table_rows: bool,
+        /// Convert mapped Markdown mentions to ADF mentions; pass NAME=ACCOUNT_ID.
+        #[arg(long = "mention", value_name = "NAME=ACCOUNT_ID")]
+        mentions: Vec<String>,
+        /// Resolve Markdown mentions by searching Atlassian users (requires --representation markdown).
+        #[arg(long)]
+        resolve_mentions: bool,
         #[arg(long)]
         version: Option<u64>,
         #[arg(long)]
@@ -728,6 +740,12 @@ pub enum PageCommentAction {
         /// Enable Confluence numbered rows for Markdown tables (requires --representation markdown).
         #[arg(long)]
         numbered_table_rows: bool,
+        /// Convert mapped Markdown mentions to ADF mentions; pass NAME=ACCOUNT_ID.
+        #[arg(long = "mention", value_name = "NAME=ACCOUNT_ID")]
+        mentions: Vec<String>,
+        /// Resolve Markdown mentions by searching Atlassian users (requires --representation markdown).
+        #[arg(long)]
+        resolve_mentions: bool,
     },
     Delete {
         page_id: String,
@@ -979,6 +997,45 @@ pub enum AttachmentAction {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn page_create_accepts_markdown_mention_options() {
+        let cli = Cli::try_parse_from([
+            "atla",
+            "confluence",
+            "page",
+            "create",
+            "--space",
+            "ENG",
+            "--title",
+            "Runbook",
+            "--body",
+            "@Neo please review",
+            "--representation",
+            "markdown",
+            "--mention",
+            "Neo=account-neo",
+            "--resolve-mentions",
+        ])
+        .expect("parse cli");
+
+        let Command::Confluence(command) = cli.command else {
+            panic!("expected confluence command");
+        };
+        let ConfluenceResource::Page(command) = command.resource else {
+            panic!("expected page command");
+        };
+        let PageAction::Create {
+            mentions,
+            resolve_mentions,
+            ..
+        } = command.action
+        else {
+            panic!("expected page create action");
+        };
+        assert_eq!(mentions, vec!["Neo=account-neo"]);
+        assert!(resolve_mentions);
+    }
 
     #[test]
     fn page_view_accepts_preserve_table_options_flag() {

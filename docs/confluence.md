@@ -218,6 +218,7 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
                               [--body TEXT | --body-file FILE]
                               [--representation storage|wiki|atlas-doc-format|markdown]
                               [--numbered-table-rows]
+                              [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
                               [--draft] [--private]
 ```
 
@@ -226,6 +227,7 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
 ```bash
 atla confluence page create --space ENG --title 'SSO Rollout Checklist'   --body-file docs/sso-rollout.md   --representation markdown   --parent 654321
 atla confluence page create --space ENG --title 'Inventory'   --body-file docs/inventory.md   --representation markdown --numbered-table-rows
+atla confluence page create --space ENG --title 'Runbook'   --body-file docs/runbook.md   --representation markdown --mention 'Neo Hsu=abc-account-id'
 ```
 
 ### Update a page
@@ -237,6 +239,7 @@ atla confluence page update <ID> [--title TITLE] [--parent ID]
                                   [--body TEXT | --body-file FILE]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
                                   [--numbered-table-rows]
+                                  [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
                                   [--version N] [--message TEXT] [--draft]
 ```
 
@@ -250,7 +253,11 @@ atla confluence page update 123456 --body-file docs/inventory.md   --representat
 
 Use `page move` for parent-only moves. `page update --parent ...` is best when you are also updating the body/version.
 
-`--numbered-table-rows` only applies when `--representation markdown` converts Markdown tables to Atlas Doc Format. To enable it for just one table in a Markdown file, place a directive immediately before that table:
+`--numbered-table-rows`, `--mention`, and `--resolve-mentions` only apply when `--representation markdown` converts Markdown to Atlas Doc Format.
+
+Markdown mentions remain literal text unless you explicitly map or resolve them. Use `--mention 'Name=ACCOUNT_ID'` for deterministic automation, or `--resolve-mentions` to scan `@name` / `@[Display Name]` candidates and resolve unique Atlassian user search matches. Ambiguous or missing matches are left as text with a warning.
+
+To enable numbered rows for just one table in a Markdown file, place a directive immediately before that table:
 
 ```markdown
 <!-- atla:table numbered-rows=true -->
@@ -356,6 +363,7 @@ atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
                                   [--numbered-table-rows]
+                                  [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
 ```
 
 **Example**

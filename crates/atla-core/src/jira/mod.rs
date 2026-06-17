@@ -1,6 +1,6 @@
 use atla_jira_api::Client as GeneratedClient;
 
-use crate::client::AtlassianClient;
+use crate::client::{ApiError, AtlassianClient, read_json};
 
 mod attachments;
 mod boards;
@@ -69,6 +69,15 @@ impl JiraClient {
 
     pub fn instance_url(&self) -> &str {
         &self.raw_client.instance().base_url
+    }
+
+    pub async fn search_users(&self, query: &str) -> Result<Vec<JiraUser>, ApiError> {
+        read_json(
+            self.raw_client
+                .get("/rest/api/3/user/search")
+                .query(&[("query", query), ("maxResults", "50")]),
+        )
+        .await
     }
 }
 

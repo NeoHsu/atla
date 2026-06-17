@@ -3,7 +3,8 @@ use atla_core::markdown;
 use atla_core::{
     ConfluenceAttachment, ConfluenceBlogPost, ConfluenceBodyRepresentation, ConfluenceClient,
     ConfluenceComment, ConfluenceCommentPage, ConfluenceContentNode, ConfluenceContentStatus,
-    ConfluenceLabelPage, ConfluencePage, ConfluenceSearchResult, ConfluenceSpace,
+    ConfluenceLabelPage, ConfluencePage, ConfluenceSearchResult, ConfluenceSpace, JiraClient,
+    JiraUser,
 };
 use std::fs;
 use std::path::Path;
@@ -61,6 +62,145 @@ pub(super) fn read_body(
     }
 }
 
+pub(super) async fn markdown_to_adf_options_for_body(
+    body: Option<&str>,
+    representation: BodyRepresentation,
+    numbered_table_rows: bool,
+    mention_args: &[String],
+    resolve_mentions: bool,
+    jira_client: Option<&JiraClient>,
+) -> anyhow::Result<markdown::MarkdownToAdfOptions> {
+    if representation != BodyRepresentation::Markdown {
+        if numbered_table_rows {
+            anyhow::bail!("--numbered-table-rows requires --representation markdown");
+        }
+        if !mention_args.is_empty() {
+            anyhow::bail!("--mention requires --representation markdown");
+        }
+        if resolve_mentions {
+            anyhow::bail!("--resolve-mentions requires --representation markdown");
+        }
+    }
+
+    let mut mentions = mention_args
+        .iter()
+        .map(|raw| parse_markdown_mention_arg(raw))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    if representation == BodyRepresentation::Markdown && resolve_mentions {
+        if let Some(body) = body {
+            let client = jira_client.ok_or_else(|| {
+                anyhow::anyhow!("--resolve-mentions requires an Atlassian API client")
+            })?;
+            for candidate in markdown::markdown_mention_candidates(body) {
+                if mentions
+                    .iter()
+                    .any(|mention| mention_matches(mention, &candidate))
+                {
+                    continue;
+                }
+                let users = client
+                    .search_users(&candidate)
+                    .await
+                    .with_context(|| format!("failed to resolve mention `@{candidate}`"))?;
+                match resolve_mention_user(&candidate, users) {
+                    MentionUserResolution::Resolved(mention) => mentions.push(mention),
+                    MentionUserResolution::NotFound => {
+                        eprintln!(
+                            "warning: mention `@{candidate}` was not resolved; leaving it as text"
+                        );
+                    }
+                    MentionUserResolution::Ambiguous(names) => {
+                        let names = names.join(", ");
+                        eprintln!(
+                            "warning: mention `@{candidate}` matched multiple users ({names}); pass --mention `{candidate}=ACCOUNT_ID` to choose one"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(markdown::MarkdownToAdfOptions {
+        numbered_table_rows,
+        mentions,
+    })
+}
+
+fn parse_markdown_mention_arg(raw: &str) -> anyhow::Result<markdown::MarkdownMention> {
+    let (name, account_id) = raw
+        .split_once('=')
+        .ok_or_else(|| anyhow::anyhow!("--mention must use NAME=ACCOUNT_ID"))?;
+    let name = name.trim().trim_start_matches('@').trim();
+    let account_id = account_id.trim();
+    if name.is_empty() || account_id.is_empty() {
+        anyhow::bail!("--mention must include both NAME and ACCOUNT_ID");
+    }
+    Ok(markdown::MarkdownMention {
+        text: name.to_owned(),
+        account_id: account_id.to_owned(),
+    })
+}
+
+fn mention_matches(mention: &markdown::MarkdownMention, candidate: &str) -> bool {
+    mention.text.trim().eq_ignore_ascii_case(candidate.trim())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum MentionUserResolution {
+    Resolved(markdown::MarkdownMention),
+    NotFound,
+    Ambiguous(Vec<String>),
+}
+
+fn resolve_mention_user(query: &str, users: Vec<JiraUser>) -> MentionUserResolution {
+    let users = users
+        .into_iter()
+        .filter(|user| user.active != Some(false))
+        .filter(|user| user.account_id.is_some())
+        .collect::<Vec<_>>();
+
+    let exact = users
+        .iter()
+        .filter(|user| {
+            user.account_id.as_deref() == Some(query)
+                || user
+                    .display_name
+                    .as_deref()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(query))
+        })
+        .collect::<Vec<_>>();
+    if exact.len() == 1 {
+        return MentionUserResolution::Resolved(user_to_mention(query, exact[0]));
+    }
+
+    match users.as_slice() {
+        [user] => MentionUserResolution::Resolved(user_to_mention(query, user)),
+        [] => MentionUserResolution::NotFound,
+        _ => MentionUserResolution::Ambiguous(
+            users
+                .iter()
+                .map(|user| {
+                    let name = user.display_name.as_deref().unwrap_or("unknown");
+                    let account_id = user.account_id.as_deref().unwrap_or("unknown-account-id");
+                    format!("{name} <{account_id}>")
+                })
+                .collect(),
+        ),
+    }
+}
+
+fn user_to_mention(query: &str, user: &JiraUser) -> markdown::MarkdownMention {
+    markdown::MarkdownMention {
+        text: query.trim().trim_start_matches('@').to_owned(),
+        account_id: user
+            .account_id
+            .as_deref()
+            .expect("filtered users include account ids")
+            .to_owned(),
+    }
+}
+
 pub(super) fn prepare_optional_body_with_options(
     body: Option<String>,
     representation: BodyRepresentation,
@@ -73,6 +213,9 @@ pub(super) fn prepare_optional_body_with_options(
             .map(|body| (body, ConfluenceBodyRepresentation::AtlasDocFormat)),
         _ if markdown_options.numbered_table_rows => {
             anyhow::bail!("--numbered-table-rows requires --representation markdown")
+        }
+        _ if !markdown_options.mentions.is_empty() => {
+            anyhow::bail!("--mention requires --representation markdown")
         }
         _ => Ok((body, confluence_body_representation(representation)?)),
     }
@@ -844,6 +987,7 @@ mod tests {
             BodyRepresentation::Markdown,
             markdown::MarkdownToAdfOptions {
                 numbered_table_rows: true,
+                ..markdown::MarkdownToAdfOptions::default()
             },
         )
         .expect("convert markdown");
@@ -864,6 +1008,7 @@ mod tests {
             BodyRepresentation::Storage,
             markdown::MarkdownToAdfOptions {
                 numbered_table_rows: true,
+                ..markdown::MarkdownToAdfOptions::default()
             },
         )
         .expect_err("numbered table rows should require markdown");
@@ -873,6 +1018,80 @@ mod tests {
                 .to_string()
                 .contains("requires --representation markdown")
         );
+    }
+
+    #[test]
+    fn converts_markdown_body_to_adf_with_explicit_mention_mapping() {
+        let (body, representation) = prepare_optional_body_with_options(
+            Some("@Neo please review".to_owned()),
+            BodyRepresentation::Markdown,
+            markdown::MarkdownToAdfOptions {
+                mentions: vec![markdown::MarkdownMention {
+                    text: "Neo".to_owned(),
+                    account_id: "account-neo".to_owned(),
+                }],
+                ..markdown::MarkdownToAdfOptions::default()
+            },
+        )
+        .expect("convert markdown");
+
+        assert_eq!(representation, ConfluenceBodyRepresentation::AtlasDocFormat);
+        let body = body.expect("converted body");
+        let adf: serde_json::Value = serde_json::from_str(&body).expect("adf json");
+        assert_eq!(adf["content"][0]["content"][0]["type"], "mention");
+        assert_eq!(
+            adf["content"][0]["content"][0]["attrs"]["id"],
+            "account-neo"
+        );
+    }
+
+    #[test]
+    fn parses_mention_mapping_argument() {
+        let mention = parse_markdown_mention_arg("@Neo Hsu=abc-123").expect("parse mention");
+
+        assert_eq!(mention.text, "Neo Hsu");
+        assert_eq!(mention.account_id, "abc-123");
+    }
+
+    #[test]
+    fn resolves_single_mention_user() {
+        let resolution = resolve_mention_user(
+            "Neo",
+            vec![JiraUser {
+                account_id: Some("account-neo".to_owned()),
+                display_name: Some("Neo Hsu".to_owned()),
+                active: Some(true),
+            }],
+        );
+
+        assert_eq!(
+            resolution,
+            MentionUserResolution::Resolved(markdown::MarkdownMention {
+                text: "Neo".to_owned(),
+                account_id: "account-neo".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_ambiguous_mention_users() {
+        let resolution = resolve_mention_user(
+            "Amy",
+            vec![
+                JiraUser {
+                    account_id: Some("account-amy-1".to_owned()),
+                    display_name: Some("Amy Chen".to_owned()),
+                    active: Some(true),
+                },
+                JiraUser {
+                    account_id: Some("account-amy-2".to_owned()),
+                    display_name: Some("Amy Wang".to_owned()),
+                    active: Some(true),
+                },
+            ],
+        );
+
+        assert!(matches!(resolution, MentionUserResolution::Ambiguous(_)));
     }
 
     #[test]

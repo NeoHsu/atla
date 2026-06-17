@@ -1,8 +1,15 @@
 use serde_json::{Value, json};
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct MarkdownToAdfOptions {
     pub numbered_table_rows: bool,
+    pub mentions: Vec<MarkdownMention>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkdownMention {
+    pub text: String,
+    pub account_id: String,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -15,7 +22,7 @@ pub fn markdown_to_adf(markdown: &str) -> Value {
 }
 
 pub fn markdown_to_adf_with_options(markdown: &str, options: MarkdownToAdfOptions) -> Value {
-    let blocks = parse_markdown_blocks(markdown, options);
+    let blocks = parse_markdown_blocks(markdown, &options);
     json!({
         "type": "doc",
         "version": 1,
@@ -23,7 +30,7 @@ pub fn markdown_to_adf_with_options(markdown: &str, options: MarkdownToAdfOption
     })
 }
 
-fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<Value> {
+fn parse_markdown_blocks(markdown: &str, options: &MarkdownToAdfOptions) -> Vec<Value> {
     let lines = markdown.lines().collect::<Vec<_>>();
     let mut blocks = Vec::new();
     let mut index = 0;
@@ -46,7 +53,7 @@ fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<V
             blocks.push(json!({
                 "type": "heading",
                 "attrs": { "level": level },
-                "content": parse_inline_markdown(text),
+                "content": parse_inline_markdown(text, options),
             }));
             index += 1;
             continue;
@@ -69,7 +76,7 @@ fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<V
         }
 
         if task_list_marker(line).is_some() {
-            let (items, next_index) = collect_task_items(&lines, index);
+            let (items, next_index) = collect_task_items(&lines, index, options);
             blocks.push(json!({
                 "type": "taskList",
                 "attrs": { "localId": format!("tasklist-{}", index + 1) },
@@ -80,7 +87,7 @@ fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<V
         }
 
         if unordered_list_text(line).is_some() {
-            let (items, next_index) = collect_list_items(&lines, index, false);
+            let (items, next_index) = collect_list_items(&lines, index, false, options);
             blocks.push(json!({
                 "type": "bulletList",
                 "content": items,
@@ -91,7 +98,7 @@ fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<V
 
         if ordered_list_text(line).is_some() {
             let order = ordered_list_order(line).unwrap_or(1);
-            let (items, next_index) = collect_list_items(&lines, index, true);
+            let (items, next_index) = collect_list_items(&lines, index, true, options);
             blocks.push(json!({
                 "type": "orderedList",
                 "attrs": { "order": order },
@@ -106,6 +113,7 @@ fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<V
                 &lines,
                 index + 1,
                 options.numbered_table_rows || numbered_table_rows,
+                options,
             );
             blocks.push(table);
             index = next_index;
@@ -114,14 +122,14 @@ fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<V
 
         if is_table_start(&lines, index) {
             let (table, next_index) =
-                parse_markdown_table(&lines, index, options.numbered_table_rows);
+                parse_markdown_table(&lines, index, options.numbered_table_rows, options);
             blocks.push(table);
             index = next_index;
             continue;
         }
 
         let (paragraph, next_index) = collect_paragraph(&lines, index);
-        blocks.push(adf_paragraph(&paragraph));
+        blocks.push(adf_paragraph(&paragraph, options));
         index = next_index;
     }
 
@@ -233,7 +241,11 @@ fn collect_prefixed_block(lines: &[&str], start: usize, prefix: char) -> (String
     (collected.join("\n\n"), index)
 }
 
-fn collect_task_items(lines: &[&str], start: usize) -> (Vec<Value>, usize) {
+fn collect_task_items(
+    lines: &[&str],
+    start: usize,
+    options: &MarkdownToAdfOptions,
+) -> (Vec<Value>, usize) {
     let mut items = Vec::new();
     let mut index = start;
     while index < lines.len() {
@@ -246,7 +258,7 @@ fn collect_task_items(lines: &[&str], start: usize) -> (Vec<Value>, usize) {
                 "localId": format!("task-{}", index + 1),
                 "state": if checked { "DONE" } else { "TODO" },
             },
-            "content": parse_inline_markdown(text),
+            "content": parse_inline_markdown(text, options),
         }));
         index += 1;
     }
@@ -261,7 +273,12 @@ fn is_ordered_list_line(line: &str) -> bool {
     ordered_list_text(line).is_some()
 }
 
-fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value>, usize) {
+fn collect_list_items(
+    lines: &[&str],
+    start: usize,
+    ordered: bool,
+    options: &MarkdownToAdfOptions,
+) -> (Vec<Value>, usize) {
     if start >= lines.len() {
         return (Vec::new(), start);
     }
@@ -288,7 +305,8 @@ fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value
         if indent >= base_indent + 2 {
             if let Some(last_item) = items.last_mut() {
                 let nested_ordered = is_ordered_list_line(line);
-                let (sub_items, consumed) = collect_list_items(lines, index, nested_ordered);
+                let (sub_items, consumed) =
+                    collect_list_items(lines, index, nested_ordered, options);
                 if !sub_items.is_empty() {
                     let order = ordered_list_order(lines[index]).unwrap_or(1);
                     let nested = if nested_ordered {
@@ -319,7 +337,7 @@ fn collect_list_items(lines: &[&str], start: usize, ordered: bool) -> (Vec<Value
 
         items.push(json!({
             "type": "listItem",
-            "content": [adf_paragraph(&[(text.to_owned(), false)])],
+            "content": [adf_paragraph(&[(text.to_owned(), false)], options)],
         }));
         index += 1;
     }
@@ -403,6 +421,112 @@ fn parse_directive_bool(value: &str) -> Option<bool> {
     }
 }
 
+pub fn markdown_mention_candidates(markdown: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    let mut fence: Option<&str> = None;
+
+    for line in markdown.lines() {
+        let trimmed = line.trim_start();
+        if let Some(active_fence) = fence {
+            if trimmed.starts_with(active_fence) {
+                fence = None;
+            }
+            continue;
+        }
+        if trimmed.starts_with("```") {
+            fence = Some("```");
+            continue;
+        }
+        if trimmed.starts_with("~~~") {
+            fence = Some("~~~");
+            continue;
+        }
+        collect_mention_candidates_from_text(line, &mut candidates);
+    }
+
+    candidates
+}
+
+fn collect_mention_candidates_from_text(text: &str, candidates: &mut Vec<String>) {
+    let mut index = 0;
+    while index < text.len() {
+        let rest = &text[index..];
+        if let Some(after_tick) = rest.strip_prefix('`') {
+            if let Some(end) = after_tick.find('`') {
+                index += end + 2;
+                continue;
+            }
+        }
+
+        let previous = text[..index].chars().next_back();
+        if previous.is_none_or(can_start_mention_after)
+            && let Some((name, consumed)) = mention_name_at_start(rest)
+        {
+            push_unique_mention_candidate(candidates, name);
+            index += consumed;
+            continue;
+        }
+
+        let Some(ch) = rest.chars().next() else {
+            break;
+        };
+        index += ch.len_utf8();
+    }
+}
+
+fn push_unique_mention_candidate(candidates: &mut Vec<String>, name: &str) {
+    let normalized = normalize_mention_name(name);
+    if normalized.is_empty() {
+        return;
+    }
+    if !candidates
+        .iter()
+        .any(|candidate| normalize_mention_name(candidate) == normalized)
+    {
+        candidates.push(name.trim().to_owned());
+    }
+}
+
+fn can_start_mention_after(ch: char) -> bool {
+    ch.is_whitespace() || matches!(ch, '(' | '[' | '{' | '>' | ':' | ';' | ',')
+}
+
+fn mention_name_at_start(text: &str) -> Option<(&str, usize)> {
+    let rest = text.strip_prefix('@')?;
+    if let Some(after_open) = rest.strip_prefix('[') {
+        let end = after_open.find(']')?;
+        let name = after_open[..end].trim();
+        if name.is_empty() {
+            return None;
+        }
+        return Some((name, end + 3));
+    }
+
+    let mut end = 0;
+    for (offset, ch) in rest.char_indices() {
+        if is_simple_mention_char(ch) {
+            end = offset + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    let mut name = &rest[..end];
+    while let Some(ch) = name.chars().next_back()
+        && matches!(ch, '.' | ',' | ':' | ';' | '!' | '?')
+    {
+        let new_end = name.len() - ch.len_utf8();
+        name = &name[..new_end];
+    }
+    if name.is_empty() {
+        return None;
+    }
+    Some((name, 1 + name.len()))
+}
+
+fn is_simple_mention_char(ch: char) -> bool {
+    ch.is_alphanumeric() || matches!(ch, '_' | '-' | '.')
+}
+
 fn is_table_row(line: &str) -> bool {
     let t = line.trim();
     t.starts_with('|') && t.contains('|')
@@ -420,21 +544,26 @@ fn parse_table_row_cells(line: &str) -> Vec<String> {
     t.split('|').map(|cell| cell.trim().to_owned()).collect()
 }
 
-fn adf_table_cell(text: &str, header: bool) -> Value {
+fn adf_table_cell(text: &str, header: bool, options: &MarkdownToAdfOptions) -> Value {
     let cell_type = if header { "tableHeader" } else { "tableCell" };
     json!({
         "type": cell_type,
         "attrs": {},
-        "content": [{"type": "paragraph", "content": parse_inline_markdown(text)}],
+        "content": [{"type": "paragraph", "content": parse_inline_markdown(text, options)}],
     })
 }
 
-fn parse_markdown_table(lines: &[&str], start: usize, numbered_table_rows: bool) -> (Value, usize) {
+fn parse_markdown_table(
+    lines: &[&str],
+    start: usize,
+    numbered_table_rows: bool,
+    options: &MarkdownToAdfOptions,
+) -> (Value, usize) {
     let headers = parse_table_row_cells(lines[start]);
     let mut index = start + 2; // skip header + separator
     let mut rows: Vec<Value> = vec![json!({
         "type": "tableRow",
-        "content": headers.iter().map(|h| adf_table_cell(h, true)).collect::<Vec<_>>(),
+        "content": headers.iter().map(|h| adf_table_cell(h, true, options)).collect::<Vec<_>>(),
     })];
     while index < lines.len() {
         let line = lines[index];
@@ -444,7 +573,7 @@ fn parse_markdown_table(lines: &[&str], start: usize, numbered_table_rows: bool)
         let cells = parse_table_row_cells(line);
         rows.push(json!({
             "type": "tableRow",
-            "content": cells.iter().map(|c| adf_table_cell(c, false)).collect::<Vec<_>>(),
+            "content": cells.iter().map(|c| adf_table_cell(c, false, options)).collect::<Vec<_>>(),
         }));
         index += 1;
     }
@@ -499,13 +628,13 @@ fn ordered_list_order(line: &str) -> Option<u64> {
     trimmed[..digits].parse().ok()
 }
 
-fn adf_paragraph(lines: &[(String, bool)]) -> Value {
+fn adf_paragraph(lines: &[(String, bool)], options: &MarkdownToAdfOptions) -> Value {
     if lines.is_empty() {
         return json!({"type": "paragraph", "content": []});
     }
     let mut content: Vec<Value> = Vec::new();
     for (i, (line, hard_break)) in lines.iter().enumerate() {
-        content.extend(parse_inline_markdown(line));
+        content.extend(parse_inline_markdown(line, options));
         if *hard_break && i + 1 < lines.len() {
             content.push(json!({"type": "hardBreak"}));
         } else if !hard_break && i + 1 < lines.len() {
@@ -532,14 +661,19 @@ fn adf_code_block(language: &str, code: &str) -> Value {
     block
 }
 
-fn parse_inline_markdown(text: &str) -> Vec<Value> {
+fn parse_inline_markdown(text: &str, options: &MarkdownToAdfOptions) -> Vec<Value> {
     let mut nodes = Vec::new();
     let mut plain = String::new();
     let mut index = 0;
 
     while index < text.len() {
         let rest = &text[index..];
-        if let Some((new_nodes, consumed)) = parse_inline_token(rest) {
+        let can_parse_token = !rest.starts_with('@')
+            || plain
+                .chars()
+                .next_back()
+                .is_none_or(can_start_mention_after);
+        if can_parse_token && let Some((new_nodes, consumed)) = parse_inline_token(rest, options) {
             push_plain_text(&mut nodes, &mut plain);
             nodes.extend(new_nodes);
             index += consumed;
@@ -554,13 +688,13 @@ fn parse_inline_markdown(text: &str) -> Vec<Value> {
     nodes
 }
 
-fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
-    // Handle backslash escapes: \* \_ \~ \\ \[ \] \! \| \# \`
+fn parse_inline_token(text: &str, options: &MarkdownToAdfOptions) -> Option<(Vec<Value>, usize)> {
+    // Handle backslash escapes: \* \_ \~ \\ \[ \] \! \| \# \` \@
     if let Some(rest) = text.strip_prefix('\\')
         && let Some(ch) = rest.chars().next()
         && matches!(
             ch,
-            '*' | '_' | '~' | '\\' | '[' | ']' | '!' | '|' | '#' | '`'
+            '*' | '_' | '~' | '\\' | '[' | ']' | '!' | '|' | '#' | '`' | '@'
         )
     {
         return Some((
@@ -569,19 +703,23 @@ fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
         ));
     }
 
-    if let Some((nodes, consumed)) = parse_delimited_mark(text, "**", "strong") {
+    if let Some((node, consumed)) = parse_mention_token(text, options) {
+        return Some((vec![node], consumed));
+    }
+
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "**", "strong", options) {
         return Some((nodes, consumed));
     }
-    if let Some((nodes, consumed)) = parse_delimited_mark(text, "__", "strong") {
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "__", "strong", options) {
         return Some((nodes, consumed));
     }
-    if let Some((nodes, consumed)) = parse_delimited_mark(text, "*", "em") {
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "*", "em", options) {
         return Some((nodes, consumed));
     }
-    if let Some((nodes, consumed)) = parse_delimited_mark(text, "_", "em") {
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "_", "em", options) {
         return Some((nodes, consumed));
     }
-    if let Some((nodes, consumed)) = parse_delimited_mark(text, "~~", "strike") {
+    if let Some((nodes, consumed)) = parse_delimited_mark(text, "~~", "strike", options) {
         return Some((nodes, consumed));
     }
     if let Some(rest) = text.strip_prefix('`') {
@@ -601,7 +739,7 @@ fn parse_inline_token(text: &str) -> Option<(Vec<Value>, usize)> {
             let raw_url = &after_open[..url_end];
             let url = strip_link_title(raw_url);
             // 1([) + label_end + 1(]) + 1(() + url_end + 1())
-            return Some((link_text(label, url), label_end + url_end + 4));
+            return Some((link_text(label, url, options), label_end + url_end + 4));
         }
     }
     if let Some(rest) = text.strip_prefix("![") {
@@ -655,15 +793,53 @@ fn marked_text(text: &str, mark_type: &str) -> Value {
     })
 }
 
+fn parse_mention_token(text: &str, options: &MarkdownToAdfOptions) -> Option<(Value, usize)> {
+    let (name, consumed) = mention_name_at_start(text)?;
+    let mention = find_mention_mapping(name, &options.mentions)?;
+    Some((adf_mention(name, &mention.account_id), consumed))
+}
+
+fn find_mention_mapping<'a>(
+    name: &str,
+    mentions: &'a [MarkdownMention],
+) -> Option<&'a MarkdownMention> {
+    let normalized_name = normalize_mention_name(name);
+    mentions
+        .iter()
+        .find(|mention| normalize_mention_name(&mention.text) == normalized_name)
+}
+
+fn normalize_mention_name(name: &str) -> String {
+    let trimmed = name.trim();
+    let without_at = trimmed.strip_prefix('@').unwrap_or(trimmed);
+    let without_brackets = without_at
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(without_at);
+    without_brackets.trim().to_lowercase()
+}
+
+fn adf_mention(text: &str, account_id: &str) -> Value {
+    let text = text.trim().trim_start_matches('@');
+    json!({
+        "type": "mention",
+        "attrs": {
+            "id": account_id,
+            "text": format!("@{text}"),
+        }
+    })
+}
+
 fn parse_delimited_mark(
     text: &str,
     delimiter: &str,
     mark_type: &str,
+    options: &MarkdownToAdfOptions,
 ) -> Option<(Vec<Value>, usize)> {
     let rest = text.strip_prefix(delimiter)?;
     let end = rest.find(delimiter)?;
     let inner = &rest[..end];
-    let mut nodes = parse_inline_markdown(inner);
+    let mut nodes = parse_inline_markdown(inner, options);
     if nodes.is_empty() {
         return None;
     }
@@ -707,8 +883,8 @@ fn add_mark(node: &mut Value, mark: Value) {
     }
 }
 
-fn link_text(text: &str, url: &str) -> Vec<Value> {
-    let mut nodes = parse_inline_markdown(text);
+fn link_text(text: &str, url: &str, options: &MarkdownToAdfOptions) -> Vec<Value> {
+    let mut nodes = parse_inline_markdown(text, options);
     if nodes.is_empty() {
         nodes.push(json!({
             "type": "text",
@@ -1585,6 +1761,79 @@ cargo test
     }
 
     #[test]
+    fn markdown_mentions_stay_text_without_mapping() {
+        let adf = markdown_to_adf("@Neo please check @[Amy Chen]");
+        let content = adf["content"][0]["content"].as_array().unwrap();
+
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], json!("text"));
+        assert_eq!(content[0]["text"], json!("@Neo please check @[Amy Chen]"));
+    }
+
+    #[test]
+    fn markdown_mentions_convert_with_mapping() {
+        let adf = markdown_to_adf_with_options(
+            "@Neo please check @[Amy Chen] and `@Robot`",
+            MarkdownToAdfOptions {
+                mentions: vec![
+                    MarkdownMention {
+                        text: "Neo".to_owned(),
+                        account_id: "account-neo".to_owned(),
+                    },
+                    MarkdownMention {
+                        text: "Amy Chen".to_owned(),
+                        account_id: "account-amy".to_owned(),
+                    },
+                    MarkdownMention {
+                        text: "Robot".to_owned(),
+                        account_id: "account-robot".to_owned(),
+                    },
+                ],
+                ..MarkdownToAdfOptions::default()
+            },
+        );
+        let content = adf["content"][0]["content"].as_array().unwrap();
+
+        assert_eq!(content[0]["type"], json!("mention"));
+        assert_eq!(content[0]["attrs"]["id"], json!("account-neo"));
+        assert_eq!(content[0]["attrs"]["text"], json!("@Neo"));
+        assert_eq!(content[2]["type"], json!("mention"));
+        assert_eq!(content[2]["attrs"]["id"], json!("account-amy"));
+        assert_eq!(content[4]["type"], json!("text"));
+        assert_eq!(content[4]["text"], json!("@Robot"));
+        assert_eq!(content[4]["marks"], json!([{ "type": "code" }]));
+        assert!(targeted_schema_errors(&adf).is_empty());
+    }
+
+    #[test]
+    fn markdown_mentions_do_not_convert_email_addresses() {
+        let adf = markdown_to_adf_with_options(
+            "email neo@example.com then @example",
+            MarkdownToAdfOptions {
+                mentions: vec![MarkdownMention {
+                    text: "example".to_owned(),
+                    account_id: "account-example".to_owned(),
+                }],
+                ..MarkdownToAdfOptions::default()
+            },
+        );
+        let content = adf["content"][0]["content"].as_array().unwrap();
+
+        assert_eq!(content[0]["type"], json!("text"));
+        assert_eq!(content[0]["text"], json!("email neo@example.com then "));
+        assert_eq!(content[1]["type"], json!("mention"));
+    }
+
+    #[test]
+    fn scans_markdown_mention_candidates() {
+        let candidates = markdown_mention_candidates(
+            "@Neo and @[Amy Chen] plus you@example.com and `@Robot`\n```\n@Code\n```\n@Neo.",
+        );
+
+        assert_eq!(candidates, vec!["Neo", "Amy Chen"]);
+    }
+
+    #[test]
     fn converts_nested_lists_tasks_and_code_blocks() {
         let adf = json!({
             "type": "doc",
@@ -1794,6 +2043,7 @@ cargo test
             markdown,
             MarkdownToAdfOptions {
                 numbered_table_rows: true,
+                ..MarkdownToAdfOptions::default()
             },
         );
         assert_eq!(

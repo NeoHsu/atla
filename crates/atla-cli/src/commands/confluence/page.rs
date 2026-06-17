@@ -2,18 +2,19 @@ use anyhow::Context;
 use atla_core::{
     ConfluenceAttachmentSearch, ConfluenceContentTreeSearch, ConfluencePageCopy,
     ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate,
-    markdown::{AdfToMarkdownOptions, MarkdownToAdfOptions},
+    markdown::AdfToMarkdownOptions,
 };
 
 use crate::cli::{ContentViewFormat, GlobalArgs, OutputFormat, PageAction, PageCommand};
 use crate::context::AppContext;
 
 use super::format::{
-    open_web_url, prepare_optional_body_with_options, prepare_required_body_with_options,
-    print_attachments, print_content_nodes, print_content_nodes_with_footer, print_page,
-    print_page_body, print_page_body_markdown, print_page_with_attachments, print_pages,
-    print_pages_with_footer, read_body, resolve_required_space_id, resolve_space_id,
-    status_from_draft, view_format_body_representation,
+    markdown_to_adf_options_for_body, open_web_url, prepare_optional_body_with_options,
+    prepare_required_body_with_options, print_attachments, print_content_nodes,
+    print_content_nodes_with_footer, print_page, print_page_body, print_page_body_markdown,
+    print_page_with_attachments, print_pages, print_pages_with_footer, read_body,
+    resolve_required_space_id, resolve_space_id, status_from_draft,
+    view_format_body_representation,
 };
 use super::page_comment::run_page_comment;
 use super::page_label::run_page_label;
@@ -29,6 +30,8 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             body_file,
             representation,
             numbered_table_rows,
+            mentions,
+            resolve_mentions,
             draft,
             private,
             root_level,
@@ -52,13 +55,23 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 return Ok(());
             }
 
-            let (body, representation) = prepare_optional_body_with_options(
-                read_body(body, body_file.as_deref())?,
+            let body = read_body(body, body_file.as_deref())?;
+            let jira_client = if resolve_mentions {
+                Some(ctx.jira_client()?)
+            } else {
+                None
+            };
+            let markdown_options = markdown_to_adf_options_for_body(
+                body.as_deref(),
                 representation,
-                MarkdownToAdfOptions {
-                    numbered_table_rows,
-                },
-            )?;
+                numbered_table_rows,
+                &mentions,
+                resolve_mentions,
+                jira_client.as_ref(),
+            )
+            .await?;
+            let (body, representation) =
+                prepare_optional_body_with_options(body, representation, markdown_options)?;
             let client = ctx.confluence_client()?;
             let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
             let page = client
@@ -430,6 +443,8 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             body_file,
             representation,
             numbered_table_rows,
+            mentions,
+            resolve_mentions,
             version,
             message,
             draft,
@@ -484,12 +499,25 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 return Ok(());
             }
 
-            let (body, representation) = prepare_required_body_with_options(
-                read_body(body, body_file.as_deref())?,
+            let body = read_body(body, body_file.as_deref())?;
+            let jira_client = if resolve_mentions {
+                Some(ctx.jira_client()?)
+            } else {
+                None
+            };
+            let markdown_options = markdown_to_adf_options_for_body(
+                body.as_deref(),
                 representation,
-                MarkdownToAdfOptions {
-                    numbered_table_rows,
-                },
+                numbered_table_rows,
+                &mentions,
+                resolve_mentions,
+                jira_client.as_ref(),
+            )
+            .await?;
+            let (body, representation) = prepare_required_body_with_options(
+                body,
+                representation,
+                markdown_options,
                 "page body update and move require --body or --body-file",
             )?;
             let title = title
