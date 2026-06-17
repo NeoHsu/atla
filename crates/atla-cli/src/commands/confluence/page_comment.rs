@@ -314,7 +314,7 @@ fn append_storage_attachment_references(
 ) -> String {
     let mut out = body.trim_end().to_owned();
     if !out.is_empty() {
-        out.push_str("\n");
+        out.push('\n');
     }
     out.push_str("<p>Attachments:</p><ul>");
     for attachment in attachments {

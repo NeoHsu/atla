@@ -451,11 +451,11 @@ fn collect_mention_candidates_from_text(text: &str, candidates: &mut Vec<String>
     let mut index = 0;
     while index < text.len() {
         let rest = &text[index..];
-        if let Some(after_tick) = rest.strip_prefix('`') {
-            if let Some(end) = after_tick.find('`') {
-                index += end + 2;
-                continue;
-            }
+        if let Some(after_tick) = rest.strip_prefix('`')
+            && let Some(end) = after_tick.find('`')
+        {
+            index += end + 2;
+            continue;
         }
 
         let previous = text[..index].chars().next_back();

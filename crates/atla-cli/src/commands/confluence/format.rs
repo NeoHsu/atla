@@ -87,35 +87,36 @@ pub(super) async fn markdown_to_adf_options_for_body(
         .map(|raw| parse_markdown_mention_arg(raw))
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    if representation == BodyRepresentation::Markdown && resolve_mentions {
-        if let Some(body) = body {
-            let client = jira_client.ok_or_else(|| {
-                anyhow::anyhow!("--resolve-mentions requires an Atlassian API client")
-            })?;
-            for candidate in markdown::markdown_mention_candidates(body) {
-                if mentions
-                    .iter()
-                    .any(|mention| mention_matches(mention, &candidate))
-                {
-                    continue;
+    if representation == BodyRepresentation::Markdown
+        && resolve_mentions
+        && let Some(body) = body
+    {
+        let client = jira_client.ok_or_else(|| {
+            anyhow::anyhow!("--resolve-mentions requires an Atlassian API client")
+        })?;
+        for candidate in markdown::markdown_mention_candidates(body) {
+            if mentions
+                .iter()
+                .any(|mention| mention_matches(mention, &candidate))
+            {
+                continue;
+            }
+            let users = client
+                .search_users(&candidate)
+                .await
+                .with_context(|| format!("failed to resolve mention `@{candidate}`"))?;
+            match resolve_mention_user(&candidate, users) {
+                MentionUserResolution::Resolved(mention) => mentions.push(mention),
+                MentionUserResolution::NotFound => {
+                    eprintln!(
+                        "warning: mention `@{candidate}` was not resolved; leaving it as text"
+                    );
                 }
-                let users = client
-                    .search_users(&candidate)
-                    .await
-                    .with_context(|| format!("failed to resolve mention `@{candidate}`"))?;
-                match resolve_mention_user(&candidate, users) {
-                    MentionUserResolution::Resolved(mention) => mentions.push(mention),
-                    MentionUserResolution::NotFound => {
-                        eprintln!(
-                            "warning: mention `@{candidate}` was not resolved; leaving it as text"
-                        );
-                    }
-                    MentionUserResolution::Ambiguous(names) => {
-                        let names = names.join(", ");
-                        eprintln!(
-                            "warning: mention `@{candidate}` matched multiple users ({names}); pass --mention `{candidate}=ACCOUNT_ID` to choose one"
-                        );
-                    }
+                MentionUserResolution::Ambiguous(names) => {
+                    let names = names.join(", ");
+                    eprintln!(
+                        "warning: mention `@{candidate}` matched multiple users ({names}); pass --mention `{candidate}=ACCOUNT_ID` to choose one"
+                    );
                 }
             }
         }
