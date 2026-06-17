@@ -1,7 +1,21 @@
 use serde_json::{Value, json};
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MarkdownToAdfOptions {
+    pub numbered_table_rows: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AdfToMarkdownOptions {
+    pub table_numbered_rows_directives: bool,
+}
+
 pub fn markdown_to_adf(markdown: &str) -> Value {
-    let blocks = parse_markdown_blocks(markdown);
+    markdown_to_adf_with_options(markdown, MarkdownToAdfOptions::default())
+}
+
+pub fn markdown_to_adf_with_options(markdown: &str, options: MarkdownToAdfOptions) -> Value {
+    let blocks = parse_markdown_blocks(markdown, options);
     json!({
         "type": "doc",
         "version": 1,
@@ -9,7 +23,7 @@ pub fn markdown_to_adf(markdown: &str) -> Value {
     })
 }
 
-fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
+fn parse_markdown_blocks(markdown: &str, options: MarkdownToAdfOptions) -> Vec<Value> {
     let lines = markdown.lines().collect::<Vec<_>>();
     let mut blocks = Vec::new();
     let mut index = 0;
@@ -48,7 +62,7 @@ fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
             let (quote, next_index) = collect_prefixed_block(&lines, index, '>');
             blocks.push(json!({
                 "type": "blockquote",
-                "content": sanitize_blockquote_content(parse_markdown_blocks(&quote)),
+                "content": sanitize_blockquote_content(parse_markdown_blocks(&quote, options)),
             }));
             index = next_index;
             continue;
@@ -87,8 +101,20 @@ fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
             continue;
         }
 
+        if let Some(numbered_table_rows) = table_numbered_rows_directive(&lines, index) {
+            let (table, next_index) = parse_markdown_table(
+                &lines,
+                index + 1,
+                options.numbered_table_rows || numbered_table_rows,
+            );
+            blocks.push(table);
+            index = next_index;
+            continue;
+        }
+
         if is_table_start(&lines, index) {
-            let (table, next_index) = parse_markdown_table(&lines, index);
+            let (table, next_index) =
+                parse_markdown_table(&lines, index, options.numbered_table_rows);
             blocks.push(table);
             index = next_index;
             continue;
@@ -103,14 +129,18 @@ fn parse_markdown_blocks(markdown: &str) -> Vec<Value> {
 }
 
 pub fn adf_to_markdown(adf: &Value) -> String {
-    trim_blank_lines(&render_block(adf, 0))
+    adf_to_markdown_with_options(adf, AdfToMarkdownOptions::default())
 }
 
-fn render_block(value: &Value, depth: usize) -> String {
+pub fn adf_to_markdown_with_options(adf: &Value, options: AdfToMarkdownOptions) -> String {
+    trim_blank_lines(&render_block(adf, 0, options))
+}
+
+fn render_block(value: &Value, depth: usize, options: AdfToMarkdownOptions) -> String {
     match value {
-        Value::Array(items) => render_blocks(items, depth),
+        Value::Array(items) => render_blocks(items, depth, options),
         Value::Object(object) => match node_type(object) {
-            "doc" => render_blocks(content_items(object), depth),
+            "doc" => render_blocks(content_items(object), depth, options),
             "paragraph" => format!("{}\n\n", render_inlines(content_items(object))),
             "heading" => {
                 let level = attrs_u64(object, "level").unwrap_or(1).clamp(1, 6);
@@ -120,27 +150,28 @@ fn render_block(value: &Value, depth: usize) -> String {
                     render_inlines(content_items(object))
                 )
             }
-            "bulletList" => render_list(content_items(object), depth, false, 1),
+            "bulletList" => render_list(content_items(object), depth, false, 1, options),
             "orderedList" => render_list(
                 content_items(object),
                 depth,
                 true,
                 attrs_u64(object, "order").unwrap_or(1),
+                options,
             ),
-            "blockquote" => render_blockquote(content_items(object), depth),
+            "blockquote" => render_blockquote(content_items(object), depth, options),
             "rule" => "---\n\n".to_owned(),
             "codeBlock" => render_code_block(object),
-            "panel" => render_panel(object, depth),
-            "table" => render_table(content_items(object)),
-            "mediaSingle" | "mediaGroup" => render_blocks(content_items(object), depth),
+            "panel" => render_panel(object, depth, options),
+            "table" => render_table(object, options),
+            "mediaSingle" | "mediaGroup" => render_blocks(content_items(object), depth, options),
             "blockCard" | "embedCard" => render_card(object),
-            "taskList" | "decisionList" => render_blocks(content_items(object), depth),
+            "taskList" | "decisionList" => render_blocks(content_items(object), depth, options),
             "taskItem" => render_task_item(object, depth),
             "decisionItem" => format!("- {}\n", render_inlines(content_items(object))),
-            "expand" | "nestedExpand" => render_expand(object, depth),
+            "expand" | "nestedExpand" => render_expand(object, depth, options),
             _ => {
                 if let Some(content) = object.get("content").and_then(Value::as_array) {
-                    render_blocks(content, depth)
+                    render_blocks(content, depth, options)
                 } else {
                     render_inline(value)
                 }
@@ -309,6 +340,7 @@ fn collect_paragraph(lines: &[&str], start: usize) -> (Vec<(String, bool)>, usiz
             || task_list_marker(line).is_some()
             || unordered_list_text(line).is_some()
             || ordered_list_text(line).is_some()
+            || table_numbered_rows_directive(lines, index).is_some()
             || is_table_start(lines, index)
         {
             break;
@@ -328,6 +360,47 @@ fn is_table_start(lines: &[&str], index: usize) -> bool {
     let line = lines[index];
     let next = lines[index + 1];
     is_table_row(line) && is_table_separator(next)
+}
+
+fn table_numbered_rows_directive(lines: &[&str], index: usize) -> Option<bool> {
+    let numbered_table_rows = parse_table_numbered_rows_directive(lines.get(index)?)?;
+    if is_table_start(lines, index + 1) {
+        Some(numbered_table_rows)
+    } else {
+        None
+    }
+}
+
+fn parse_table_numbered_rows_directive(line: &str) -> Option<bool> {
+    let inner = line
+        .trim()
+        .strip_prefix("<!--")?
+        .strip_suffix("-->")?
+        .trim();
+    let mut parts = inner.split_whitespace();
+    if parts.next()? != "atla:table" {
+        return None;
+    }
+
+    parts.find_map(|part| {
+        if part == "numbered-rows" {
+            return Some(true);
+        }
+        part.strip_prefix("numbered-rows=")
+            .and_then(parse_directive_bool)
+    })
+}
+
+fn parse_directive_bool(value: &str) -> Option<bool> {
+    match value
+        .trim_matches(|ch| ch == '\'' || ch == '"')
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "true" | "yes" | "on" | "1" => Some(true),
+        "false" | "no" | "off" | "0" => Some(false),
+        _ => None,
+    }
 }
 
 fn is_table_row(line: &str) -> bool {
@@ -356,7 +429,7 @@ fn adf_table_cell(text: &str, header: bool) -> Value {
     })
 }
 
-fn parse_markdown_table(lines: &[&str], start: usize) -> (Value, usize) {
+fn parse_markdown_table(lines: &[&str], start: usize, numbered_table_rows: bool) -> (Value, usize) {
     let headers = parse_table_row_cells(lines[start]);
     let mut index = start + 2; // skip header + separator
     let mut rows: Vec<Value> = vec![json!({
@@ -378,7 +451,7 @@ fn parse_markdown_table(lines: &[&str], start: usize) -> (Value, usize) {
     (
         json!({
             "type": "table",
-            "attrs": {"isNumberColumnEnabled": false, "layout": "default"},
+            "attrs": {"isNumberColumnEnabled": numbered_table_rows, "layout": "default"},
             "content": rows,
         }),
         index,
@@ -689,10 +762,10 @@ fn sanitize_blockquote_block(block: Value) -> Value {
     block
 }
 
-fn render_blocks(items: &[Value], depth: usize) -> String {
+fn render_blocks(items: &[Value], depth: usize, options: AdfToMarkdownOptions) -> String {
     items
         .iter()
-        .map(|item| render_block(item, depth))
+        .map(|item| render_block(item, depth, options))
         .collect::<String>()
 }
 
@@ -912,7 +985,13 @@ fn apply_atomic_marks(text: String, obj: &serde_json::Map<String, Value>) -> Str
     })
 }
 
-fn render_list(items: &[Value], depth: usize, ordered: bool, start: u64) -> String {
+fn render_list(
+    items: &[Value],
+    depth: usize,
+    ordered: bool,
+    start: u64,
+    options: AdfToMarkdownOptions,
+) -> String {
     let mut out = String::new();
     for (index, item) in items.iter().enumerate() {
         let Value::Object(object) = item else {
@@ -923,13 +1002,18 @@ fn render_list(items: &[Value], depth: usize, ordered: bool, start: u64) -> Stri
         } else {
             "-".to_owned()
         };
-        out.push_str(&render_list_item(object, depth, &marker));
+        out.push_str(&render_list_item(object, depth, &marker, options));
     }
     out.push('\n');
     out
 }
 
-fn render_list_item(object: &serde_json::Map<String, Value>, depth: usize, marker: &str) -> String {
+fn render_list_item(
+    object: &serde_json::Map<String, Value>,
+    depth: usize,
+    marker: &str,
+    options: AdfToMarkdownOptions,
+) -> String {
     let mut text_parts = Vec::new();
     let mut nested_blocks = Vec::new();
 
@@ -941,15 +1025,17 @@ fn render_list_item(object: &serde_json::Map<String, Value>, depth: usize, marke
                     depth + 1,
                     false,
                     1,
+                    options,
                 )),
                 "orderedList" => nested_blocks.push(render_list(
                     content_items(child_object),
                     depth + 1,
                     true,
                     attrs_u64(child_object, "order").unwrap_or(1),
+                    options,
                 )),
                 _ => {
-                    let rendered = trim_blank_lines(&render_block(child, depth));
+                    let rendered = trim_blank_lines(&render_block(child, depth, options));
                     if !rendered.is_empty() {
                         text_parts.push(rendered);
                     }
@@ -977,8 +1063,8 @@ fn render_list_item(object: &serde_json::Map<String, Value>, depth: usize, marke
     out
 }
 
-fn render_blockquote(items: &[Value], depth: usize) -> String {
-    let body = trim_blank_lines(&render_blocks(items, depth));
+fn render_blockquote(items: &[Value], depth: usize, options: AdfToMarkdownOptions) -> String {
+    let body = trim_blank_lines(&render_blocks(items, depth, options));
     let quoted = body
         .lines()
         .map(|line| {
@@ -999,15 +1085,23 @@ fn render_code_block(object: &serde_json::Map<String, Value>) -> String {
     format!("```{language}\n{}\n```\n\n", code.trim_end())
 }
 
-fn render_panel(object: &serde_json::Map<String, Value>, depth: usize) -> String {
+fn render_panel(
+    object: &serde_json::Map<String, Value>,
+    depth: usize,
+    options: AdfToMarkdownOptions,
+) -> String {
     let panel_type = attrs_str(object, "panelType").unwrap_or("panel");
-    let body = trim_blank_lines(&render_blocks(content_items(object), depth));
+    let body = trim_blank_lines(&render_blocks(content_items(object), depth, options));
     format!("> **{panel_type}:**\n>\n{}\n\n", prefix_lines(&body, "> "))
 }
 
-fn render_expand(object: &serde_json::Map<String, Value>, depth: usize) -> String {
+fn render_expand(
+    object: &serde_json::Map<String, Value>,
+    depth: usize,
+    options: AdfToMarkdownOptions,
+) -> String {
     let title = attrs_str(object, "title").unwrap_or("Details");
-    let body = trim_blank_lines(&render_blocks(content_items(object), depth));
+    let body = trim_blank_lines(&render_blocks(content_items(object), depth, options));
     format!("<details>\n<summary>{title}</summary>\n\n{body}\n\n</details>\n\n")
 }
 
@@ -1034,8 +1128,8 @@ fn render_media(object: &serde_json::Map<String, Value>) -> String {
         .unwrap_or_else(|| format!("[media: {alt}]"))
 }
 
-fn render_table(rows: &[Value]) -> String {
-    let rows = rows
+fn render_table(object: &serde_json::Map<String, Value>, options: AdfToMarkdownOptions) -> String {
+    let rows = content_items(object)
         .iter()
         .filter_map(|row| match row {
             Value::Object(object) if node_type(object) == "tableRow" => Some(
@@ -1045,7 +1139,7 @@ fn render_table(rows: &[Value]) -> String {
                         Value::Object(cell_object)
                             if matches!(node_type(cell_object), "tableHeader" | "tableCell") =>
                         {
-                            Some(table_cell_text(content_items(cell_object)))
+                            Some(table_cell_text(content_items(cell_object), options))
                         }
                         _ => None,
                     })
@@ -1061,6 +1155,11 @@ fn render_table(rows: &[Value]) -> String {
     };
     let width = rows.iter().map(Vec::len).max().unwrap_or(0);
     let mut out = String::new();
+    if options.table_numbered_rows_directives
+        && attrs_bool(object, "isNumberColumnEnabled").unwrap_or(false)
+    {
+        out.push_str("<!-- atla:table numbered-rows=true -->\n");
+    }
     out.push_str(&format_table_row(first_row, width));
     out.push_str(&format_table_separator(width));
     for row in rows.iter().skip(1) {
@@ -1070,8 +1169,8 @@ fn render_table(rows: &[Value]) -> String {
     out
 }
 
-fn table_cell_text(items: &[Value]) -> String {
-    trim_blank_lines(&render_blocks(items, 0))
+fn table_cell_text(items: &[Value], options: AdfToMarkdownOptions) -> String {
+    trim_blank_lines(&render_blocks(items, 0, options))
         .replace('\n', "<br>")
         .replace('|', "\\|")
 }
@@ -1159,6 +1258,13 @@ fn attrs_str<'a>(object: &'a serde_json::Map<String, Value>, name: &str) -> Opti
         .get("attrs")
         .and_then(|attrs| attrs.get(name))
         .and_then(Value::as_str)
+}
+
+fn attrs_bool(object: &serde_json::Map<String, Value>, name: &str) -> Option<bool> {
+    object
+        .get("attrs")
+        .and_then(|attrs| attrs.get(name))
+        .and_then(Value::as_bool)
 }
 
 fn attrs_u64(object: &serde_json::Map<String, Value>, name: &str) -> Option<u64> {
@@ -1612,6 +1718,103 @@ cargo test
         assert_eq!(
             adf_to_markdown(&adf),
             "> Heads up\n\n| Key | Value |\n| --- | --- |\n| Status | Done |\n\nhttps://example.com/card"
+        );
+    }
+
+    #[test]
+    fn adf_table_numbered_rows_render_as_directive_when_requested() {
+        let adf = json!({
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "table",
+                    "attrs": {"isNumberColumnEnabled": true, "layout": "default"},
+                    "content": [
+                        {
+                            "type": "tableRow",
+                            "content": [
+                                {
+                                    "type": "tableHeader",
+                                    "content": [{
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "Key"}]
+                                    }]
+                                }
+                            ]
+                        },
+                        {
+                            "type": "tableRow",
+                            "content": [
+                                {
+                                    "type": "tableCell",
+                                    "content": [{
+                                        "type": "paragraph",
+                                        "content": [{"type": "text", "text": "Status"}]
+                                    }]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        assert_eq!(adf_to_markdown(&adf), "| Key |\n| --- |\n| Status |");
+
+        let markdown = adf_to_markdown_with_options(
+            &adf,
+            AdfToMarkdownOptions {
+                table_numbered_rows_directives: true,
+            },
+        );
+        assert_eq!(
+            markdown,
+            "<!-- atla:table numbered-rows=true -->\n| Key |\n| --- |\n| Status |"
+        );
+
+        let round_tripped = markdown_to_adf(&markdown);
+        assert_eq!(
+            round_tripped["content"][0]["attrs"]["isNumberColumnEnabled"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn markdown_table_numbered_rows_are_opt_in() {
+        let markdown = "| Key | Value |\n| --- | --- |\n| Status | Done |";
+
+        let default_adf = markdown_to_adf(markdown);
+        assert_eq!(
+            default_adf["content"][0]["attrs"]["isNumberColumnEnabled"],
+            json!(false)
+        );
+
+        let numbered_adf = markdown_to_adf_with_options(
+            markdown,
+            MarkdownToAdfOptions {
+                numbered_table_rows: true,
+            },
+        );
+        assert_eq!(
+            numbered_adf["content"][0]["attrs"]["isNumberColumnEnabled"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn markdown_table_directive_enables_numbered_rows_for_next_table() {
+        let adf = markdown_to_adf(
+            "<!-- atla:table numbered-rows=true -->\n| A |\n| --- |\n| one |\n\n| B |\n| --- |\n| two |",
+        );
+
+        assert_eq!(
+            adf["content"][0]["attrs"]["isNumberColumnEnabled"],
+            json!(true)
+        );
+        assert_eq!(
+            adf["content"][1]["attrs"]["isNumberColumnEnabled"],
+            json!(false)
         );
     }
 
