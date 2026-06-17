@@ -18,7 +18,7 @@ also accept `--all` in place of `--limit`/`--page-token`.
 
 ### List spaces
 ```
-atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN]
+atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### View a space
@@ -49,21 +49,22 @@ atla confluence space delete <KEY> [--yes]
 
 ### List pages
 ```
-atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
+atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### View a page
 ```
-atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format] [--with-attachments]
+atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format] [--preserve-table-options] [--with-attachments]
 ```
 - `--format markdown` returns rendered Markdown
 - `--web` opens it in the browser
 - `--with-attachments` also fetches and prints page attachments
+- `--preserve-table-options` keeps ADF table metadata directives (like numbered rows) in Markdown output (only valid with `--format markdown`).
 - Combine with `--output json` for structured data
 
 ### List page children
 ```
-atla confluence page children <ID> [--depth N] [--limit N=25] [--page-token TOKEN]
+atla confluence page children <ID> [--depth N] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### Copy a page
@@ -78,12 +79,20 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
                               [--parent ID | --root-level]
                               [--body TEXT | --body-file FILE]
                               [--representation storage|wiki|atlas-doc-format|markdown]
+                              [--numbered-table-rows]
+                              [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
                               [--draft] [--private]
 ```
+
+`--numbered-table-rows`, `--mention`, and `--resolve-mentions` apply when using `--representation markdown`.
+`--numbered-table-rows` enables numbered rows in Markdown tables.
+`--mention` maps a single `NAME=ACCOUNT_ID` pair and `--resolve-mentions` attempts to auto-resolve `@name` mentions.
+
 Example:
 ```bash
 atla confluence page create --space ENG --title 'SSO Rollout Checklist' \
   --body-file docs/sso-rollout.md --representation markdown --parent 654321
+atla confluence page create --space ENG --title 'Runbook' --body-file docs/runbook.md --representation markdown --numbered-table-rows
 ```
 
 ### Update a page
@@ -91,9 +100,13 @@ atla confluence page create --space ENG --title 'SSO Rollout Checklist' \
 atla confluence page update <ID> [--title TITLE] [--parent ID]
                                   [--body TEXT | --body-file FILE]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
+                                  [--numbered-table-rows]
+                                  [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
                                   [--version N] [--message TEXT] [--draft]
 ```
 Use `page move` for parent-only moves. `page update --parent ...` is for when also updating body/version.
+
+`--numbered-table-rows`, `--mention`, and `--resolve-mentions` apply when using `--representation markdown`.
 
 ### Delete a page
 ```
@@ -112,7 +125,7 @@ atla confluence page move <ID> --parent NEW_PARENT_ID
 
 ### List labels
 ```
-atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
+atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### Add labels
@@ -132,7 +145,7 @@ atla confluence page label remove <PAGE_ID> <LABEL>
 
 ### List comments
 ```
-atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN]
+atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### Add a comment
@@ -140,6 +153,10 @@ atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN]
 atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
+                                  [--numbered-table-rows]
+                                  [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
+                                  [--attachment FILE ...]
+                                  [--attachment-mode auto|link|embed]
 ```
 
 ### Delete a comment
@@ -147,13 +164,15 @@ atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
 atla confluence page comment delete <PAGE_ID> <COMMENT_ID> [--yes]
 ```
 
+When `--attachment` is used, `atla` uploads each file to the page first, then appends attachment references to the new comment. `auto` embeds image-style references where supported and links other files; use `link` for links only or `embed` for richer embed-style references where supported.
+
 ---
 
 ## Blogs
 
 ### List blog posts
 ```
-atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
+atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### View a blog post
@@ -184,14 +203,14 @@ atla confluence blog delete <ID> [--purge] [--draft] [--yes]
 
 ### Blog labels
 ```
-atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
+atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN] [--all]
 atla confluence blog label add <BLOG_ID> LABEL [LABEL ...]
 atla confluence blog label remove <BLOG_ID> <LABEL>
 ```
 
 ### Blog comments
 ```
-atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN]
+atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN] [--all]
 atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
@@ -204,7 +223,7 @@ atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
 
 ### Run a CQL search
 ```
-atla confluence search <CQL> [--limit N=25] [--page-token TOKEN]
+atla confluence search <CQL> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 Example:
 ```bash
@@ -217,7 +236,7 @@ atla confluence search 'type = page AND space = ENG AND title ~ "Runbook"' --lim
 
 ### List attachments
 ```
-atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25] [--page-token TOKEN]
+atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### View attachment metadata

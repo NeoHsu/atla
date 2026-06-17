@@ -18,7 +18,7 @@ also accept `--all` in place of `--limit`/`--page-token`.
 
 ### List projects
 ```
-atla jira project list [--query TEXT] [--limit N=50] [--page-token TOKEN]
+atla jira project list [--query TEXT] [--limit N=50] [--page-token TOKEN] [--all]
 ```
 Example: `atla jira project list --query platform --limit 25`
 
@@ -42,7 +42,7 @@ Use this before `issue create` to discover valid `--type` values.
 
 ### Run a JQL search
 ```
-atla jira search <JQL> [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
+atla jira search <JQL> [--limit N=50] [--page-token TOKEN] [--fields FIELDS] [--all]
 ```
 Example:
 ```bash
@@ -57,7 +57,7 @@ atla jira search 'project = PROJ AND statusCategory != Done ORDER BY updated DES
 ### List issues
 ```
 atla jira issue list [--project KEY] [--status STATUS] [--type TYPE] [--assignee USER]
-                     [--jql JQL] [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
+                     [--jql JQL] [--limit N=50] [--page-token TOKEN] [--fields FIELDS] [--all]
 ```
 Example: `atla jira issue list --project PROJ --status 'In Progress' --assignee me`
 
@@ -141,11 +141,21 @@ atla jira issue fields --project PROJ --type Bug -o json
 ### Add a comment
 ```
 atla jira issue comment add <KEY> [BODY | --body TEXT | --body-file FILE]
+                                  [--attachment FILE ...]
+                                  [--attachment-mode auto|link|embed]
+```
+
+When `--attachment` is used, `atla` uploads each file to the issue first, then appends attachment references to the new comment. `auto` embeds image-style references for images and links other files; use `link` for links only or `embed` to force richer embedding for supported formats.
+
+Examples:
+```bash
+atla jira issue comment add PROJ-123 --body 'Ready for review.'
+atla jira issue comment add PROJ-123 --body 'Please check the logs.' --attachment ./error.log --attachment ./screenshot.png
 ```
 
 ### List comments
 ```
-atla jira issue comment list <KEY> [--limit N=25] [--page-token TOKEN]
+atla jira issue comment list <KEY> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ### Update a comment
@@ -243,7 +253,7 @@ Example: `atla jira issue worklog add PROJ-123 --time 1h30m --comment 'Debugged 
 
 ### List worklogs
 ```
-atla jira issue worklog list <KEY> [--limit N=25] [--page-token TOKEN]
+atla jira issue worklog list <KEY> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 ---
@@ -252,7 +262,7 @@ atla jira issue worklog list <KEY> [--limit N=25] [--page-token TOKEN]
 
 ### List boards
 ```
-atla jira board list [--project KEY] [--type TYPE] [--name NAME] [--limit N=50] [--page-token TOKEN]
+atla jira board list [--project KEY] [--type TYPE] [--name NAME] [--limit N=50] [--page-token TOKEN] [--all]
 ```
 Example: `atla jira board list --project PROJ --type scrum`
 
@@ -267,12 +277,12 @@ atla jira board view <ID>
 
 ### List sprints
 ```
-atla jira sprint list --board ID [--state STATE] [--limit N=50] [--page-token TOKEN]
+atla jira sprint list --board ID [--state STATE] [--limit N=50] [--page-token TOKEN] [--all]
 ```
 
 ### List active sprints
 ```
-atla jira sprint active --board ID [--limit N=50] [--page-token TOKEN]
+atla jira sprint active --board ID [--limit N=50] [--page-token TOKEN] [--all]
 ```
 
 ### View a sprint
@@ -309,7 +319,7 @@ atla jira sprint remove <ID> --issues KEY,KEY,...
 
 ### List sprint issues
 ```
-atla jira sprint issues <ID> [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
+atla jira sprint issues <ID> [--limit N=50] [--page-token TOKEN] [--fields FIELDS] [--all]
 ```
 
 ---
