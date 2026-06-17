@@ -567,6 +567,9 @@ pub enum PageAction {
         body_file: Option<PathBuf>,
         #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
         representation: BodyRepresentation,
+        /// Enable Confluence numbered rows for Markdown tables (requires --representation markdown).
+        #[arg(long)]
+        numbered_table_rows: bool,
         #[arg(long)]
         draft: bool,
         #[arg(long)]
@@ -596,6 +599,9 @@ pub enum PageAction {
         web: bool,
         #[arg(long, value_enum)]
         format: Option<ContentViewFormat>,
+        /// Emit atla Markdown directives for ADF table metadata (requires --format markdown).
+        #[arg(long)]
+        preserve_table_options: bool,
         #[arg(long)]
         with_attachments: bool,
     },
@@ -637,6 +643,9 @@ pub enum PageAction {
         body_file: Option<PathBuf>,
         #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
         representation: BodyRepresentation,
+        /// Enable Confluence numbered rows for Markdown tables (requires --representation markdown).
+        #[arg(long)]
+        numbered_table_rows: bool,
         #[arg(long)]
         version: Option<u64>,
         #[arg(long)]
@@ -716,6 +725,9 @@ pub enum PageCommentAction {
         parent: Option<String>,
         #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
         representation: BodyRepresentation,
+        /// Enable Confluence numbered rows for Markdown tables (requires --representation markdown).
+        #[arg(long)]
+        numbered_table_rows: bool,
     },
     Delete {
         page_id: String,
@@ -967,6 +979,40 @@ pub enum AttachmentAction {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn page_view_accepts_preserve_table_options_flag() {
+        let cli = Cli::try_parse_from([
+            "atla",
+            "confluence",
+            "page",
+            "view",
+            "123456",
+            "--format",
+            "markdown",
+            "--preserve-table-options",
+        ])
+        .expect("parse cli");
+
+        let Command::Confluence(command) = cli.command else {
+            panic!("expected confluence command");
+        };
+        let ConfluenceResource::Page(command) = command.resource else {
+            panic!("expected page command");
+        };
+        let PageAction::View {
+            id,
+            format,
+            preserve_table_options,
+            ..
+        } = command.action
+        else {
+            panic!("expected page view action");
+        };
+        assert_eq!(id, "123456");
+        assert!(matches!(format, Some(ContentViewFormat::Markdown)));
+        assert!(preserve_table_options);
+    }
 
     #[test]
     fn attachment_download_accepts_save_to_flag() {

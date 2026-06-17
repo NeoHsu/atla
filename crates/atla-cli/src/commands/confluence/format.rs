@@ -61,33 +61,42 @@ pub(super) fn read_body(
     }
 }
 
-pub(super) fn prepare_optional_body(
+pub(super) fn prepare_optional_body_with_options(
     body: Option<String>,
     representation: BodyRepresentation,
+    markdown_options: markdown::MarkdownToAdfOptions,
 ) -> anyhow::Result<(Option<String>, ConfluenceBodyRepresentation)> {
     match representation {
         BodyRepresentation::Markdown => body
-            .map(markdown_body_to_adf)
+            .map(|body| markdown_body_to_adf_with_options(body, markdown_options))
             .transpose()
             .map(|body| (body, ConfluenceBodyRepresentation::AtlasDocFormat)),
+        _ if markdown_options.numbered_table_rows => {
+            anyhow::bail!("--numbered-table-rows requires --representation markdown")
+        }
         _ => Ok((body, confluence_body_representation(representation)?)),
     }
 }
 
-pub(super) fn prepare_required_body(
+pub(super) fn prepare_required_body_with_options(
     body: Option<String>,
     representation: BodyRepresentation,
+    markdown_options: markdown::MarkdownToAdfOptions,
     missing_message: &str,
 ) -> anyhow::Result<(String, ConfluenceBodyRepresentation)> {
-    let (body, representation) = prepare_optional_body(body, representation)?;
+    let (body, representation) =
+        prepare_optional_body_with_options(body, representation, markdown_options)?;
     Ok((
         body.ok_or_else(|| anyhow::anyhow!(missing_message.to_owned()))?,
         representation,
     ))
 }
 
-pub(super) fn markdown_body_to_adf(body: String) -> anyhow::Result<String> {
-    serde_json::to_string(&markdown::markdown_to_adf(&body))
+pub(super) fn markdown_body_to_adf_with_options(
+    body: String,
+    options: markdown::MarkdownToAdfOptions,
+) -> anyhow::Result<String> {
+    serde_json::to_string(&markdown::markdown_to_adf_with_options(&body, options))
         .context("failed to encode Markdown body as Atlas Doc Format")
 }
 
@@ -132,13 +141,16 @@ pub(super) fn print_page_body(page: &ConfluencePage) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn print_page_body_markdown(page: &ConfluencePage) -> anyhow::Result<()> {
+pub(super) fn print_page_body_markdown(
+    page: &ConfluencePage,
+    options: markdown::AdfToMarkdownOptions,
+) -> anyhow::Result<()> {
     let body = page
         .body
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("page did not include a body"))?;
     let markdown = serde_json::from_str::<serde_json::Value>(body)
-        .map(|adf| markdown::adf_to_markdown(&adf))
+        .map(|adf| markdown::adf_to_markdown_with_options(&adf, options))
         .unwrap_or_else(|_| body.to_owned());
     println!("{markdown}");
     Ok(())
@@ -811,9 +823,10 @@ mod tests {
 
     #[test]
     fn converts_markdown_body_to_adf_write_body() {
-        let (body, representation) = prepare_optional_body(
+        let (body, representation) = prepare_optional_body_with_options(
             Some("# Title\n\n**Important**".to_owned()),
             BodyRepresentation::Markdown,
+            markdown::MarkdownToAdfOptions::default(),
         )
         .expect("convert markdown");
 
@@ -822,6 +835,44 @@ mod tests {
         let adf: serde_json::Value = serde_json::from_str(&body).expect("adf json");
         assert_eq!(adf["type"], "doc");
         assert_eq!(adf["content"][0]["type"], "heading");
+    }
+
+    #[test]
+    fn converts_markdown_body_to_adf_with_numbered_table_rows() {
+        let (body, representation) = prepare_optional_body_with_options(
+            Some("| Key | Value |\n| --- | --- |\n| Status | Done |".to_owned()),
+            BodyRepresentation::Markdown,
+            markdown::MarkdownToAdfOptions {
+                numbered_table_rows: true,
+            },
+        )
+        .expect("convert markdown");
+
+        assert_eq!(representation, ConfluenceBodyRepresentation::AtlasDocFormat);
+        let body = body.expect("converted body");
+        let adf: serde_json::Value = serde_json::from_str(&body).expect("adf json");
+        assert_eq!(
+            adf["content"][0]["attrs"]["isNumberColumnEnabled"],
+            serde_json::json!(true)
+        );
+    }
+
+    #[test]
+    fn rejects_numbered_table_rows_without_markdown_representation() {
+        let error = prepare_optional_body_with_options(
+            Some("<p>body</p>".to_owned()),
+            BodyRepresentation::Storage,
+            markdown::MarkdownToAdfOptions {
+                numbered_table_rows: true,
+            },
+        )
+        .expect_err("numbered table rows should require markdown");
+
+        assert!(
+            error
+                .to_string()
+                .contains("requires --representation markdown")
+        );
     }
 
     #[test]

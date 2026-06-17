@@ -2,17 +2,18 @@ use anyhow::Context;
 use atla_core::{
     ConfluenceAttachmentSearch, ConfluenceContentTreeSearch, ConfluencePageCopy,
     ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate,
+    markdown::{AdfToMarkdownOptions, MarkdownToAdfOptions},
 };
 
 use crate::cli::{ContentViewFormat, GlobalArgs, OutputFormat, PageAction, PageCommand};
 use crate::context::AppContext;
 
 use super::format::{
-    open_web_url, prepare_optional_body, prepare_required_body, print_attachments,
-    print_content_nodes, print_content_nodes_with_footer, print_page, print_page_body,
-    print_page_body_markdown, print_page_with_attachments, print_pages, print_pages_with_footer,
-    read_body, resolve_required_space_id, resolve_space_id, status_from_draft,
-    view_format_body_representation,
+    open_web_url, prepare_optional_body_with_options, prepare_required_body_with_options,
+    print_attachments, print_content_nodes, print_content_nodes_with_footer, print_page,
+    print_page_body, print_page_body_markdown, print_page_with_attachments, print_pages,
+    print_pages_with_footer, read_body, resolve_required_space_id, resolve_space_id,
+    status_from_draft, view_format_body_representation,
 };
 use super::page_comment::run_page_comment;
 use super::page_label::run_page_label;
@@ -27,6 +28,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             body,
             body_file,
             representation,
+            numbered_table_rows,
             draft,
             private,
             root_level,
@@ -50,8 +52,13 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 return Ok(());
             }
 
-            let (body, representation) =
-                prepare_optional_body(read_body(body, body_file.as_deref())?, representation)?;
+            let (body, representation) = prepare_optional_body_with_options(
+                read_body(body, body_file.as_deref())?,
+                representation,
+                MarkdownToAdfOptions {
+                    numbered_table_rows,
+                },
+            )?;
             let client = ctx.confluence_client()?;
             let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
             let page = client
@@ -178,8 +185,15 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             id,
             web,
             format,
+            preserve_table_options,
             with_attachments,
         } => {
+            if preserve_table_options && !matches!(format, Some(ContentViewFormat::Markdown)) {
+                anyhow::bail!("--preserve-table-options requires --format markdown");
+            }
+            let markdown_options = AdfToMarkdownOptions {
+                table_numbered_rows_directives: preserve_table_options,
+            };
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -234,7 +248,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     .await
                     .with_context(|| format!("failed to list attachments for page `{id}`"))?;
                 if matches!(format, Some(ContentViewFormat::Markdown)) {
-                    print_page_body_markdown(&page)?;
+                    print_page_body_markdown(&page, markdown_options)?;
                 } else if format.is_some() {
                     print_page_body(&page)?;
                 } else {
@@ -248,7 +262,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     print_attachments(&attachments.results, global)?;
                 }
             } else if matches!(format, Some(ContentViewFormat::Markdown)) {
-                print_page_body_markdown(&page)?;
+                print_page_body_markdown(&page, markdown_options)?;
             } else if format.is_some() {
                 print_page_body(&page)?;
             } else {
@@ -415,6 +429,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             body,
             body_file,
             representation,
+            numbered_table_rows,
             version,
             message,
             draft,
@@ -469,9 +484,12 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 return Ok(());
             }
 
-            let (body, representation) = prepare_required_body(
+            let (body, representation) = prepare_required_body_with_options(
                 read_body(body, body_file.as_deref())?,
                 representation,
+                MarkdownToAdfOptions {
+                    numbered_table_rows,
+                },
                 "page body update and move require --body or --body-file",
             )?;
             let title = title

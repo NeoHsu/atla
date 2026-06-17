@@ -1,11 +1,11 @@
 use anyhow::Context;
-use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch};
+use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch, markdown::MarkdownToAdfOptions};
 
 use crate::cli::{GlobalArgs, OutputFormat, PageCommentAction};
 use crate::context::AppContext;
 
 use super::format::{
-    prepare_required_body, print_comment, print_comments, print_comments_with_footer,
+    prepare_required_body_with_options, print_comment, print_comments, print_comments_with_footer,
     print_deleted, read_body,
 };
 
@@ -104,13 +104,17 @@ pub(super) async fn run_page_comment(
             body_file,
             parent,
             representation,
+            numbered_table_rows,
         } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let (body, representation) = prepare_required_body(
+            let (body, representation) = prepare_required_body_with_options(
                 read_body(body, body_file.as_deref())?,
                 representation,
+                MarkdownToAdfOptions {
+                    numbered_table_rows,
+                },
                 "missing comment body",
             )?;
 
