@@ -226,18 +226,18 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence space update` | `<KEY>` | `--name`, `--description`, `--description-file` | Update space metadata. | `atla confluence space update ENG --name 'Engineering Knowledge Base'` |
 | `confluence space delete` | `<KEY>` | `--yes` | Delete a space. | `atla confluence space delete ENG --yes` |
 | `confluence page list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List pages. | `atla confluence page list --space ENG --title Runbook` |
-| `confluence page view` | `<ID>` | `--web`, `--format` | Show page metadata/body or open in browser. | `atla confluence page view 123456 --format markdown` |
+| `confluence page view` | `<ID>` | `--web`, `--format`, `--preserve-table-options` | Show page metadata/body or open in browser. | `atla confluence page view 123456 --format markdown` |
 | `confluence page children` | `<ID>` | `--depth`, `--limit`, `--page-token` | List page children or descendants. | `atla confluence page children 123456 --depth 2` |
 | `confluence page copy` | `<SOURCE_ID>` | `--title`, `-s/--space`, `--space-id`, `--parent`, `--root-level` | Copy a page. | `atla confluence page copy 123456 --title 'Template Copy' --space ENG` |
-| `confluence page create` | none | `-s/--space`, `--space-id`, `--title`, `--parent`, `--root-level`, `--body`, `--body-file`, `--representation`, `--draft`, `--private` | Create a page. | `atla confluence page create --space ENG --title 'Checklist' --body-file docs/checklist.md --representation markdown` |
-| `confluence page update` | `<ID>` | `--title`, `--parent`, `--body`, `--body-file`, `--representation`, `--version`, `--message`, `--draft` | Update page title/body/version. | `atla confluence page update 123456 --title 'Checklist v2'` |
+| `confluence page create` | none | `-s/--space`, `--space-id`, `--title`, `--parent`, `--root-level`, `--body`, `--body-file`, `--representation`, `--numbered-table-rows`, `--draft`, `--private` | Create a page. | `atla confluence page create --space ENG --title 'Checklist' --body-file docs/checklist.md --representation markdown` |
+| `confluence page update` | `<ID>` | `--title`, `--parent`, `--body`, `--body-file`, `--representation`, `--numbered-table-rows`, `--version`, `--message`, `--draft` | Update page title/body/version. | `atla confluence page update 123456 --title 'Checklist v2'` |
 | `confluence page delete` | `<ID>` | `--purge`, `--draft`, `--yes` | Delete page. | `atla confluence page delete 123456 --yes` |
 | `confluence page move` | `<ID>` | `--parent` | Move page under a new parent. | `atla confluence page move 123456 --parent 654321` |
 | `confluence page label list` | `<PAGE_ID>` | `--prefix`, `--limit`, `--page-token` | List page labels. | `atla confluence page label list 123456 --limit 20` |
 | `confluence page label add` | `<PAGE_ID> LABEL...` | none | Add page labels. | `atla confluence page label add 123456 runbook urgent` |
 | `confluence page label remove` | `<PAGE_ID> <LABEL>` | none | Remove page label. | `atla confluence page label remove 123456 urgent` |
 | `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
-| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body-file`, `--parent`, `--representation` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
+| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
 | `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
 | `confluence blog view` | `<ID>` | none | Show one blog post. | `atla confluence blog view 234567` |
@@ -324,6 +324,7 @@ atla jira sprint issues 221 --fields summary,status,assignee,priority --output c
 
 ```bash
 atla confluence page create --space ENG --title 'SSO Rollout'   --body-file docs/sso-rollout.md --representation markdown
+# Add --numbered-table-rows to enable Confluence numbered rows on all Markdown tables.
 ```
 
 ### 6. Fetch Confluence page body as Markdown

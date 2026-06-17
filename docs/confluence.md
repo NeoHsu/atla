@@ -165,6 +165,7 @@ atla confluence page list --space ENG --title 'Runbook' --limit 20
 
 ```bash
 atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format]
+                           [--preserve-table-options]
 ```
 
 **Examples**
@@ -172,8 +173,11 @@ atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-form
 ```bash
 atla confluence page view 123456
 atla confluence page view 123456 --format markdown
+atla confluence page view 123456 --format markdown --preserve-table-options
 atla confluence page view 123456 --web
 ```
+
+Use `--preserve-table-options` with `--format markdown` to emit `<!-- atla:table ... -->` directives for ADF table metadata such as numbered rows.
 
 ### List page children
 
@@ -213,6 +217,7 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
                               [--parent ID | --root-level]
                               [--body TEXT | --body-file FILE]
                               [--representation storage|wiki|atlas-doc-format|markdown]
+                              [--numbered-table-rows]
                               [--draft] [--private]
 ```
 
@@ -220,6 +225,7 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
 
 ```bash
 atla confluence page create --space ENG --title 'SSO Rollout Checklist'   --body-file docs/sso-rollout.md   --representation markdown   --parent 654321
+atla confluence page create --space ENG --title 'Inventory'   --body-file docs/inventory.md   --representation markdown --numbered-table-rows
 ```
 
 ### Update a page
@@ -230,6 +236,7 @@ atla confluence page create --space ENG --title 'SSO Rollout Checklist'   --body
 atla confluence page update <ID> [--title TITLE] [--parent ID]
                                   [--body TEXT | --body-file FILE]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
+                                  [--numbered-table-rows]
                                   [--version N] [--message TEXT] [--draft]
 ```
 
@@ -238,9 +245,19 @@ atla confluence page update <ID> [--title TITLE] [--parent ID]
 ```bash
 atla confluence page update 123456 --title 'SSO Rollout Checklist v2'
 atla confluence page update 123456 --body-file docs/sso-rollout.md   --representation markdown --message 'Refresh rollout steps'
+atla confluence page update 123456 --body-file docs/inventory.md   --representation markdown --numbered-table-rows
 ```
 
 Use `page move` for parent-only moves. `page update --parent ...` is best when you are also updating the body/version.
+
+`--numbered-table-rows` only applies when `--representation markdown` converts Markdown tables to Atlas Doc Format. To enable it for just one table in a Markdown file, place a directive immediately before that table:
+
+```markdown
+<!-- atla:table numbered-rows=true -->
+| Name | Status |
+| --- | --- |
+| API | Done |
+```
 
 ### Delete a page
 
@@ -338,6 +355,7 @@ atla confluence page comment list 123456 --limit 10
 atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
+                                  [--numbered-table-rows]
 ```
 
 **Example**
