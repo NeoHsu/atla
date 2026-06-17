@@ -3,18 +3,14 @@ use std::path::{Path, PathBuf};
 
 use super::JiraClient;
 use super::models::{JiraAttachment, JiraAttachmentDownload};
-use super::util::generated_error;
 use crate::client::{ApiError, read_empty, read_json};
 
 impl JiraClient {
     pub async fn get_attachment(&self, id: &str) -> Result<JiraAttachment, ApiError> {
-        self.generated
-            .get_attachment()
-            .id(id)
-            .send()
-            .await
-            .map(|rv| JiraAttachment::from(rv.into_inner()))
-            .map_err(generated_error)
+        // Jira Cloud may return attachment `id` as either a string or a number from
+        // this endpoint. The generated client currently expects a string and fails
+        // to decode numeric IDs, so deserialize into our tolerant domain model.
+        read_json(self.raw_client.get(&format!("/rest/api/3/attachment/{id}"))).await
     }
 
     pub async fn list_issue_attachments(
