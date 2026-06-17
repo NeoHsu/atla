@@ -1,10 +1,10 @@
 use anyhow::Context;
 use atla_core::{
-    JiraAssigneeTarget, JiraIssueAssign, JiraIssueCreate, JiraIssueFieldsQuery, JiraIssueList,
-    JiraIssueUpdate, default_issue_fields,
+    JiraAssigneeTarget, JiraAttachment, JiraIssueAssign, JiraIssueCreate, JiraIssueFieldsQuery,
+    JiraIssueList, JiraIssueUpdate, default_issue_fields,
 };
 
-use crate::cli::{GlobalArgs, IssueAction, IssueCommand, IssueCommentAction};
+use crate::cli::{AttachmentMode, GlobalArgs, IssueAction, IssueCommand, IssueCommentAction};
 use crate::context::AppContext;
 
 use super::attachment::run_issue_attachment;
@@ -514,6 +514,8 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 body,
                 body_flag,
                 body_file,
+                attachments,
+                attachment_mode,
             } => {
                 let ctx = AppContext::load(global)?;
                 let profile_name = ctx.profile_name();
@@ -527,11 +529,32 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                         profile.instance.trim_end_matches('/'),
                         key
                     );
+                    for attachment in &attachments {
+                        println!(
+                            "Would POST {}/rest/api/3/issue/{}/attachments with file `{}` using profile `{profile_name}`",
+                            profile.instance.trim_end_matches('/'),
+                            key,
+                            attachment.display()
+                        );
+                    }
                     println!("Would POST {url} using profile `{profile_name}`");
                     return Ok(());
                 }
 
                 let client = ctx.jira_client()?;
+                let mut uploaded = Vec::new();
+                for attachment in &attachments {
+                    uploaded.extend(client.upload_attachment(&key, attachment).await.with_context(
+                        || {
+                            format!(
+                                "failed to upload attachment `{}` to Jira issue `{key}` from {}",
+                                attachment.display(),
+                                client.instance_url()
+                            )
+                        },
+                    )?);
+                }
+                let body = append_jira_attachment_references(&body, &uploaded, attachment_mode);
                 let comment = client.add_comment(&key, &body).await.with_context(|| {
                     format!(
                         "failed to add comment to Jira issue `{key}` from {}",
@@ -741,4 +764,98 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
     }
 
     Ok(())
+}
+
+fn append_jira_attachment_references(
+    body: &str,
+    attachments: &[JiraAttachment],
+    mode: AttachmentMode,
+) -> String {
+    if attachments.is_empty() {
+        return body.to_owned();
+    }
+
+    let mut out = body.trim_end().to_owned();
+    if !out.is_empty() {
+        out.push_str("\n\n");
+    }
+    out.push_str("Attachments:\n");
+    for attachment in attachments {
+        out.push_str("- ");
+        out.push_str(&jira_attachment_reference(attachment, mode));
+        out.push('\n');
+    }
+    out.trim_end().to_owned()
+}
+
+fn jira_attachment_reference(attachment: &JiraAttachment, mode: AttachmentMode) -> String {
+    let filename = attachment
+        .filename
+        .as_deref()
+        .or(attachment.id.as_deref())
+        .unwrap_or("attachment");
+    let Some(url) = attachment.content.as_deref() else {
+        return filename.to_owned();
+    };
+
+    if should_embed_attachment(mode, attachment.mime_type.as_deref()) {
+        format!("![{filename}]({url})")
+    } else {
+        format!("[{filename}]({url})")
+    }
+}
+
+fn should_embed_attachment(mode: AttachmentMode, mime_type: Option<&str>) -> bool {
+    !matches!(mode, AttachmentMode::Link)
+        && mime_type.is_some_and(|mime_type| mime_type.starts_with("image/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn appends_jira_attachment_links_to_comment_body() {
+        let body = append_jira_attachment_references(
+            "Please check",
+            &[JiraAttachment {
+                id: Some("10001".to_owned()),
+                filename: Some("error.log".to_owned()),
+                mime_type: Some("text/plain".to_owned()),
+                size: None,
+                author: None,
+                created: None,
+                content: Some("https://example.atlassian.net/attachment/error.log".to_owned()),
+                thumbnail: None,
+            }],
+            AttachmentMode::Auto,
+        );
+
+        assert_eq!(
+            body,
+            "Please check\n\nAttachments:\n- [error.log](https://example.atlassian.net/attachment/error.log)"
+        );
+    }
+
+    #[test]
+    fn auto_embeds_jira_image_attachments() {
+        let body = append_jira_attachment_references(
+            "Screenshot attached",
+            &[JiraAttachment {
+                id: Some("10002".to_owned()),
+                filename: Some("screenshot.png".to_owned()),
+                mime_type: Some("image/png".to_owned()),
+                size: None,
+                author: None,
+                created: None,
+                content: Some("https://example.atlassian.net/attachment/screenshot.png".to_owned()),
+                thumbnail: None,
+            }],
+            AttachmentMode::Auto,
+        );
+
+        assert!(body.contains(
+            "![screenshot.png](https://example.atlassian.net/attachment/screenshot.png)"
+        ));
+    }
 }

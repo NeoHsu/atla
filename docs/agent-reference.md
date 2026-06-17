@@ -191,7 +191,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `jira issue delete` | `<KEY>` | `--delete-subtasks`, `--yes` | Delete an issue. | `atla jira issue delete PROJ-123 --yes` |
 | `jira issue assign` | `<KEY>` | `--to`, `--account-id`, `--unassign` | Assign or clear assignee. | `atla jira issue assign PROJ-123 --to me` |
 | `jira issue transition` | `<KEY>` | `--to`, `--field` | Apply workflow transition; can prompt unless `--no-input`. | `atla jira issue transition PROJ-123 --to Done` |
-| `jira issue comment add` | `<KEY>` | `BODY`, `--body`, `--body-file` | Add a comment. | `atla jira issue comment add PROJ-123 --body 'Ready for review'` |
+| `jira issue comment add` | `<KEY>` | `BODY`, `--body`, `--body-file`, `--attachment`, `--attachment-mode` | Add a comment. | `atla jira issue comment add PROJ-123 --body 'Ready for review'` |
 | `jira issue comment list` | `<KEY>` | `--limit`, `--page-token` | List comments. | `atla jira issue comment list PROJ-123 --limit 10` |
 | `jira issue comment update` | `<KEY> <COMMENT_ID>` | `--body`, `--body-file` | Update a comment. | `atla jira issue comment update PROJ-123 10001 --body 'Merged'` |
 | `jira issue comment delete` | `<KEY> <COMMENT_ID>` | `--yes` | Delete a comment. | `atla jira issue comment delete PROJ-123 10001 --yes` |
@@ -237,7 +237,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence page label add` | `<PAGE_ID> LABEL...` | none | Add page labels. | `atla confluence page label add 123456 runbook urgent` |
 | `confluence page label remove` | `<PAGE_ID> <LABEL>` | none | Remove page label. | `atla confluence page label remove 123456 urgent` |
 | `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
-| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
+| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
 | `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
 | `confluence blog view` | `<ID>` | none | Show one blog post. | `atla confluence blog view 234567` |

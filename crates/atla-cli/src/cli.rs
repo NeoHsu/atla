@@ -53,6 +53,13 @@ pub enum BodyRepresentation {
     Markdown,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum AttachmentMode {
+    Auto,
+    Link,
+    Embed,
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum ContentViewFormat {
     Markdown,
@@ -275,6 +282,12 @@ pub enum IssueCommentAction {
         body_flag: Option<String>,
         #[arg(long)]
         body_file: Option<PathBuf>,
+        /// Upload files to the issue and reference them from the comment.
+        #[arg(long = "attachment", value_name = "FILE")]
+        attachments: Vec<PathBuf>,
+        /// How to reference comment attachments.
+        #[arg(long, value_enum, default_value_t = AttachmentMode::Auto)]
+        attachment_mode: AttachmentMode,
     },
     List {
         key: String,
@@ -746,6 +759,12 @@ pub enum PageCommentAction {
         /// Resolve Markdown mentions by searching Atlassian users (requires --representation markdown).
         #[arg(long)]
         resolve_mentions: bool,
+        /// Upload files to the page and reference them from the comment.
+        #[arg(long = "attachment", value_name = "FILE")]
+        attachments: Vec<PathBuf>,
+        /// How to reference comment attachments.
+        #[arg(long, value_enum, default_value_t = AttachmentMode::Auto)]
+        attachment_mode: AttachmentMode,
     },
     Delete {
         page_id: String,
@@ -1069,6 +1088,82 @@ mod tests {
         assert_eq!(id, "123456");
         assert!(matches!(format, Some(ContentViewFormat::Markdown)));
         assert!(preserve_table_options);
+    }
+
+    #[test]
+    fn jira_comment_add_accepts_attachment_options() {
+        let cli = Cli::try_parse_from([
+            "atla",
+            "jira",
+            "issue",
+            "comment",
+            "add",
+            "PROJ-123",
+            "please check",
+            "--attachment",
+            "error.log",
+            "--attachment-mode",
+            "link",
+        ])
+        .expect("parse cli");
+
+        let Command::Jira(command) = cli.command else {
+            panic!("expected jira command");
+        };
+        let JiraResource::Issue(command) = command.resource else {
+            panic!("expected issue command");
+        };
+        let IssueAction::Comment { action } = command.action else {
+            panic!("expected comment action");
+        };
+        let IssueCommentAction::Add {
+            attachments,
+            attachment_mode,
+            ..
+        } = action
+        else {
+            panic!("expected comment add action");
+        };
+        assert_eq!(attachments, vec![PathBuf::from("error.log")]);
+        assert_eq!(attachment_mode, AttachmentMode::Link);
+    }
+
+    #[test]
+    fn page_comment_add_accepts_attachment_options() {
+        let cli = Cli::try_parse_from([
+            "atla",
+            "confluence",
+            "page",
+            "comment",
+            "add",
+            "123456",
+            "please check",
+            "--attachment",
+            "report.pdf",
+            "--attachment-mode",
+            "embed",
+        ])
+        .expect("parse cli");
+
+        let Command::Confluence(command) = cli.command else {
+            panic!("expected confluence command");
+        };
+        let ConfluenceResource::Page(command) = command.resource else {
+            panic!("expected page command");
+        };
+        let PageAction::Comment { action } = command.action else {
+            panic!("expected page comment action");
+        };
+        let PageCommentAction::Add {
+            attachments,
+            attachment_mode,
+            ..
+        } = action
+        else {
+            panic!("expected page comment add action");
+        };
+        assert_eq!(attachments, vec![PathBuf::from("report.pdf")]);
+        assert_eq!(attachment_mode, AttachmentMode::Embed);
     }
 
     #[test]

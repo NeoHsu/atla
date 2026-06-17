@@ -364,13 +364,18 @@ atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
                                   [--numbered-table-rows]
                                   [--mention NAME=ACCOUNT_ID] [--resolve-mentions]
+                                  [--attachment FILE ...]
+                                  [--attachment-mode auto|link|embed]
 ```
 
 **Example**
 
 ```bash
 atla confluence page comment add 123456 'Please verify the rollback steps.'
+atla confluence page comment add 123456 'Please review the report.'   --representation markdown --attachment ./report.pdf
 ```
+
+When `--attachment` is used, `atla` uploads files to the page before creating the comment, then appends attachment references to the comment body. `auto` embeds image-style references where supported and links other files; use `link` for links only or `embed` to request richer embed-style references where the selected representation supports them.
 
 #### Delete a comment
 

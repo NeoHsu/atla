@@ -199,6 +199,7 @@ atla jira issue view PROJ-123 --web
 atla jira issue assign PROJ-123 --to me
 atla jira issue transition PROJ-123 --to Done
 atla jira issue comment add PROJ-123 "Ready for review"
+atla jira issue comment add PROJ-123 "Please check the screenshot" --attachment ./screenshot.png
 atla jira issue delete PROJ-123 --yes
 atla jira issue fields --project PROJ --type Bug --required-only
 atla jira board list --project PROJ
@@ -220,6 +221,7 @@ atla confluence page update 67890 --title "Updated Notes"
 atla confluence page move 67890 --parent 12345
 atla confluence page label add 67890 runbook urgent
 atla confluence page comment add 67890 "Looks good"
+atla confluence page comment add 67890 "Please review the report" --representation markdown --attachment ./report.pdf
 atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
 atla confluence search "type=page AND space=DEV"
 atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"

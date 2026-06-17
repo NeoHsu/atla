@@ -245,13 +245,18 @@ Use `--no-input` in CI to disable that prompt.
 
 ```bash
 atla jira issue comment add <KEY> [BODY | --body TEXT | --body-file FILE]
+                                  [--attachment FILE ...]
+                                  [--attachment-mode auto|link|embed]
 ```
 
 **Example**
 
 ```bash
 atla jira issue comment add PROJ-123 --body 'Ready for review.'
+atla jira issue comment add PROJ-123 --body 'Please check the logs.'   --attachment ./error.log --attachment ./screenshot.png
 ```
+
+When `--attachment` is used, `atla` uploads each file to the issue first, then appends attachment references to the new comment. `auto` embeds image-style references for images and links other files; use `link` for links only or `embed` to request image-style references for images.
 
 #### List comments
 
