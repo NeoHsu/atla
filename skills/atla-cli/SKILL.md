@@ -204,6 +204,8 @@ atla confluence page update PAGE_ID --body-file fixed.xml --representation stora
 ## Safety Rules
 
 - Always use `--dry-run` before destructive operations (delete, transition) when unsure.
+  For Jira issue create/update and comment add it also prints the JSON request body —
+  use it to verify `--field` assembly and Markdown→ADF conversion before executing.
 - Always pass `--yes` for delete commands to skip confirmation, or omit it to get a prompt.
 - Use `--no-input` in automated/scripted contexts to prevent hanging on prompts.
 - For bulk operations, preview with `--dry-run` first, then remove it to execute.

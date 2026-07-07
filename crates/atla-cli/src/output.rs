@@ -8,6 +8,13 @@ pub fn print_json<T: Serialize + ?Sized>(value: &T) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Print the JSON body a --dry-run mutation would send, so callers can verify
+/// field assembly and Markdown conversion before executing.
+pub fn print_dry_run_body<T: Serialize + ?Sized>(body: &T) -> anyhow::Result<()> {
+    println!("Request body:");
+    print_json(body)
+}
+
 pub fn print_records<T: Serialize + ?Sized>(
     format: OutputFormat,
     json: &T,

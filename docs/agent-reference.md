@@ -135,7 +135,7 @@ back to the repo checkout.
 | `-o, --output` | `json\|table\|csv\|keys` | `table` for tabular results | Human or machine output mode |
 | `--profile` | string | active/default profile | Selects auth/config profile |
 | `--verbose` | boolean | `false` | Enables verbose client logging |
-| `--dry-run` | boolean | `false` | Prints the request and skips mutation |
+| `--dry-run` | boolean | `false` | Prints the request (method, URL, and JSON body for Jira issue create/update and comment add) and skips the mutation |
 | `--no-input` | boolean | `false` | Disables prompts and interactive selection |
 
 ### Exit codes and error output

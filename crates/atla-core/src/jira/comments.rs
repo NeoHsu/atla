@@ -5,6 +5,12 @@ use super::models::{JiraComment, JiraCommentPage};
 use super::util::{JIRA_LIST_PAGE_CAP, ProgenitorResultExt, adf_body, limit_i32, next_offset};
 use crate::client::ApiError;
 
+/// JSON request body `add_comment`/`update_comment` send (Markdown converted
+/// to ADF); used by --dry-run previews.
+pub fn comment_request_body(body: &str) -> serde_json::Value {
+    serde_json::json!({ "body": adf_body(body) })
+}
+
 impl JiraClient {
     pub async fn add_comment(
         &self,

@@ -191,6 +191,39 @@ async fn dry_run_makes_no_request() {
 }
 
 #[tokio::test]
+async fn dry_run_create_prints_request_body() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+
+    let output = atla(
+        &config,
+        &[
+            "--dry-run",
+            "jira",
+            "issue",
+            "create",
+            "--project",
+            "PROJ",
+            "--type",
+            "Bug",
+            "--summary",
+            "Crash on save",
+            "--field",
+            "customfield_10166=\"5.1.0\"",
+        ],
+    );
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let out = stdout(&output);
+    assert!(out.contains("Would POST"), "got: {out}");
+    let body_json = out.split_once("Request body:").expect("body printed").1;
+    let body: serde_json::Value = serde_json::from_str(body_json.trim()).expect("body is JSON");
+    assert_eq!(body["fields"]["summary"], "Crash on save");
+    assert_eq!(body["fields"]["customfield_10166"], "5.1.0");
+    assert_eq!(body["fields"]["project"]["key"], "PROJ");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn pagination_accumulates_across_pages() {
     let server = MockServer::start().await;
     let (_dir, config) = setup(&server.uri()).await;

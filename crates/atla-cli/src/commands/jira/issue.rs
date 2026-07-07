@@ -157,6 +157,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                     profile.instance.trim_end_matches('/')
                 );
                 println!("Would POST {url} using profile `{profile_name}`");
+                crate::output::print_dry_run_body(&issue.request_body())?;
                 return Ok(());
             }
 
@@ -198,6 +199,12 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                     issue.issue_id_or_key
                 );
                 println!("Would PUT {url} using profile `{profile_name}`");
+                if !issue.is_empty() {
+                    crate::output::print_dry_run_body(&issue.request_body())?;
+                }
+                if !label_update.is_empty() {
+                    crate::output::print_dry_run_body(&label_update.request_body())?;
+                }
                 return Ok(());
             }
 
@@ -538,6 +545,9 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                         );
                     }
                     println!("Would POST {url} using profile `{profile_name}`");
+                    crate::output::print_dry_run_body(&atla_core::jira::comment_request_body(
+                        &body,
+                    ))?;
                     return Ok(());
                 }
 

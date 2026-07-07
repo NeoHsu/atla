@@ -13,6 +13,7 @@ mod sprints;
 pub mod util;
 mod worklogs;
 
+pub use comments::comment_request_body;
 pub use models::*;
 
 pub fn default_issue_fields() -> Vec<String> {

@@ -160,6 +160,11 @@ impl JiraIssueCreate {
             update: serde_json::Map::new(),
         }
     }
+
+    /// JSON request body `create_issue` will send; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("issue create body is serializable")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -197,6 +202,11 @@ impl JiraIssueLabelUpdate {
             }
         })
     }
+
+    /// JSON request body `update_issue_labels` will send; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        self.to_json()
+    }
 }
 
 impl JiraIssueUpdate {
@@ -217,6 +227,11 @@ impl JiraIssueUpdate {
             fields,
             update: serde_json::Map::new(),
         }
+    }
+
+    /// JSON request body `update_issue` will send; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("issue update body is serializable")
     }
 }
 
