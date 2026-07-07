@@ -56,14 +56,6 @@ impl AtlassianClient {
         &self.instance
     }
 
-    pub(crate) fn email(&self) -> &str {
-        &self.email
-    }
-
-    pub(crate) fn token(&self) -> &str {
-        &self.token
-    }
-
     fn log_request(&self, method: &str, url: &str) {
         if self.verbose {
             eprintln!("[verbose] {} {}", method, url);
@@ -123,6 +115,25 @@ impl AtlassianClient {
             .basic_auth(&self.email, Some(&self.token))
             .header(reqwest::header::ACCEPT, "application/json")
             .header("X-Atlassian-Token", "no-check")
+    }
+
+    /// A reqwest client with Basic auth in its default headers, shared by the
+    /// progenitor-generated API clients.
+    pub(crate) fn authed_http_client(&self) -> reqwest::Client {
+        use base64::Engine;
+        use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+
+        let creds = base64::engine::general_purpose::STANDARD
+            .encode(format!("{}:{}", self.email, self.token));
+        let mut value = HeaderValue::from_str(&format!("Basic {creds}"))
+            .expect("base64 credentials are always a valid header value");
+        value.set_sensitive(true);
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, value);
+        reqwest::Client::builder()
+            .default_headers(headers)
+            .build()
+            .expect("reqwest client construction only fails on TLS backend init")
     }
 
     pub fn url(&self, path: &str) -> String {
@@ -215,10 +226,51 @@ pub(crate) fn extract_api_error_body(body: &str) -> String {
     }
 }
 
+const MAX_RETRIES: u32 = 2;
+
+/// Sends a request, retrying transient failures (429, 502/503/504, connect or
+/// timeout errors) with Retry-After support and exponential backoff. Requests
+/// whose bodies cannot be cloned (streaming uploads) are sent once.
+async fn send_with_retry(request: reqwest::RequestBuilder) -> Result<reqwest::Response, ApiError> {
+    use reqwest::StatusCode;
+
+    let mut attempt = 0u32;
+    loop {
+        let Some(this_attempt) = request.try_clone() else {
+            return Ok(request.send().await?);
+        };
+        let outcome = this_attempt.send().await;
+        let transient = match &outcome {
+            Ok(response) => matches!(
+                response.status(),
+                StatusCode::TOO_MANY_REQUESTS
+                    | StatusCode::BAD_GATEWAY
+                    | StatusCode::SERVICE_UNAVAILABLE
+                    | StatusCode::GATEWAY_TIMEOUT
+            ),
+            Err(error) => error.is_connect() || error.is_timeout(),
+        };
+        if !transient || attempt >= MAX_RETRIES {
+            return Ok(outcome?);
+        }
+        let delay = outcome
+            .as_ref()
+            .ok()
+            .and_then(|response| response.headers().get(reqwest::header::RETRY_AFTER))
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .map(std::time::Duration::from_secs)
+            .unwrap_or_else(|| std::time::Duration::from_millis(500 << attempt))
+            .min(std::time::Duration::from_secs(30));
+        tokio::time::sleep(delay).await;
+        attempt += 1;
+    }
+}
+
 pub async fn read_json<T: serde::de::DeserializeOwned>(
     request: reqwest::RequestBuilder,
 ) -> Result<T, ApiError> {
-    let response = request.send().await?;
+    let response = send_with_retry(request).await?;
     let status = response.status();
 
     if !status.is_success() {
@@ -233,7 +285,7 @@ pub async fn read_json<T: serde::de::DeserializeOwned>(
 }
 
 pub async fn read_empty(request: reqwest::RequestBuilder) -> Result<(), ApiError> {
-    let response = request.send().await?;
+    let response = send_with_retry(request).await?;
     let status = response.status();
 
     if !status.is_success() {

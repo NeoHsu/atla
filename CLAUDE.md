@@ -53,8 +53,13 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 
 - Refresh flow: `scripts/update-specs.sh` then `cargo build` (each API crate's `build.rs`
   regenerates its client). There is no `generate.sh`.
-- After any spec refresh, re-apply every patch in `specs/PATCHES.md` by hand — upstream
-  enums drift from real API responses (two past deserialization breakages).
+- All three clients build from **partial specs** (`specs/*-partial.json`). The jira and
+  confluence-v1 scripts hand-build minimal specs; `confluence-v2-partial-spec.js` prunes
+  the upstream spec to the used operations via $ref closure — when core starts calling a
+  new v2 operation, add its snake_case name to `usedOperations` in that script and rerun.
+- Enum patches (`specs/PATCHES.md`) for confluence-v2 are applied automatically by the
+  filter script (`stripEnumSchemas`); the jira patch is still manual — check PATCHES.md
+  on every refresh.
 - `specs/manifest.json` tracks spec sources + SHA256; keep it updated via the script.
 
 ## Agent-facing contracts (do not break)
@@ -77,7 +82,9 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 - Generated-client errors flow through `ProgenitorResultExt::or_api_error()`
   (`atla-core/src/generated_api.rs`) which reads the response body. Never map errors
   with a sync helper that drops the body.
-- No automatic retry on 429/5xx yet; `ApiError::retryable()` exists for callers.
-- Most clap args lack doc comments → empty `--help`. When touching a command, add them.
-- `atla-confluence-api` compiles a 103k-line client from the full v2 spec; a partial-spec
-  filter script (like the jira one) would cut clean builds drastically.
+- Retry on 429/502/503/504 (`send_with_retry`, `client.rs`) covers only the raw-reqwest
+  paths (`read_json`/`read_empty`: Agile API, attachments, user search). The progenitor
+  clients accept a plain `reqwest::Client`, so their calls are NOT retried — callers
+  branch on exit code 5 / `ApiError::retryable()`.
+- Shared Basic-auth client construction lives in `AtlassianClient::authed_http_client()`;
+  don't hand-roll header setup in Jira/Confluence client constructors.

@@ -35,9 +35,12 @@ any unlisted project type appears in the API response.
 
 ---
 
-## `confluence-v2.json`
+## `confluence-v2-partial.json`
 
 ### 1. `OnlyArchivedAndCurrentContentStatus` — remove enum constraint
+
+**Applied automatically** by `scripts/confluence-v2-partial-spec.js` (see its
+`stripEnumSchemas` set) — no manual re-application needed on spec refresh.
 
 **Location:** `#/components/schemas/OnlyArchivedAndCurrentContentStatus`
 

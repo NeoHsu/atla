@@ -4,41 +4,19 @@ Consolidated from a deep architecture / agent-UX / doc-drift review on 2026-07-0
 (atla 0.3.0, commit da5e667). Ordered by return on investment. Each item is scoped so a
 single focused session can ship it. Check items off (or delete them) as they land.
 
-## P1 — test net for the agent contract
+## Remaining backlog
 
-4. **Snapshot-test output rendering** (`insta`): table/json/csv/keys for the main
-   printers in `commands/jira/format.rs` (1493 lines, 3 tests) and
-   `commands/confluence/format.rs` (1109 lines, 8 tests). The JSON `pagination` object is
-   an API contract with zero lock-in today.
-5. **HTTP-level tests** (`wiremock`) for `JiraClient`/`ConfluenceClient`: error mapping
-   in `atla-core/src/generated_api.rs` (the body-reading path needs regression cover
-   beyond the unit tests in `atla-cli/src/error.rs`) and the pagination accumulation
-   loop (`jira/util.rs:17-33`).
-6. **`trycmd` end-to-end runs of `--dry-run`** — dry-run needs no network and exercises
-   arg parsing, profile resolution, and request construction.
-
-## P2 — help text & discoverability
-
-7. Almost every subcommand/arg in `cli.rs` lacks a doc comment → empty `--help`; agents
-   cannot discover `--field NAME=VALUE` format or that `--representation markdown`
-   exists. Add doc comments everywhere plus `after_help` examples on the big four
-   (`issue create`, `search`, `page create`, `comment add`). Zero risk, high payoff.
-8. Print the request **payload** on `--dry-run`, not just method+URL
-   (`commands/jira/issue.rs:360-368`) — agents use dry-run to verify `--field` assembly.
-
-## P3 — build & duplication debt
-
-9. **Trim the confluence v2 spec.** The generated client is 103k lines (jira: 5.7k)
-   because no partial-spec filter exists for it. Clone
-   `scripts/jira-v3-partial-spec.js` → `confluence-v2-partial-spec.js`; while there,
-   encode the `specs/PATCHES.md` enum-stripping rules into the filter so
-   `update-specs.sh` becomes one-shot idempotent.
-10. **Deduplicate** the two hand-rolled authed `reqwest::Client` builders
-    (`jira/mod.rs:44-62`, `confluence/mod.rs:26-50` — includes runtime `expect()`s);
-    hang a shared builder off `AtlassianClient`. (The three `generated_error*` copies
-    were already unified into `atla-core/src/generated_api.rs`.)
-11. **Retry on 429/5xx** with `Retry-After` support at the shared client layer (natural
-    follow-up to #10). `ApiError::retryable()` already encodes the policy.
+- **Deeper output snapshot coverage**: the e2e suite locks keys/csv/table/json for
+  search and boards; extending the same wiremock pattern to sprint/page/space printers
+  is mechanical when a regression appears.
+- **Retry for generated-client calls**: progenitor clients accept a plain
+  `reqwest::Client`, so `send_with_retry` cannot wrap them. Options: progenitor
+  `pre_hook`/custom-client support in a future version, or operation-level retry
+  wrappers in core. Until then only raw paths (Agile API, attachments) auto-retry.
+- **Confluence dry-run payload preview**: body conversion happens after the dry-run
+  check and may need the network (space-id resolution, `--resolve-mentions`), so page
+  create/update previews print URL only. Printing the local-only conversion result
+  would need the markdown pipeline hoisted above the dry-run check.
 
 ## P4 — agent ergonomics (design decisions, discuss before doing)
 
@@ -48,11 +26,21 @@ single focused session can ship it. Check items off (or delete them) as they lan
     produces broken content. Consider sniffing + warning.
 14. Confluence-side `--fields` filtering and a `--max-chars` guard on large page bodies
     (protects agent context windows).
-15. `confluence page comment add` lacks `--body` while `jira issue comment add` has it —
-    align (agents guess by analogy). If added, also update the "Common Traps" section in
-    `skills/atla-cli/SKILL.md`.
-
 ## Done (this review)
+
+- **P1 test net (2026-07-07):** e2e suite (`crates/atla-cli/tests/e2e.rs`) runs the real
+  binary against wiremock — exit codes, error bodies, JSON errors, output formats,
+  pagination accumulation, dry-run isolation, and 429 retry.
+- **P2 discoverability (2026-07-07):** every subcommand/arg documented in `--help`,
+  after_help examples on the big five; `--dry-run` prints the JSON request body for
+  Jira issue create/update and comment add (`request_body()` previews live in core).
+- **P3 build debt (2026-07-07):** confluence-v2 now builds from a pruned partial spec
+  (103k → 34k generated lines; `scripts/confluence-v2-partial-spec.js`, $ref-closure
+  filter with automatic enum stripping); Basic-auth client construction unified into
+  `AtlassianClient::authed_http_client()`; raw-path requests retry transient failures
+  with Retry-After support (`send_with_retry`).
+- **P4-15 (2026-07-07):** `confluence page/blog comment add` accept `--body`, matching
+  the jira command.
 
 - **P0 error contract (all three items, verified against the live API 2026-07-07):**
   API error bodies now surface (bad JQL returns Jira's exact explanation); all

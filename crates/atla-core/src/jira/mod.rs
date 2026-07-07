@@ -43,23 +43,7 @@ pub struct JiraClient {
 
 impl JiraClient {
     pub fn new(client: AtlassianClient) -> Self {
-        use base64::Engine;
-        use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-
-        let creds = base64::engine::general_purpose::STANDARD.encode(format!(
-            "{}:{}",
-            client.email(),
-            client.token()
-        ));
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Basic {creds}")).expect("valid header"),
-        );
-        let http_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .build()
-            .expect("build reqwest client");
+        let http_client = client.authed_http_client();
         let generated = GeneratedClient::new_with_client(&client.instance().base_url, http_client);
 
         Self {

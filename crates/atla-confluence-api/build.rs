@@ -1,7 +1,7 @@
 use progenitor::{GenerationSettings, Generator, InterfaceStyle};
 
 fn main() {
-    let src = "../../specs/confluence-v2.json";
+    let src = "../../specs/confluence-v2-partial.json";
     println!("cargo:rerun-if-changed={src}");
 
     let file = std::fs::File::open(src).unwrap();

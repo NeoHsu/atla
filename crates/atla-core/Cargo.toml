@@ -17,6 +17,7 @@ progenitor-client = "0.14"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { version = "1", default-features = false, features = ["time"] }
 toml.workspace = true
 reqwest.workspace = true
 

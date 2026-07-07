@@ -24,25 +24,7 @@ pub struct ConfluenceClient {
 
 impl ConfluenceClient {
     pub fn new(client: AtlassianClient) -> Self {
-        use base64::Engine;
-        let creds = base64::engine::general_purpose::STANDARD.encode(format!(
-            "{}:{}",
-            client.email(),
-            client.token()
-        ));
-
-        let http_client = reqwest::Client::builder()
-            .default_headers({
-                let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert(
-                    reqwest::header::AUTHORIZATION,
-                    format!("Basic {creds}").parse().unwrap(),
-                );
-                headers
-            })
-            .build()
-            .expect("http client");
-
+        let http_client = client.authed_http_client();
         let base_url_v2 = format!("{}/wiki/api/v2", client.instance().base_url);
         let base_url_v1 = client.instance().base_url.clone();
 

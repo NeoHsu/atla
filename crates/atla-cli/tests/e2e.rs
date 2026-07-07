@@ -266,6 +266,34 @@ async fn pagination_accumulates_across_pages() {
 }
 
 #[tokio::test]
+async fn transient_429_is_retried_on_raw_endpoints() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+
+    // First response is a 429 with a fast Retry-After; the retry succeeds.
+    Mock::given(method("GET"))
+        .and(path("/rest/agile/1.0/board"))
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "1"))
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/rest/agile/1.0/board"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "values": [{"id": 84, "name": "Platform board", "type": "scrum"}],
+            "isLast": true,
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(&config, &["jira", "board", "list"]);
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    assert!(stdout(&output).contains("Platform board"));
+}
+
+#[tokio::test]
 async fn output_formats_render_the_same_data() {
     let server = MockServer::start().await;
     let (_dir, config) = setup(&server.uri()).await;

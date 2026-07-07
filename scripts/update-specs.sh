@@ -26,6 +26,10 @@ curl -fL "${confluence_v1_url}" \
   "${repo_root}/specs/confluence-v1.json" \
   "${repo_root}/specs/confluence-v1-partial.json"
 
+"${repo_root}/scripts/confluence-v2-partial-spec.js" \
+  "${repo_root}/specs/confluence-v2.json" \
+  "${repo_root}/specs/confluence-v2-partial.json"
+
 python3 - "${repo_root}" "${manifest_path}" "${generator_version}" "${jira_url}" "${confluence_v2_url}" "${confluence_v1_url}" <<'PY'
 from pathlib import Path
 import hashlib
@@ -58,12 +62,13 @@ base = {
             "description": "Jira REST API v3 (partial, filtered to used endpoints)",
         },
         "confluence": {
-            "source_file": "specs/confluence-v2.json",
-            "source_sha256": sha256_file("specs/confluence-v2.json"),
+            "source_file": "specs/confluence-v2-partial.json",
+            "source_sha256": sha256_file("specs/confluence-v2-partial.json"),
             "upstream_source_file": "specs/confluence-v2.json",
             "upstream_url": confluence_v2_url,
             "upstream_sha256": sha256_file("specs/confluence-v2.json"),
-            "description": "Confluence REST API v2",
+            "partial_spec_script": "scripts/confluence-v2-partial-spec.js",
+            "description": "Confluence REST API v2 (partial, filtered to used endpoints)",
         },
         "confluence-v1": {
             "source_file": "specs/confluence-v1-partial.json",
