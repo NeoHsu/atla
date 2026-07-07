@@ -1,6 +1,11 @@
 use std::num::NonZeroU32;
 
-use crate::client::{ApiError, extract_api_error_body};
+use crate::client::ApiError;
+
+pub(super) use crate::generated_api::{
+    ProgenitorResultExt, generated_error_with_body,
+    generated_error_with_body as generated_v1_error_with_body,
+};
 
 /// Per-request page cap used when iterating Confluence v2 cursor endpoints.
 /// The server enforces its own ceiling (250 for most list endpoints); we stay
@@ -61,76 +66,4 @@ pub(super) fn parse_i64_id(id: &str) -> Result<i64, ApiError> {
 
 pub(super) fn optional_i64_vec(id: Option<&str>) -> Result<Option<Vec<i64>>, ApiError> {
     id.map(|id| parse_i64_id(id).map(|id| vec![id])).transpose()
-}
-
-pub(super) fn generated_error(error: atla_confluence_api::Error<()>) -> ApiError {
-    match error {
-        atla_confluence_api::Error::InvalidRequest(msg) => ApiError::Decode(msg),
-        atla_confluence_api::Error::CommunicationError(e) => ApiError::Decode(e.to_string()),
-        atla_confluence_api::Error::ErrorResponse(rv) => {
-            let status = rv.status();
-            ApiError::Http {
-                status,
-                body: format!("{:?}", rv.into_inner()),
-            }
-        }
-        atla_confluence_api::Error::InvalidResponsePayload(_, e) => ApiError::Decode(e.to_string()),
-        atla_confluence_api::Error::UnexpectedResponse(resp) => ApiError::Http {
-            status: resp.status(),
-            body: String::new(),
-        },
-        _ => ApiError::Decode("unknown API error".to_owned()),
-    }
-}
-
-pub(super) async fn generated_error_with_body(error: atla_confluence_api::Error<()>) -> ApiError {
-    match error {
-        atla_confluence_api::Error::UnexpectedResponse(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            ApiError::Http {
-                status,
-                body: extract_api_error_body(&body),
-            }
-        }
-        other => generated_error(other),
-    }
-}
-
-pub(super) async fn generated_v1_error_with_body(
-    error: atla_confluence_v1_api::Error<()>,
-) -> ApiError {
-    match error {
-        atla_confluence_v1_api::Error::UnexpectedResponse(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            ApiError::Http {
-                status,
-                body: extract_api_error_body(&body),
-            }
-        }
-        other => generated_v1_error(other),
-    }
-}
-
-pub(super) fn generated_v1_error(error: atla_confluence_v1_api::Error<()>) -> ApiError {
-    match error {
-        atla_confluence_v1_api::Error::InvalidRequest(msg) => ApiError::Decode(msg),
-        atla_confluence_v1_api::Error::CommunicationError(e) => ApiError::Decode(e.to_string()),
-        atla_confluence_v1_api::Error::ErrorResponse(rv) => {
-            let status = rv.status();
-            ApiError::Http {
-                status,
-                body: format!("{:?}", rv.into_inner()),
-            }
-        }
-        atla_confluence_v1_api::Error::InvalidResponsePayload(_, e) => {
-            ApiError::Decode(e.to_string())
-        }
-        atla_confluence_v1_api::Error::UnexpectedResponse(resp) => ApiError::Http {
-            status: resp.status(),
-            body: String::new(),
-        },
-        _ => ApiError::Decode("unknown API error".to_owned()),
-    }
 }

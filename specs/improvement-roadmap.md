@@ -4,27 +4,6 @@ Consolidated from a deep architecture / agent-UX / doc-drift review on 2026-07-0
 (atla 0.3.0, commit da5e667). Ordered by return on investment. Each item is scoped so a
 single focused session can ship it. Check items off (or delete them) as they land.
 
-## P0 — error contract for machine users
-
-The single biggest gap for the primary (agent) audience.
-
-1. **Stop dropping API error bodies.** `generated_error` maps
-   `Error::UnexpectedResponse` to `body: String::new()`
-   (`crates/atla-core/src/jira/util.rs` ~L47, `confluence/util.rs` ~L78), so agents see
-   `Atlassian API returned 400 Bad Request: ` with nothing after the colon — including
-   for JQL syntax errors that Jira explains precisely. 33 call sites use it vs 15 for
-   `generated_error_with_body`. Fix: make the body-reading path the only path and feed it
-   through `extract_api_error_body` (`atla-core/src/client.rs:155-190`, already good).
-2. **Fix the network-error misclassification.** `CommunicationError` currently becomes
-   `ApiError::Decode` ("failed to decode response") in all three `generated_error*`
-   copies — misleading and kills retry logic. Add an `ApiError::Network` variant.
-3. **Exit-code taxonomy + JSON errors.** Everything exits 1 today
-   (`crates/atla-cli/src/error.rs` is a 5-line stub). Define
-   `CliError { kind, status, retryable, message, hint }`; exit 2=usage, 3=auth,
-   4=not-found, 5=rate-limited/retryable, 1=other; with `-o json`, emit
-   `{"error": {...}}` on stderr. Document the taxonomy in `docs/agent-reference.md` and
-   the skill.
-
 ## P1 — test net for the agent contract
 
 4. **Snapshot-test output rendering** (`insta`): table/json/csv/keys for the main
@@ -32,8 +11,9 @@ The single biggest gap for the primary (agent) audience.
    `commands/confluence/format.rs` (1109 lines, 8 tests). The JSON `pagination` object is
    an API contract with zero lock-in today.
 5. **HTTP-level tests** (`wiremock`) for `JiraClient`/`ConfluenceClient`: error mapping
-   (the P0 fixes need regression cover) and the pagination accumulation loop
-   (`jira/util.rs:17-33`).
+   in `atla-core/src/generated_api.rs` (the body-reading path needs regression cover
+   beyond the unit tests in `atla-cli/src/error.rs`) and the pagination accumulation
+   loop (`jira/util.rs:17-33`).
 6. **`trycmd` end-to-end runs of `--dry-run`** — dry-run needs no network and exercises
    arg parsing, profile resolution, and request construction.
 
@@ -53,12 +33,12 @@ The single biggest gap for the primary (agent) audience.
    `scripts/jira-v3-partial-spec.js` → `confluence-v2-partial-spec.js`; while there,
    encode the `specs/PATCHES.md` enum-stripping rules into the filter so
    `update-specs.sh` becomes one-shot idempotent.
-10. **Deduplicate** the three `generated_error*` copies (macro over the three progenitor
-    error types) and the two hand-rolled authed `reqwest::Client` builders
+10. **Deduplicate** the two hand-rolled authed `reqwest::Client` builders
     (`jira/mod.rs:44-62`, `confluence/mod.rs:26-50` — includes runtime `expect()`s);
-    hang a shared builder off `AtlassianClient`.
+    hang a shared builder off `AtlassianClient`. (The three `generated_error*` copies
+    were already unified into `atla-core/src/generated_api.rs`.)
 11. **Retry on 429/5xx** with `Retry-After` support at the shared client layer (natural
-    follow-up to #10).
+    follow-up to #10). `ApiError::retryable()` already encodes the policy.
 
 ## P4 — agent ergonomics (design decisions, discuss before doing)
 
@@ -73,6 +53,15 @@ The single biggest gap for the primary (agent) audience.
     `skills/atla-cli/SKILL.md`.
 
 ## Done (this review)
+
+- **P0 error contract (all three items, verified against the live API 2026-07-07):**
+  API error bodies now surface (bad JQL returns Jira's exact explanation); all
+  generated-client errors flow through `ProgenitorResultExt::or_api_error()` in the new
+  `atla-core/src/generated_api.rs` (also unified the three per-crate copies);
+  `ApiError::Network` fixes the CommunicationError→Decode misclassification and
+  `ApiError::retryable()/status()` expose retry semantics; exit codes are classified
+  (2 usage / 3 auth / 4 not-found / 5 retryable / 1 other, `atla-cli/src/error.rs`) and
+  `-o json` emits a structured `{"error": {...}}` on stderr.
 
 - Doc-drift protection: `crates/atla-cli/src/doc_check.rs` — every `atla` example in
   docs/skills parse-checked; CLI surface snapshotted to `docs/cli-surface.txt`.

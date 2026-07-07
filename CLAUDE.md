@@ -68,13 +68,16 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   never be able to hang on a prompt.
 - `confluence page view`/`blog view` return metadata only unless `--format` is given;
   markdown input requires explicit `--representation markdown`.
+- Exit-code taxonomy (`crates/atla-cli/src/error.rs`): 2 usage, 3 auth, 4 not-found,
+  5 retryable, 1 other; `-o json` emits `{"error": {...}}` on stderr. Documented in
+  `docs/agent-reference.md` §3 — keep all three in sync.
 
 ## Known debt (verified 2026-07, keep in mind when touching these areas)
 
-- `generated_error` (33 call sites, `atla-core/src/{jira,confluence}/util.rs`) drops API
-  error bodies — 400s surface as empty messages. Prefer `generated_error_with_body`; a
-  proper fix should route all errors through `extract_api_error_body` (`client.rs`).
-- All runtime failures exit 1; no exit-code taxonomy, no JSON error output, no 429 retry.
+- Generated-client errors flow through `ProgenitorResultExt::or_api_error()`
+  (`atla-core/src/generated_api.rs`) which reads the response body. Never map errors
+  with a sync helper that drops the body.
+- No automatic retry on 429/5xx yet; `ApiError::retryable()` exists for callers.
 - Most clap args lack doc comments → empty `--help`. When touching a command, add them.
 - `atla-confluence-api` compiles a 103k-line client from the full v2 spec; a partial-spec
   filter script (like the jira one) would cut clean builds drastically.

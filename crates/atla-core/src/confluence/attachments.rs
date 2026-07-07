@@ -87,7 +87,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 req = req.cursor(cursor.clone());
             }
-            let raw = req.send().await.map_err(generated_error)?.into_inner();
+            let raw = req.send().await.or_api_error().await?.into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceAttachment::from));
@@ -122,7 +122,8 @@ impl ConfluenceClient {
             .send()
             .await
             .map(|rv| ConfluenceAttachment::from(rv.into_inner()))
-            .map_err(generated_error)
+            .or_api_error()
+            .await
     }
 
     pub async fn delete_attachment(&self, id: &str, purge: bool) -> Result<(), ApiError> {
@@ -132,7 +133,8 @@ impl ConfluenceClient {
             .purge(purge)
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
         Ok(())
     }
 

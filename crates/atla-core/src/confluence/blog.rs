@@ -34,7 +34,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 request = request.cursor(cursor.clone());
             }
-            let page = request.send().await.map_err(generated_error)?.into_inner();
+            let page = request.send().await.or_api_error().await?.into_inner();
 
             let received = page.results.len();
             collected.extend(page.results.into_iter().map(ConfluenceBlogPost::from));
@@ -70,7 +70,8 @@ impl ConfluenceClient {
             .include_version(true)
             .send()
             .await
-            .map_err(generated_error)?
+            .or_api_error()
+            .await?
             .into_inner();
 
         Ok(post.into())
@@ -124,7 +125,8 @@ impl ConfluenceClient {
             .draft(draft)
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
         Ok(())
     }
 }

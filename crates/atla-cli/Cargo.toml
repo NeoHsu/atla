@@ -20,6 +20,7 @@ clap.workspace = true
 clap_complete.workspace = true
 comfy-table.workspace = true
 dialoguer.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shell-words.workspace = true

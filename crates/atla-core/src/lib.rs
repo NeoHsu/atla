@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod client;
 pub mod confluence;
+pub(crate) mod generated_api;
 pub mod jira;
 pub mod markdown;
 pub mod profile;

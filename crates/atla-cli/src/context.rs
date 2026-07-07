@@ -7,6 +7,7 @@ use atla_core::{
 
 use crate::cli::GlobalArgs;
 use crate::config;
+use crate::error::AuthSetupError;
 
 #[derive(Debug, Clone)]
 pub struct AppContext {
@@ -23,17 +24,18 @@ impl AppContext {
         let (profile_name, profile) = atla_config
             .active_profile(active_profile_name)
             .ok_or_else(|| {
-                if let Some(name) = active_profile_name {
-                    anyhow::anyhow!(
+                let message = if let Some(name) = active_profile_name {
+                    format!(
                         "profile `{name}` does not exist; run `atla auth login --profile {name}` to create it"
                     )
                 } else if let Some(name) = atla_config.default.profile.as_deref() {
-                    anyhow::anyhow!(
+                    format!(
                         "default profile `{name}` does not exist; run `atla auth login --profile {name}` to recreate it"
                     )
                 } else {
-                    anyhow::anyhow!("no active profile; run `atla auth login` first")
-                }
+                    "no active profile; run `atla auth login` first".to_owned()
+                };
+                anyhow::Error::new(AuthSetupError(message))
             })?;
 
         Ok(Self {
@@ -68,11 +70,10 @@ impl AppContext {
         };
 
         token.ok_or_else(|| {
-            anyhow::anyhow!(
+            anyhow::Error::new(AuthSetupError(format!(
                 "missing API token; run `atla auth login --profile {} --storage {}` or set ATLA_TOKEN",
-                self.profile_name,
-                self.profile.credential_store
-            )
+                self.profile_name, self.profile.credential_store
+            )))
         })
     }
 

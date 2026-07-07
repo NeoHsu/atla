@@ -1,7 +1,7 @@
 use super::JiraClient;
 use super::models::{JiraIssueType, JiraProject, JiraProjectPage, JiraProjectSearch};
 use super::util::{
-    JIRA_LIST_PAGE_CAP, generated_error, generated_error_with_body, limit_i32, next_offset,
+    JIRA_LIST_PAGE_CAP, ProgenitorResultExt, generated_error_with_body, limit_i32, next_offset,
 };
 use crate::client::ApiError;
 
@@ -35,7 +35,8 @@ impl JiraClient {
             let page: JiraProjectPage = builder
                 .send()
                 .await
-                .map_err(generated_error)?
+                .or_api_error()
+                .await?
                 .into_inner()
                 .into();
             let received = page.values.len() as u64;
@@ -101,7 +102,8 @@ impl JiraClient {
             .project_id(&project_id)
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
 
         let list: Vec<_> = Vec::from(issue_types.into_inner());
         Ok(list.into_iter().map(JiraIssueType::from).collect())

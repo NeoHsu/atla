@@ -31,7 +31,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 request = request.cursor(cursor.clone());
             }
-            let page = request.send().await.map_err(generated_error)?.into_inner();
+            let page = request.send().await.or_api_error().await?.into_inner();
 
             let received = page.results.len();
             collected.extend(page.results.into_iter().map(ConfluencePage::from));
@@ -86,7 +86,7 @@ impl ConfluenceClient {
                     if let Some(cursor) = &cursor {
                         req = req.cursor(cursor.clone());
                     }
-                    req.send().await.map_err(generated_error)?.into_inner()
+                    req.send().await.or_api_error().await?.into_inner()
                 };
                 let nodes: Vec<ConfluenceContentNode> = page
                     .results
@@ -104,7 +104,7 @@ impl ConfluenceClient {
                     if let Some(cursor) = &cursor {
                         req = req.cursor(cursor.clone());
                     }
-                    req.send().await.map_err(generated_error)?.into_inner()
+                    req.send().await.or_api_error().await?.into_inner()
                 };
                 let nodes: Vec<ConfluenceContentNode> = page
                     .results
@@ -156,7 +156,7 @@ impl ConfluenceClient {
         if let Some(body_format) = body_format {
             request = request.body_format(body_format.as_primary_body_single());
         }
-        let page = request.send().await.map_err(generated_error)?.into_inner();
+        let page = request.send().await.or_api_error().await?.into_inner();
 
         Ok(page.into())
     }
@@ -226,7 +226,8 @@ impl ConfluenceClient {
             })
             .send()
             .await
-            .map_err(generated_error)?
+            .or_api_error()
+            .await?
             .into_inner();
 
         Ok(page.into())
@@ -259,7 +260,8 @@ impl ConfluenceClient {
             .draft(draft)
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
         Ok(())
     }
 

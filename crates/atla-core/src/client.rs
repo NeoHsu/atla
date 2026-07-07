@@ -143,6 +143,8 @@ pub enum ApiError {
     Request(#[from] reqwest::Error),
     #[error("failed to decode response: {0}")]
     Decode(String),
+    #[error("network error: {0}")]
+    Network(String),
     #[error("Atlassian API returned {status}: {body}")]
     Http {
         status: reqwest::StatusCode,
@@ -150,6 +152,30 @@ pub enum ApiError {
     },
     #[error("{0}")]
     Io(String),
+}
+
+impl ApiError {
+    /// Whether retrying the same request may succeed (transient network
+    /// failures, rate limiting, or server-side errors).
+    pub fn retryable(&self) -> bool {
+        match self {
+            ApiError::Network(_) => true,
+            ApiError::Request(e) => e.is_timeout() || e.is_connect(),
+            ApiError::Http { status, .. } => {
+                *status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+            }
+            ApiError::Decode(_) | ApiError::Io(_) => false,
+        }
+    }
+
+    /// HTTP status of the failed request, when one was received.
+    pub fn status(&self) -> Option<reqwest::StatusCode> {
+        match self {
+            ApiError::Http { status, .. } => Some(*status),
+            ApiError::Request(e) => e.status(),
+            _ => None,
+        }
+    }
 }
 
 pub(crate) fn extract_api_error_body(body: &str) -> String {

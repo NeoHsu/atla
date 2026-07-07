@@ -6,7 +6,7 @@ use super::models::{
     JiraIssueField, JiraIssueFieldsQuery, JiraIssueLabelUpdate, JiraIssueSearch,
     JiraIssueSearchPage, JiraIssueUpdate, JiraTransition, JiraUser,
 };
-use super::util::{generated_error, generated_error_with_body, issue_fields, limit_i32};
+use super::util::{ProgenitorResultExt, generated_error_with_body, issue_fields, limit_i32};
 use crate::client::{ApiError, read_empty, read_json};
 
 /// Per-request maximum for `GET /rest/api/3/search/jql`. The server silently
@@ -93,9 +93,8 @@ impl JiraClient {
                 builder = builder.next_page_token(token.clone());
             }
 
-            let mut page = JiraIssueSearchPage::from(
-                builder.send().await.map_err(generated_error)?.into_inner(),
-            );
+            let mut page =
+                JiraIssueSearchPage::from(builder.send().await.or_api_error().await?.into_inner());
 
             let received = page.issues.len();
             server_is_last = page.is_last;
@@ -134,7 +133,8 @@ impl JiraClient {
             .send()
             .await
             .map(|rv| JiraIssue::from(rv.into_inner()))
-            .map_err(generated_error)
+            .or_api_error()
+            .await
     }
 
     pub async fn list_transitions(
@@ -148,7 +148,8 @@ impl JiraClient {
             .expand("transitions.fields")
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
 
         Ok(transitions
             .into_inner()
@@ -241,7 +242,8 @@ impl JiraClient {
             .send()
             .await
             .map(|_| ())
-            .map_err(generated_error)
+            .or_api_error()
+            .await
     }
 
     pub async fn assign_issue(&self, assign: &JiraIssueAssign) -> Result<JiraUser, ApiError> {

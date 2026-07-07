@@ -198,7 +198,9 @@ atla confluence page update PAGE_ID --body-file fixed.xml --representation stora
   content — always pass the flag when the source is Markdown.
 - `confluence page comment add` takes the body as a **positional argument** (no `--body`
   flag, unlike `jira issue comment add` which accepts both).
-- Errors currently exit 1 regardless of cause; parse stderr for the reason. Auth errors
+- Runtime errors use classified exit codes: `2` usage, `3` auth, `4` not found,
+  `5` retryable (network/429/5xx), `1` anything else. With `-o json`, stderr carries
+  `{"error": {"kind", "message", "status", "retryable"}}` instead of prose. Auth errors
   include the exact `atla auth login ...` command to fix them.
 
 ## Safety Rules

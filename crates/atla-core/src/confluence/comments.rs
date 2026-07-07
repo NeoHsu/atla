@@ -31,7 +31,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 req = req.cursor(cursor.clone());
             }
-            let raw = req.send().await.map_err(generated_error)?.into_inner();
+            let raw = req.send().await.or_api_error().await?.into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceComment::from));
@@ -68,7 +68,8 @@ impl ConfluenceClient {
             .body(comment.to_generated_page_footer())
             .send()
             .await
-            .map_err(generated_error)?
+            .or_api_error()
+            .await?
             .into_inner();
 
         Ok(created.into())
@@ -80,7 +81,8 @@ impl ConfluenceClient {
             .comment_id(parse_i64_id(comment_id)?)
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
         Ok(())
     }
 
@@ -110,7 +112,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 req = req.cursor(cursor.clone());
             }
-            let raw = req.send().await.map_err(generated_error)?.into_inner();
+            let raw = req.send().await.or_api_error().await?.into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceComment::from));
@@ -147,7 +149,8 @@ impl ConfluenceClient {
             .body(comment.to_generated_blog_footer())
             .send()
             .await
-            .map_err(generated_error)?
+            .or_api_error()
+            .await?
             .into_inner();
 
         Ok(created.into())

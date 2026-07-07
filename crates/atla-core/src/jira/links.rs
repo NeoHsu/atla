@@ -15,7 +15,7 @@ const GITHUB_APP_TYPE_KEYS: &[&str] = &[
 use super::models::{
     JiraGithubCommit, JiraGithubPullRequest, JiraIssueLink, JiraIssueLinkCreate, JiraLinkedIssue,
 };
-use super::util::generated_error;
+use super::util::ProgenitorResultExt;
 use crate::client::{ApiError, read_json};
 
 impl JiraClient {
@@ -31,7 +31,8 @@ impl JiraClient {
             .send()
             .await
             .map(|_| ())
-            .map_err(generated_error)
+            .or_api_error()
+            .await
     }
 
     pub async fn list_issue_links(
@@ -188,7 +189,8 @@ impl JiraClient {
             .send()
             .await
             .map(|_| ())
-            .map_err(generated_error)
+            .or_api_error()
+            .await
     }
 
     async fn resolve_link_type(&self, user_input: &str) -> Result<String, ApiError> {

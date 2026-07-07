@@ -2,7 +2,7 @@ use atla_jira_api::types as generated_types;
 
 use super::JiraClient;
 use super::models::{JiraComment, JiraCommentPage};
-use super::util::{JIRA_LIST_PAGE_CAP, adf_body, generated_error, limit_i32, next_offset};
+use super::util::{JIRA_LIST_PAGE_CAP, ProgenitorResultExt, adf_body, limit_i32, next_offset};
 use crate::client::ApiError;
 
 impl JiraClient {
@@ -20,7 +20,8 @@ impl JiraClient {
             })
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
 
         Ok(comment.into_inner().into())
     }
@@ -41,7 +42,8 @@ impl JiraClient {
             })
             .send()
             .await
-            .map_err(generated_error)?;
+            .or_api_error()
+            .await?;
 
         Ok(comment.into_inner().into())
     }
@@ -82,7 +84,8 @@ impl JiraClient {
                 .max_results(limit_i32(page_size))
                 .send()
                 .await
-                .map_err(generated_error)?
+                .or_api_error()
+                .await?
                 .into_inner()
                 .into();
 
@@ -127,6 +130,7 @@ impl JiraClient {
             .send()
             .await
             .map(|_| ())
-            .map_err(generated_error)
+            .or_api_error()
+            .await
     }
 }

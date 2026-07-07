@@ -138,6 +138,33 @@ back to the repo checkout.
 | `--dry-run` | boolean | `false` | Prints the request and skips mutation |
 | `--no-input` | boolean | `false` | Disables prompts and interactive selection |
 
+### Exit codes and error output
+
+| Code | Kind | Meaning |
+| --- | --- | --- |
+| `0` | — | Success |
+| `1` | `other` | Any other failure (non-retryable 4xx business errors, IO) |
+| `2` | `usage` | Invalid arguments (emitted by clap) |
+| `3` | `auth` | Missing/invalid credentials or profile (HTTP 401/403) |
+| `4` | `not_found` | Resource does not exist (HTTP 404) |
+| `5` | `retryable` | Transient failure: network error, HTTP 429, or 5xx |
+
+With `-o json`, runtime errors are emitted to stderr as a machine-readable object:
+
+```json
+{
+  "error": {
+    "kind": "not_found",
+    "message": "failed to load Jira issue `NOPE-1`: Atlassian API returned 404 Not Found: Issue does not exist or you do not have permission to see it.",
+    "status": 404,
+    "retryable": false
+  }
+}
+```
+
+Agents should retry (with backoff) only when the exit code is `5` or
+`error.retryable` is `true`.
+
 ### Pagination
 
 Every `--limit N` flag is a "max-results" cap. `atla` paginates the underlying API

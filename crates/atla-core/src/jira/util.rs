@@ -1,5 +1,6 @@
-use crate::client::{ApiError, extract_api_error_body};
 use crate::markdown::markdown_to_adf;
+
+pub(super) use crate::generated_api::{ProgenitorResultExt, generated_error_with_body};
 
 pub(super) fn limit_i32(limit: u32) -> i32 {
     limit.min(i32::MAX as u32) as i32
@@ -30,40 +31,6 @@ pub(super) fn next_offset(
         return None;
     }
     Some(next)
-}
-
-pub(super) fn generated_error(error: atla_jira_api::Error<()>) -> ApiError {
-    match error {
-        atla_jira_api::Error::InvalidRequest(msg) => ApiError::Decode(msg),
-        atla_jira_api::Error::CommunicationError(e) => ApiError::Decode(e.to_string()),
-        atla_jira_api::Error::ErrorResponse(rv) => {
-            let status = rv.status();
-            ApiError::Http {
-                status,
-                body: format!("{:?}", rv.into_inner()),
-            }
-        }
-        atla_jira_api::Error::InvalidResponsePayload(_, e) => ApiError::Decode(e.to_string()),
-        atla_jira_api::Error::UnexpectedResponse(resp) => ApiError::Http {
-            status: resp.status(),
-            body: String::new(),
-        },
-        _ => ApiError::Decode("unknown API error".to_owned()),
-    }
-}
-
-pub(super) async fn generated_error_with_body(error: atla_jira_api::Error<()>) -> ApiError {
-    match error {
-        atla_jira_api::Error::UnexpectedResponse(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            ApiError::Http {
-                status,
-                body: extract_api_error_body(&body),
-            }
-        }
-        other => generated_error(other),
-    }
 }
 
 pub(super) fn issue_fields(fields: Option<&[String]>) -> Vec<String> {

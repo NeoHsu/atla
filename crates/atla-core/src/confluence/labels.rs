@@ -33,7 +33,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 req = req.cursor(cursor.clone());
             }
-            let raw = req.send().await.map_err(generated_error)?.into_inner();
+            let raw = req.send().await.or_api_error().await?.into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceLabel::from));
@@ -88,7 +88,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 req = req.cursor(cursor.clone());
             }
-            let raw = req.send().await.map_err(generated_error)?.into_inner();
+            let raw = req.send().await.or_api_error().await?.into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceLabel::from));
@@ -136,7 +136,8 @@ impl ConfluenceClient {
             .body(request)
             .send()
             .await
-            .map_err(generated_v1_error)?
+            .or_api_error()
+            .await?
             .into_inner();
 
         Ok(labels.into())
@@ -149,7 +150,8 @@ impl ConfluenceClient {
             .name(label)
             .send()
             .await
-            .map_err(generated_v1_error)?;
+            .or_api_error()
+            .await?;
         Ok(())
     }
 

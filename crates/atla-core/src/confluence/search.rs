@@ -29,7 +29,8 @@ impl ConfluenceClient {
                 .start(start)
                 .send()
                 .await
-                .map_err(generated_v1_error)?
+                .or_api_error()
+                .await?
                 .into_inner();
 
             let received = raw.results.len() as i32;

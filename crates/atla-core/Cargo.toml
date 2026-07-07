@@ -13,6 +13,7 @@ atla-jira-api = { path = "../atla-jira-api" }
 base64.workspace = true
 chrono.workspace = true
 keyring.workspace = true
+progenitor-client = "0.14"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

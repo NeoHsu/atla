@@ -31,7 +31,7 @@ impl ConfluenceClient {
             if let Some(cursor) = &cursor {
                 request = request.cursor(cursor.clone());
             }
-            let page = request.send().await.map_err(generated_error)?.into_inner();
+            let page = request.send().await.or_api_error().await?.into_inner();
 
             let received = page.results.len();
             collected.extend(page.results.into_iter().map(ConfluenceSpace::from));
@@ -78,7 +78,8 @@ impl ConfluenceClient {
             .limit(limit_non_zero(1)?)
             .send()
             .await
-            .map_err(generated_error)?
+            .or_api_error()
+            .await?
             .into_inner();
 
         Ok(page.results.into_iter().next().map(ConfluenceSpace::from))
@@ -155,7 +156,8 @@ impl ConfluenceClient {
             .space_key(key)
             .send()
             .await
-            .map_err(generated_v1_error)?;
+            .or_api_error()
+            .await?;
         Ok(())
     }
 }
