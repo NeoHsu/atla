@@ -8,8 +8,10 @@ description: >
   spaces, uploading attachments, or any Atlassian Cloud automation. Also use when the user
   mentions `atla` commands, asks about JQL/CQL queries, or wants to script Atlassian
   workflows. Even if the user just says "create a Jira ticket", "check my sprint", "update
-  the confluence page", or "find issues assigned to me" — use this skill, because `atla`
-  is the tool installed in this environment for those tasks.
+  the confluence page", "find issues assigned to me" — or in Chinese: 「開一張 Jira 票」、
+  「建立工單」、「查 sprint」、「更新 Confluence 頁面」、「找我負責的 issue」、「搜尋
+  Confluence」、「上傳附件到頁面」 — use this skill, because `atla` is the tool installed
+  in this environment for those tasks.
 ---
 
 # atla CLI Reference
@@ -20,7 +22,9 @@ auth, multiple output formats, and a global `--dry-run` safety net.
 
 ## Prerequisites
 
-The user must have `atla` installed and authenticated. If auth fails, guide them through:
+Any command that exits with code `3` means auth/profile is not set up — its stderr
+contains the exact `atla auth login ...` command to fix it; run that (or show it to the
+user), verify with `atla auth status`, then retry the original command:
 
 ```bash
 atla auth login --instance https://SITE.atlassian.net --email USER@example.com --token "$ATLASSIAN_TOKEN"

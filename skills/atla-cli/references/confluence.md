@@ -3,14 +3,8 @@
 Complete syntax and flags for all `atla confluence` commands. All commands accept global flags:
 `-o/--output`, `--profile`, `--verbose`, `--dry-run`, `--no-input`.
 
-**Pagination.** `--limit N` is a hard cap on returned items for the current invocation,
-not a single-page hint. If more matches exist, `atla` returns an opaque `--page-token` for
-the next logical page. Table output prints a ready-to-copy next command; JSON output
-includes `pagination.nextPageToken` and `pagination.nextCommand`; CSV/keys keep stdout
-record-only and write the next-page hint to stderr. Pass `--page-token` back to the same
-command/query to continue. Use `--all` when you want every matching record; `--all` is
-mutually exclusive with both `--limit` and `--page-token`. All paginating syntaxes below
-also accept `--all` in place of `--limit`/`--page-token`.
+**Pagination.** `--limit`/`--page-token`/`--all` semantics are defined once in SKILL.md
+(section "Pagination"); the syntaxes below only show which commands accept them.
 
 ---
 
