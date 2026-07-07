@@ -3,6 +3,8 @@ mod cli;
 mod commands;
 mod config;
 mod context;
+#[cfg(test)]
+mod doc_check;
 mod output;
 mod pagination;
 
