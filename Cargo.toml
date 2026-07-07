@@ -40,6 +40,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 toml = "0.9"
 tempfile = "3"
+wiremock = "0.6"
 
 # Config for 'cargo dist'
 [profile.dist]
