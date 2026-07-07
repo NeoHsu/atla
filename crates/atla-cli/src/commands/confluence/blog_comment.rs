@@ -101,6 +101,7 @@ pub(super) async fn run_blog_comment(
         BlogCommentAction::Add {
             blog_id,
             body,
+            body_flag,
             body_file,
             parent,
             representation,
@@ -108,7 +109,7 @@ pub(super) async fn run_blog_comment(
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let body = read_body(body, body_file.as_deref())?
+            let body = read_body(body.or(body_flag), body_file.as_deref())?
                 .ok_or_else(|| anyhow::anyhow!("missing comment body"))?;
             let representation = confluence_body_representation(representation)?;
 

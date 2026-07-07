@@ -104,6 +104,7 @@ pub(super) async fn run_page_comment(
         PageCommentAction::Add {
             page_id,
             body,
+            body_flag,
             body_file,
             parent,
             representation,
@@ -133,7 +134,7 @@ pub(super) async fn run_page_comment(
                 return Ok(());
             }
 
-            let body = read_body(body, body_file.as_deref())?;
+            let body = read_body(body.or(body_flag), body_file.as_deref())?;
             let jira_client = if resolve_mentions {
                 Some(ctx.jira_client()?)
             } else {

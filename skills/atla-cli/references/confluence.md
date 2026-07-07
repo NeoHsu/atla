@@ -150,7 +150,7 @@ atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN] 
 
 ### Add a comment
 ```
-atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
+atla confluence page comment add <PAGE_ID> [BODY | --body TEXT | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
                                   [--numbered-table-rows]
@@ -211,7 +211,7 @@ atla confluence blog label remove <BLOG_ID> <LABEL>
 ### Blog comments
 ```
 atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN] [--all]
-atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
+atla confluence blog comment add <BLOG_ID> [BODY | --body TEXT | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
 atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]

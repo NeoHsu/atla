@@ -196,8 +196,6 @@ atla confluence page update PAGE_ID --body-file fixed.xml --representation stora
 - `page create/update` and comment `--body-file` default to `--representation storage`
   (XHTML). Feeding a Markdown file without `--representation markdown` produces broken
   content — always pass the flag when the source is Markdown.
-- `confluence page comment add` takes the body as a **positional argument** (no `--body`
-  flag, unlike `jira issue comment add` which accepts both).
 - Runtime errors use classified exit codes: `2` usage, `3` auth, `4` not found,
   `5` retryable (network/429/5xx), `1` anything else. With `-o json`, stderr carries
   `{"error": {"kind", "message", "status", "retryable"}}` instead of prose. Auth errors

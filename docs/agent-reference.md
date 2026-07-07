@@ -271,7 +271,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence page label add` | `<PAGE_ID> LABEL...` | none | Add page labels. | `atla confluence page label add 123456 runbook urgent` |
 | `confluence page label remove` | `<PAGE_ID> <LABEL>` | none | Remove page label. | `atla confluence page label remove 123456 urgent` |
 | `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
-| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
+| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
 | `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
 | `confluence blog view` | `<ID>` | `--format` | Show one blog post. Body requires `--format`. | `atla confluence blog view 234567 --format markdown` |
@@ -282,7 +282,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence blog label add` | `<BLOG_ID> LABEL...` | none | Add blog labels. | `atla confluence blog label add 234567 release-notes engineering` |
 | `confluence blog label remove` | `<BLOG_ID> <LABEL>` | none | Remove blog label. | `atla confluence blog label remove 234567 engineering` |
 | `confluence blog comment list` | `<BLOG_ID>` | `--limit`, `--page-token` | List blog comments. | `atla confluence blog comment list 234567 --limit 10` |
-| `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body-file`, `--parent`, `--representation` | Add blog comment. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
+| `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation` | Add blog comment. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
 | `confluence blog comment delete` | `<BLOG_ID> <COMMENT_ID>` | `--yes` | Delete blog comment. | `atla confluence blog comment delete 234567 78910 --yes` |
 | `confluence search` | `<CQL>` | `--limit`, `--page-token` | Run CQL search. | `atla confluence search 'type = page AND space = ENG' --limit 25` |
 | `confluence attachment list` | `<PAGE_ID>` | `--filename`, `--limit`, `--page-token` | List page attachments. | `atla confluence attachment list 123456 --filename diagram` |

@@ -73,7 +73,7 @@ atla confluence page label add <PAGE_ID> <LABELS>
 atla confluence page label remove <PAGE_ID> <LABEL>
 atla confluence page comment
 atla confluence page comment list <PAGE_ID> --all --limit --page-token
-atla confluence page comment add <PAGE_ID> <BODY> --attachment --attachment-mode --body-file --mention --numbered-table-rows --parent --representation --resolve-mentions
+atla confluence page comment add <PAGE_ID> <BODY> --attachment --attachment-mode --body --body-file --mention --numbered-table-rows --parent --representation --resolve-mentions
 atla confluence page comment delete <PAGE_ID> <COMMENT_ID> --yes
 atla confluence space
 atla confluence space list --all --key --limit --page-token
@@ -93,7 +93,7 @@ atla confluence blog label add <BLOG_ID> <LABELS>
 atla confluence blog label remove <BLOG_ID> <LABEL>
 atla confluence blog comment
 atla confluence blog comment list <BLOG_ID> --all --limit --page-token
-atla confluence blog comment add <BLOG_ID> <BODY> --body-file --parent --representation
+atla confluence blog comment add <BLOG_ID> <BODY> --body --body-file --parent --representation
 atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> --yes
 atla confluence search <CQL> --all --limit --page-token
 atla confluence attachment

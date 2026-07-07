@@ -140,7 +140,10 @@ async fn json_output_emits_structured_error() {
         .mount(&server)
         .await;
 
-    let output = atla(&config, &["-o", "json", "jira", "issue", "view", "PROJ-404"]);
+    let output = atla(
+        &config,
+        &["-o", "json", "jira", "issue", "view", "PROJ-404"],
+    );
     assert_eq!(output.status.code(), Some(4));
     let error: serde_json::Value =
         serde_json::from_str(&stderr(&output)).expect("stderr is a JSON error object");
@@ -215,7 +218,15 @@ async fn pagination_accumulates_across_pages() {
 
     let output = atla(
         &config,
-        &["-o", "keys", "jira", "search", "project = PROJ", "--limit", "5"],
+        &[
+            "-o",
+            "keys",
+            "jira",
+            "search",
+            "project = PROJ",
+            "--limit",
+            "5",
+        ],
     );
     assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
     assert_eq!(stdout(&output), "PROJ-1\nPROJ-2\n");
