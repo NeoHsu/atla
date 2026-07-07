@@ -61,6 +61,7 @@ back to the repo checkout.
 - `atla jira issue delete <KEY>` — delete an issue.
 - `atla jira issue assign <KEY>` — assign, reassign, or unassign an issue.
 - `atla jira issue transition <KEY>` — list/select/apply workflow transitions.
+- `atla jira issue fields` — list create-meta fields for a project/type.
 - `atla jira issue comment add <KEY>` — add a comment.
 - `atla jira issue comment list <KEY>` — list comments.
 - `atla jira issue comment update <KEY> <COMMENT_ID>` — edit a comment.
@@ -72,12 +73,14 @@ back to the repo checkout.
 - `atla jira issue link add <KEY>` — create an issue link.
 - `atla jira issue link list <KEY>` — list linked issues.
 - `atla jira issue link remove <LINK_ID>` — remove a link.
+- `atla jira issue link github-links <KEY>` — list GitHub PRs from the development panel.
+- `atla jira issue link github-commits <KEY>` — list GitHub commits from the development panel.
 - `atla jira issue worklog add <KEY>` — add logged time.
 - `atla jira issue worklog list <KEY>` — list worklogs.
 - `atla jira board list` — list Jira Software boards.
 - `atla jira board view <ID>` — show a board.
-- `atla jira sprint list --board ID` — list board sprints.
-- `atla jira sprint active --board ID` — list active sprints.
+- `atla jira sprint list --board <ID>` — list board sprints.
+- `atla jira sprint active --board <ID>` — list active sprints.
 - `atla jira sprint view <ID>` — show a sprint.
 - `atla jira sprint create` — create a sprint.
 - `atla jira sprint start <ID>` — start a sprint.
@@ -117,6 +120,7 @@ back to the repo checkout.
 - `atla confluence blog label remove <BLOG_ID>` — remove a blog label.
 - `atla confluence blog comment list <BLOG_ID>` — list blog comments.
 - `atla confluence blog comment add <BLOG_ID>` — add a blog comment.
+- `atla confluence blog comment delete <BLOG_ID> <COMMENT_ID>` — delete a blog comment.
 - `atla confluence search <CQL>` — run Confluence Query Language search.
 - `atla confluence attachment list <PAGE_ID>` — list page attachments.
 - `atla confluence attachment view <ATTACHMENT_ID>` — inspect an attachment.
@@ -187,7 +191,8 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `jira issue list` | none | `--project`, `--status`, `--type`, `--assignee`, `--jql`, `--limit`, `--page-token`, `--fields` | List issues by filters or custom JQL. | `atla jira issue list --project PROJ --status 'In Progress'` |
 | `jira issue create` | none | `--project`, `--type`, `--summary`, `--description`, `--description-file`, `--field`, `--labels` | Create an issue. | `atla jira issue create --project PROJ --type Task --summary 'Fix login'` |
 | `jira issue update` | `<KEY>` | `--summary`, `--description`, `--description-file`, `--field`, `--labels` | Update an issue. Alias: `edit`. | `atla jira issue update PROJ-123 --labels add:urgent` |
-| `jira issue view` | `<KEY>` | `--web`, `--fields` | Show issue details or open in browser. | `atla jira issue view PROJ-123 --fields summary,status` |
+| `jira issue fields` | none | `--project`, `--type`, `--required-only` | List create-meta fields (ID, type, allowed values) for `issue create`. | `atla jira issue fields --project PROJ --type Bug --required-only` |
+| `jira issue view` | `<KEY>` | `--web`, `--fields`, `--with-github` | Show issue details or open in browser. | `atla jira issue view PROJ-123 --fields summary,status` |
 | `jira issue delete` | `<KEY>` | `--delete-subtasks`, `--yes` | Delete an issue. | `atla jira issue delete PROJ-123 --yes` |
 | `jira issue assign` | `<KEY>` | `--to`, `--account-id`, `--unassign` | Assign or clear assignee. | `atla jira issue assign PROJ-123 --to me` |
 | `jira issue transition` | `<KEY>` | `--to`, `--field` | Apply workflow transition; can prompt unless `--no-input`. | `atla jira issue transition PROJ-123 --to Done` |
@@ -202,6 +207,8 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `jira issue link add` | `<KEY>` | `--type`, `--target` | Create issue link. | `atla jira issue link add PROJ-123 --type Blocks --target PROJ-456` |
 | `jira issue link list` | `<KEY>` | none | List issue links. | `atla jira issue link list PROJ-123` |
 | `jira issue link remove` | `<LINK_ID>` | `--yes` | Remove issue link. | `atla jira issue link remove 10500 --yes` |
+| `jira issue link github-links` | `<KEY>` | none | List GitHub PRs from the Jira development panel. | `atla jira issue link github-links PROJ-123` |
+| `jira issue link github-commits` | `<KEY>` | none | List GitHub commits from the Jira development panel. | `atla jira issue link github-commits PROJ-123` |
 | `jira issue worklog add` | `<KEY>` | `--time`, `--comment`, `--started` | Add time spent entry. | `atla jira issue worklog add PROJ-123 --time 45m --comment 'Debugged callback'` |
 | `jira issue worklog list` | `<KEY>` | `--limit`, `--page-token` | List worklogs. | `atla jira issue worklog list PROJ-123 --limit 10` |
 | `jira board list` | none | `--project`, `--type`, `--name`, `--limit`, `--page-token` | List Jira Software boards. | `atla jira board list --project PROJ --type scrum` |
@@ -226,7 +233,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence space update` | `<KEY>` | `--name`, `--description`, `--description-file` | Update space metadata. | `atla confluence space update ENG --name 'Engineering Knowledge Base'` |
 | `confluence space delete` | `<KEY>` | `--yes` | Delete a space. | `atla confluence space delete ENG --yes` |
 | `confluence page list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List pages. | `atla confluence page list --space ENG --title Runbook` |
-| `confluence page view` | `<ID>` | `--web`, `--format`, `--preserve-table-options` | Show page metadata/body or open in browser. | `atla confluence page view 123456 --format markdown` |
+| `confluence page view` | `<ID>` | `--web`, `--format`, `--preserve-table-options`, `--with-attachments` | Show page metadata/body or open in browser. Body requires `--format`. | `atla confluence page view 123456 --format markdown` |
 | `confluence page children` | `<ID>` | `--depth`, `--limit`, `--page-token` | List page children or descendants. | `atla confluence page children 123456 --depth 2` |
 | `confluence page copy` | `<SOURCE_ID>` | `--title`, `-s/--space`, `--space-id`, `--parent`, `--root-level` | Copy a page. | `atla confluence page copy 123456 --title 'Template Copy' --space ENG` |
 | `confluence page create` | none | `-s/--space`, `--space-id`, `--title`, `--parent`, `--root-level`, `--body`, `--body-file`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--draft`, `--private` | Create a page. | `atla confluence page create --space ENG --title 'Checklist' --body-file docs/checklist.md --representation markdown` |
@@ -240,7 +247,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
 | `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
-| `confluence blog view` | `<ID>` | none | Show one blog post. | `atla confluence blog view 234567` |
+| `confluence blog view` | `<ID>` | `--format` | Show one blog post. Body requires `--format`. | `atla confluence blog view 234567 --format markdown` |
 | `confluence blog create` | none | `-s/--space`, `--space-id`, `--title`, `--body`, `--body-file`, `--representation`, `--draft`, `--private` | Create a blog post. | `atla confluence blog create --space ENG --title 'Release Notes' --body-file docs/release.md --representation markdown` |
 | `confluence blog update` | `<ID>` | `--title`, `--body`, `--body-file`, `--representation`, `--version`, `--message`, `--draft` | Update a blog post. | `atla confluence blog update 234567 --message 'Add known issues'` |
 | `confluence blog delete` | `<ID>` | `--purge`, `--draft`, `--yes` | Delete a blog post. | `atla confluence blog delete 234567 --yes` |
@@ -249,11 +256,12 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence blog label remove` | `<BLOG_ID> <LABEL>` | none | Remove blog label. | `atla confluence blog label remove 234567 engineering` |
 | `confluence blog comment list` | `<BLOG_ID>` | `--limit`, `--page-token` | List blog comments. | `atla confluence blog comment list 234567 --limit 10` |
 | `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body-file`, `--parent`, `--representation` | Add blog comment. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
+| `confluence blog comment delete` | `<BLOG_ID> <COMMENT_ID>` | `--yes` | Delete blog comment. | `atla confluence blog comment delete 234567 78910 --yes` |
 | `confluence search` | `<CQL>` | `--limit`, `--page-token` | Run CQL search. | `atla confluence search 'type = page AND space = ENG' --limit 25` |
 | `confluence attachment list` | `<PAGE_ID>` | `--filename`, `--limit`, `--page-token` | List page attachments. | `atla confluence attachment list 123456 --filename diagram` |
 | `confluence attachment view` | `<ATTACHMENT_ID>` | none | Show attachment metadata. | `atla confluence attachment view 987654` |
 | `confluence attachment upload` | `<PAGE_ID> <FILE>` | `--comment`, `--minor-edit` | Upload attachment to page. | `atla confluence attachment upload 123456 ./diagram.png --minor-edit` |
-| `confluence attachment download` | `<ATTACHMENT_ID>` | `-o` | Download attachment. | `atla confluence attachment download 987654 -o ./downloads/diagram.png` |
+| `confluence attachment download` | `<ATTACHMENT_ID>` | `--save-to`/`-f` | Download attachment. | `atla confluence attachment download 987654 --save-to ./downloads/diagram.png` |
 | `confluence attachment delete` | `<ATTACHMENT_ID>` | `--purge`, `--yes` | Delete attachment. | `atla confluence attachment delete 987654 --yes` |
 
 ## 6. Output Formats

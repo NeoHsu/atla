@@ -267,7 +267,7 @@ atla auth status
 atla auth switch <profile>
 
 # Or use --profile for a one-off command
-atla jira issue get PROJ-1 --profile work
+atla jira issue view PROJ-1 --profile work
 ```
 
 ### Token expired or revoked

@@ -72,7 +72,7 @@ trips.
 ### Core
 - `atla auth login/logout/status/switch` — manage profiles and credentials
 - `atla config set/get/list` — configuration and aliases
-- `atla completion bash/zsh/fish/powershell` — shell completions
+- `atla completion bash/elvish/fish/powershell/zsh` — shell completions
 
 ### Jira (`atla jira ...`)
 - `project list/view/issue-types`
@@ -133,7 +133,7 @@ atla jira issue transition PROJ-123 --to Done
 ```bash
 atla jira issue comment add PROJ-123 --body 'Please check logs' \
   --attachment ./error.log --attachment-mode link
-atla confluence page comment add 123456 --body 'Screenshot attached' \
+atla confluence page comment add 123456 'Screenshot attached' \
   --attachment ./screenshot.png --attachment-mode auto
 ```
 
@@ -186,8 +186,20 @@ atla confluence attachment upload PAGE_ID /tmp/file.jpg
 
 If a page was already created with external URL references, fix it:
 ```bash
-atla confluence page update PAGE_ID --body-file fixed.xml --representation storage --version N
+atla confluence page update PAGE_ID --body-file fixed.xml --representation storage --version 4
 ```
+
+## Common Traps
+
+- `confluence page view <ID>` / `blog view <ID>` return **metadata only** (no body).
+  To get content, pass `--format markdown` (or `storage` / `atlas-doc-format`).
+- `page create/update` and comment `--body-file` default to `--representation storage`
+  (XHTML). Feeding a Markdown file without `--representation markdown` produces broken
+  content — always pass the flag when the source is Markdown.
+- `confluence page comment add` takes the body as a **positional argument** (no `--body`
+  flag, unlike `jira issue comment add` which accepts both).
+- Errors currently exit 1 regardless of cause; parse stderr for the reason. Auth errors
+  include the exact `atla auth login ...` command to fix them.
 
 ## Safety Rules
 

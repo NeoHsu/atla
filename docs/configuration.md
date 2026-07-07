@@ -255,10 +255,10 @@ Use `--profile` without changing the default:
 
 ```bash
 # Default profile (work)
-atla jira issue get TEAM-100
+atla jira issue view TEAM-100
 
 # One-off with different profile
-atla jira issue get SIDE-5 --profile personal
+atla jira issue view SIDE-5 --profile personal
 ```
 
 ---
