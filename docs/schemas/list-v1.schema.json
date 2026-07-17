@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/list-v1.schema.json",
+  "title": "atla paginated list envelope v1",
+  "type": "object",
+  "required": ["schemaVersion", "pagination"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "pagination": {
+      "type": "object",
+      "required": ["isLast", "nextPageToken", "nextCommand"],
+      "properties": {
+        "isLast": { "type": "boolean" },
+        "nextPageToken": { "type": ["string", "null"] },
+        "nextCommand": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

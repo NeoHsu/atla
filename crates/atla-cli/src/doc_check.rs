@@ -249,11 +249,14 @@ fn render_surface(cmd: &clap::Command, path: &str, out: &mut String) {
     let mut flags = Vec::new();
     for arg in cmd.get_arguments() {
         let id = arg.get_id().as_str();
-        if id == "help" || id == "version" {
+        if id == "help" || (id == "version" && path == "atla") {
             continue;
         }
         if path != "atla" && arg.is_global_set() {
-            continue;
+            let declared_by_plan = path == "atla plan" && matches!(id, "out" | "expires_in");
+            if !declared_by_plan {
+                continue;
+            }
         }
         if arg.is_positional() {
             positionals.push(format!("<{}>", id.to_uppercase()));
@@ -294,6 +297,103 @@ fn render_surface(cmd: &clap::Command, path: &str, out: &mut String) {
             continue;
         }
         render_surface(sub, &format!("{path} {}", sub.get_name()), out);
+    }
+}
+
+fn validate_schema_fixture(schema: &serde_json::Value, value: &serde_json::Value, path: &str) {
+    if let Some(expected) = schema.get("const") {
+        assert_eq!(value, expected, "{path}: const mismatch");
+    }
+    if let Some(values) = schema.get("enum").and_then(serde_json::Value::as_array) {
+        assert!(values.contains(value), "{path}: value is not in enum");
+    }
+    if let Some(types) = schema.get("type") {
+        let matches_type = |kind: &str| match kind {
+            "object" => value.is_object(),
+            "array" => value.is_array(),
+            "string" => value.is_string(),
+            "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+            "boolean" => value.is_boolean(),
+            "null" => value.is_null(),
+            _ => true,
+        };
+        let valid = types.as_str().is_some_and(matches_type)
+            || types.as_array().is_some_and(|types| {
+                types
+                    .iter()
+                    .filter_map(serde_json::Value::as_str)
+                    .any(matches_type)
+            });
+        assert!(valid, "{path}: JSON type does not match schema");
+    }
+    if let Some(required) = schema.get("required").and_then(serde_json::Value::as_array) {
+        let object = value.as_object().expect("required applies to an object");
+        for key in required.iter().filter_map(serde_json::Value::as_str) {
+            assert!(object.contains_key(key), "{path}: missing required `{key}`");
+        }
+    }
+    if let (Some(properties), Some(object)) = (
+        schema
+            .get("properties")
+            .and_then(serde_json::Value::as_object),
+        value.as_object(),
+    ) {
+        for (key, property_schema) in properties {
+            if let Some(property) = object.get(key) {
+                validate_schema_fixture(property_schema, property, &format!("{path}.{key}"));
+            }
+        }
+    }
+    if let (Some(item_schema), Some(items)) = (schema.get("items"), value.as_array()) {
+        for (index, item) in items.iter().enumerate() {
+            validate_schema_fixture(item_schema, item, &format!("{path}[{index}]"));
+        }
+    }
+    if let (Some(min_items), Some(items)) = (
+        schema.get("minItems").and_then(serde_json::Value::as_u64),
+        value.as_array(),
+    ) {
+        assert!(items.len() as u64 >= min_items, "{path}: too few items");
+    }
+}
+
+#[test]
+fn json_contract_fixtures_match_published_schemas() {
+    let root = repo_root().join("docs/schemas");
+    for name in [
+        "error-v1",
+        "list-v1",
+        "jira-issue-list-v1",
+        "confluence-page-list-v1",
+        "operation-plan-v1",
+        "mutation-receipt-v1",
+    ] {
+        let schema: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join(format!("{name}.schema.json")))
+                .expect("read JSON schema"),
+        )
+        .expect("parse JSON schema");
+        let fixture: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join("fixtures").join(format!("{name}.json")))
+                .expect("read JSON fixture"),
+        )
+        .expect("parse JSON fixture");
+        if let Some(all_of) = schema.get("allOf").and_then(serde_json::Value::as_array) {
+            for referenced in all_of {
+                if let Some(reference) = referenced.get("$ref").and_then(serde_json::Value::as_str)
+                {
+                    let referenced_schema: serde_json::Value = serde_json::from_str(
+                        &std::fs::read_to_string(root.join(reference))
+                            .expect("read referenced JSON schema"),
+                    )
+                    .expect("parse referenced JSON schema");
+                    validate_schema_fixture(&referenced_schema, &fixture, name);
+                } else {
+                    validate_schema_fixture(referenced, &fixture, name);
+                }
+            }
+        }
+        validate_schema_fixture(&schema, &fixture, name);
     }
 }
 

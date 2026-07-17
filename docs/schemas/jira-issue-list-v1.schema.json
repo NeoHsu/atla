@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/jira-issue-list-v1.schema.json",
+  "title": "atla Jira issue list v1",
+  "allOf": [
+    { "$ref": "list-v1.schema.json" }
+  ],
+  "type": "object",
+  "required": ["schemaVersion", "issues", "pagination"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "key": { "type": ["string", "null"] },
+          "fields": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

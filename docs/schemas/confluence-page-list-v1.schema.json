@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/confluence-page-list-v1.schema.json",
+  "title": "atla Confluence page list v1",
+  "allOf": [
+    { "$ref": "list-v1.schema.json" }
+  ],
+  "type": "object",
+  "required": ["schemaVersion", "results", "pagination"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "title": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

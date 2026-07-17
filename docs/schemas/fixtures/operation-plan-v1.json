@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "planVersion": 1,
+  "operation": "jira.issue.create",
+  "profile": "work",
+  "site": "https://example.atlassian.net",
+  "requests": [
+    {
+      "method": "POST",
+      "url": "https://example.atlassian.net/rest/api/3/issue",
+      "body": { "fields": { "summary": "Example" } }
+    }
+  ],
+  "preconditions": [],
+  "unresolved": [],
+  "inputFiles": [],
+  "mutating": true,
+  "createdAt": "2026-07-17T00:00:00Z",
+  "expiresAt": "2026-07-17T01:00:00Z",
+  "planHash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/mutation-receipt-v1.schema.json",
+  "title": "atla mutation receipt v1",
+  "type": "object",
+  "required": ["schemaVersion", "operation", "profile", "target", "requestId", "completedAt"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "operation": { "type": "string", "minLength": 1 },
+    "profile": { "type": "string", "minLength": 1 },
+    "target": { "type": ["string", "integer", "null"] },
+    "requestId": { "type": ["string", "null"] },
+    "completedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

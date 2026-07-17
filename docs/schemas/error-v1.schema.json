@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/error-v1.schema.json",
+  "title": "atla error envelope v1",
+  "type": "object",
+  "required": ["schemaVersion", "error"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "error": {
+      "type": "object",
+      "required": ["kind", "message", "status", "retryable"],
+      "properties": {
+        "kind": {
+          "enum": ["usage", "auth", "not_found", "retryable", "ambiguous_mutation", "other"]
+        },
+        "message": { "type": "string" },
+        "status": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+        "retryable": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

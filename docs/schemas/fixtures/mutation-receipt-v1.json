@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "operation": "jira.issue.attachment.delete",
+  "profile": "work",
+  "target": "10001",
+  "requestId": null,
+  "completedAt": "2026-07-17T00:00:00Z",
+  "deleted": "10001"
+}

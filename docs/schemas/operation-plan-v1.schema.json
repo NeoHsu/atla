@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/operation-plan-v1.schema.json",
+  "title": "atla operation plan v1",
+  "type": "object",
+  "required": ["schemaVersion", "planVersion", "operation", "profile", "site", "requests", "preconditions", "unresolved", "inputFiles", "mutating", "createdAt", "expiresAt", "planHash"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "planVersion": { "const": 1 },
+    "operation": { "type": "string", "minLength": 1 },
+    "profile": { "type": "string", "minLength": 1 },
+    "site": { "type": "string", "format": "uri" },
+    "requests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["method", "url"],
+        "properties": {
+          "method": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "body": {}
+        },
+        "additionalProperties": false
+      }
+    },
+    "preconditions": { "type": "array", "items": { "type": "string" } },
+    "unresolved": { "type": "array", "items": { "type": "string" } },
+    "inputFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "mutating": { "const": true },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "planHash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "additionalProperties": false
+}

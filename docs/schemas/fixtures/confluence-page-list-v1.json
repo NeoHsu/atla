@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "results": [
+    { "id": "123", "title": "Runbook", "status": "current" }
+  ],
+  "pagination": {
+    "isLast": true,
+    "nextPageToken": null,
+    "nextCommand": null
+  }
+}

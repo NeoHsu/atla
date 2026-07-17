@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "issues": [
+    { "id": "10001", "key": "PROJ-1", "fields": {} }
+  ],
+  "pagination": {
+    "isLast": true,
+    "nextPageToken": null,
+    "nextCommand": null
+  }
+}

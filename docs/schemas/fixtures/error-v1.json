@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "error": {
+    "kind": "not_found",
+    "message": "resource not found",
+    "status": 404,
+    "retryable": false
+  }
+}
