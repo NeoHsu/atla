@@ -1,0 +1,55 @@
+{
+  "skill_name": "atla-cli",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Delete Confluence page 123456 from the work profile. This is automation, so don't stop to ask me questions or wait for a prompt.",
+      "expected_output": "The agent verifies the active profile/site, reads the target, and uses the destructive command with --yes; it does not claim an interactive confirmation exists.",
+      "files": [],
+      "expectations": [
+        "Runs or requests `atla --output json auth status` before the mutation",
+        "Uses `atla --profile work --no-input confluence page delete 123456 --yes` or an equivalent ordering of global flags",
+        "States that destructive commands fail without --yes and never prompt",
+        "Does not purge unless the page is already trashed and space-admin permission is confirmed"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Create a saved plan to update Confluence page 654321 from runbook.md in space ENG, then apply it. Keep everything JSON and offline until apply.",
+      "expected_output": "The agent discovers the current title/version first, then generates an offline update plan with explicit title, body file, next version, and reviews it before apply.",
+      "files": [],
+      "expectations": [
+        "Discovers page metadata before plan generation and calculates the explicit next version",
+        "The plan command supplies --title, --body-file, --representation markdown, and --version",
+        "Does not attempt to resolve --space during the offline update plan",
+        "Applies only with `atla apply ... --yes --output json` after reviewing profile, site, URL, and body"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Test every implemented Confluence function against our CLI TEST page, but do not run space create/update/delete. Create temporary pages, blogs, comments and attachments, then clean up everything.",
+      "expected_output": "The agent verifies the tenant and baseline before mutations, keeps an explicit temporary-resource ledger, marks the three excluded command leaves as skipped, and does not claim completion while cleanup remains unresolved.",
+      "files": [],
+      "expectations": [
+        "Captures auth-status and target-page baseline JSON before the first mutation",
+        "Lists the implemented Confluence command leaves and marks space create/update/delete skipped with the user's reason",
+        "Records every created page, blog, comment, label, and attachment ID with its parent",
+        "Resumes the same ledger after a failure instead of starting a replacement run",
+        "Deletes only IDs created by the current run",
+        "Reports active, trashed, or purge-blocked resources instead of claiming a clean pass"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Set up a second Atlassian profile called staging for https://staging.atlassian.net in CI. The token is in ATLASSIAN_TOKEN and must not appear in process arguments.",
+      "expected_output": "The agent selects the staging profile explicitly, pipes the token to --token-stdin, uses file-backed storage for CI, and verifies status without claiming profile names are derived automatically.",
+      "files": [],
+      "expectations": [
+        "Uses global `--profile staging` on auth login",
+        "Pipes ATLASSIAN_TOKEN to --token-stdin rather than using --token",
+        "Includes --no-input and --storage file",
+        "Verifies the resulting profile with auth status"
+      ]
+    }
+  ]
+}

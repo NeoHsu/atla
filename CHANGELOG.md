@@ -37,6 +37,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Refactored the bundled agent skill around fail-closed, atla-native mutation gates.
+- Added a tested maintainer-only Confluence live-smoke coverage/resource ledger to the repository.
 - Bounded `--all` requests now stop safely and emit a resume token.
 - Generated clients now retry transient read/idempotent failures under a bounded policy.
 - JSON body views and supplementary Jira/Confluence data now remain a single JSON document or CSV

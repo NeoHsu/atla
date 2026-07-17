@@ -1,5 +1,8 @@
 # Authentication & Configuration Reference
 
+Use `atla auth --help` or `atla config --help` as the runtime syntax authority. Global execution
+controls and safety gates live in `../SKILL.md`.
+
 ## Authentication
 
 Atlassian API tokens expire after a configurable 1–365 days. Rotate stored tokens before
@@ -27,22 +30,15 @@ printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
   --instance https://example.atlassian.net --email you@example.com --token-stdin
 ```
 
-Scoped token:
+For a scoped token, discover the tenant and add the returned Cloud ID to the non-interactive login
+command above as `--cloud-id 11111111-2222-3333-4444-555555555555`:
 
 ```bash
 atla --output json auth discover --site https://example.atlassian.net
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
-  --instance https://example.atlassian.net \
-  --cloud-id 11111111-2222-3333-4444-555555555555 \
-  --email you@example.com --token-stdin
 ```
 
-Headless/CI (file-backed):
-
-```bash
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input --storage file \
-  --instance https://example.atlassian.net --email you@example.com --token-stdin
-```
+For headless or CI storage, add `--storage file` to the same canonical login command. Do not replace
+`--token-stdin` with a token-bearing process argument.
 
 Instance URL is auto-normalized: `example.atlassian.net` becomes `https://example.atlassian.net`.
 
@@ -70,11 +66,12 @@ atla auth switch <profile>
 
 ## Multiple Profiles
 
-Each unique instance/email pair creates a separate profile. Switch between them:
+Login writes the profile selected by global `--profile`; without it, the profile name is `default`.
+It does not derive a profile name from the instance/email pair. Create a named profile by adding
+`--profile work` to the canonical login command, then switch to it:
 
 ```bash
 atla auth switch work
-atla auth switch personal
 ```
 
 Per-command override without switching:
@@ -146,7 +143,8 @@ atla completion powershell | Out-File -Encoding utf8 atla-completion.ps1
 
 ## Aliases
 
-Aliases expand before argument parsing (one level, no recursion).
+Aliases expand before argument parsing and may chain through other aliases. Expansion stops after
+at most eight steps; cycles fail instead of recursing indefinitely.
 
 ```bash
 atla config set aliases.mine "jira search 'assignee = currentUser() order by updated desc'"

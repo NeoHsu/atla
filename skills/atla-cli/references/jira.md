@@ -1,11 +1,9 @@
 # Jira Command Reference
 
-Complete syntax and flags for all `atla jira` commands. All commands accept global flags:
-`-o/--output`, `--profile`, `--verbose`, `--dry-run`, `--read-only`, `--max-pages`,
-`--max-items`, `--max-bytes`, `--timeout`, `--no-input`.
-
-**Pagination.** `--limit`/`--page-token`/`--all` semantics are defined once in SKILL.md
-(section "Pagination"); the syntaxes below only show which commands accept them.
+Use a concrete help path such as `atla jira issue create --help` as the runtime syntax authority.
+Global execution controls,
+safety gates, and opaque pagination-token behavior live in `../SKILL.md`; the summaries below show
+which Jira collection commands accept pagination controls.
 
 ---
 
@@ -113,7 +111,7 @@ CSV uses one `record_type` header, and keys remain one identifier per line.
 ### Delete an issue
 
 ```
-atla jira issue delete <KEY> [--delete-subtasks] [--yes]
+atla jira issue delete <KEY> [--delete-subtasks] --yes
 ```
 
 ### Assign an issue
@@ -154,7 +152,6 @@ Returns each field's ID, name, required flag, type, and allowed values.
 Use this before `issue create` to discover what `--field` values are needed.
 
 ```bash
-atla jira issue fields --project PROJ --type Bug --required-only
 atla jira issue fields --project PROJ --type Bug -o json
 ```
 
@@ -194,7 +191,7 @@ atla jira issue comment update <KEY> <COMMENT_ID> [--body TEXT | --body-file FIL
 ### Delete a comment
 
 ```
-atla jira issue comment delete <KEY> <COMMENT_ID> [--yes]
+atla jira issue comment delete <KEY> <COMMENT_ID> --yes
 ```
 
 ---
@@ -224,7 +221,7 @@ Use `--all` with an issue key to download all attachments.
 ### Delete
 
 ```
-atla jira issue attachment delete <ATTACHMENT_ID> [--yes]
+atla jira issue attachment delete <ATTACHMENT_ID> --yes
 ```
 
 ---
@@ -248,7 +245,7 @@ atla jira issue link list <KEY>
 ### Remove an issue link
 
 ```
-atla jira issue link remove <LINK_ID> [--yes]
+atla jira issue link remove <LINK_ID> --yes
 ```
 
 ### GitHub development links

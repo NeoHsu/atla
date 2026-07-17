@@ -1,298 +1,216 @@
 ---
 name: atla-cli
 description: >
-  Reference and usage skill for the `atla` Atlassian CLI — a unified command-line tool
-  for Jira and Confluence Cloud. Use this skill whenever the user wants to interact with
-  Jira or Confluence from the terminal using `atla`: searching issues, creating or updating
-  Jira tickets, managing sprints and boards, reading or publishing Confluence pages, managing
-  spaces, uploading attachments, or any Atlassian Cloud automation. Also use when the user
-  mentions `atla` commands, asks about JQL/CQL queries, or wants to script Atlassian
-  workflows. Even if the user just says "create a Jira ticket", "check my sprint", "update
-  the confluence page", "find issues assigned to me" — or in Chinese: 「開一張 Jira 票」、
-  「建立工單」、「查 sprint」、「更新 Confluence 頁面」、「找我負責的 issue」、「搜尋
-  Confluence」、「上傳附件到頁面」 — use this skill, because `atla` is the tool installed
-  in this environment for those tasks.
+  Reference and execution skill for the `atla` Jira + Confluence Cloud CLI. Use it whenever
+  the user wants to search, read, create, update, transition, attach, comment on, or delete
+  Atlassian content; automate Jira/Confluence workflows; use JQL/CQL; or asks about an `atla`
+  command. Trigger even when the user does not name the CLI, for requests such as “create a
+  Jira ticket”, “check my sprint”, “publish this Confluence page”, 「開一張 Jira 票」、
+  「建立工單」、「查 sprint」、「更新 Confluence 頁面」、「找我負責的 issue」、
+  「搜尋 Confluence」或「上傳附件到頁面」, because `atla` is the installed execution tool.
 ---
 
-# atla CLI Reference
+# atla CLI
 
-`atla` is a Rust CLI for day-to-day Atlassian Cloud work. It covers Jira (projects, issues,
-boards, sprints) and Confluence (spaces, pages, blogs, search, attachments) with profile-based
-auth, multiple output formats, and a global `--dry-run` safety net.
+Use `atla` as a deterministic Jira + Confluence Cloud execution layer. Prefer machine-readable,
+bounded, non-interactive commands and verify remote state after mutations.
 
-## Prerequisites
+## Execution gate
 
-Any command that exits with code `3` means auth/profile is not set up — its stderr
-contains the exact `atla auth login ...` command to fix it; run that (or show it to the
-user), verify with `atla auth status`, then retry the original command:
+Run these gates before copying a command from the examples below.
+
+### 1. Verify the active target
 
 ```bash
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
-  --instance https://example.atlassian.net --email you@example.com --token-stdin
-atla auth status  # verify
+atla --output json auth status
 ```
 
-For headless/CI environments, use `--storage file` or set `ATLA_TOKEN` env var.
-Atlassian tokens expire after a configurable 1–365 days; rotate them before expiry. For a
-scoped token, add `--cloud-id CLOUD_ID` to `auth login`; atla then selects separate Jira and
-Confluence `api.atlassian.com/ex/{product}/{cloudId}` roots.
+Confirm the profile, instance, API target, and policy mode match the user's intended tenant. An
+exit code `3` means auth/profile setup is missing; read `references/auth-config.md` and follow the
+exact remediation from stderr before continuing. Never put a token in a shell argument when
+`--token-stdin` is available.
 
-## Global Flags (available on every command)
+### 2. Discover before mutating
 
-| Flag | Purpose |
-|------|---------|
-| `-o, --output json\|table\|csv\|keys` | Output format (default: `table`) |
-| `--profile NAME` | Use a specific auth profile |
-| `--dry-run` | Preview the API call without executing |
-| `--read-only` | Reject real local/remote mutations; allow dry-run previews |
-| `--max-pages N` | Stop automatic pagination after N API pages |
-| `--max-items N` | Return at most N records |
-| `--max-bytes N` | Refuse oversized JSON output (requires `--output json`) |
-| `--timeout SECONDS` | Bound each API request, upload, and download |
-| `--no-input` | Disable interactive prompts (for scripts/CI) |
-| `--verbose` | Show HTTP request/response details |
-
-## Pagination, `--limit`, `--page-token`, and `--all`
-
-On list/search commands, `--limit N` is a max-results cap for the current invocation.
-`atla` paginates the underlying API automatically (Jira `nextPageToken`/`startAt`,
-Confluence cursor or CQL `start`/`totalSize`) and accumulates up to `N` items before
-returning — there is no need to write batch loops in the shell.
-
-If `--limit` is reached but more matches exist server-side, `atla` exposes a next-page
-token. Table output prints a ready-to-copy command, JSON output includes a `pagination`
-object, and `keys`/`csv` keep stdout record-only while writing the next-page hint to
-stderr:
-
-```text
-More results available.
-Next page:
-  atla jira search 'project = PROJ' --limit 50 --page-token <TOKEN>
-```
-
-Treat `--page-token` as opaque. Pass it back to the same command/query to continue; it is
-validated against the command and query and fails fast if reused with different filters,
-JQL/CQL, fields, or content IDs.
-
-When you want every matching record without picking a number, use `--all`. Without a global
-budget it runs until the server reports no more results and does not emit next-page metadata.
-`--all` is mutually exclusive with both `--limit` and `--page-token`. If `--max-pages` or
-`--max-items` stops it, atla emits a resume token. Prefer bounded runs for agents:
+Read the exact target with `--read-only`, use IDs returned by the API, and bound broad reads:
 
 ```bash
 atla --read-only --max-pages 5 --max-items 200 --max-bytes 1000000 --timeout 30 \
-  --output json jira search 'project = PROJ ORDER BY updated DESC'
+  --output json confluence page view 123456
 ```
 
-## Command Tree Overview
+Record the target ID and current version. Do not infer a Jira project, Confluence space, profile,
+or resource ID from a title alone.
+
+### 3. Make mutation scope auditable
+
+Before a mutation, state the operation, profile/site, target IDs, expected effect, and cleanup
+method. Destructive commands require `--yes` and **never prompt**; without it they fail before
+credentials or network access. Dry-run previews are exempt from confirmation.
+
+For two or more live mutations, bulk work, or exhaustive smoke testing, keep an explicit temporary
+resource ledger in the task notes or a private file. Record each operation, every created ID and
+parent, and its cleanup state. Resume that ledger after a failure instead of restarting from
+scratch, and only delete IDs created by the current run. If the user excludes a command or scope,
+record it as `skipped` with a reason rather than silently counting it as passed.
+
+### 4. Preview with the supported mechanism
+
+Structured JSON dry-run and saved plans are supported only for:
+
+- `jira.issue.create`
+- `confluence.page.create`
+- `confluence.page.update`
+- `confluence.blog.create`
+- `confluence.blog.update`
+
+For these operations, prefer `atla plan ... --out FILE` followed by reviewed
+`atla apply FILE --yes`. For any other operation, use a non-JSON `--dry-run`; combining an
+unsupported operation with `--dry-run --output json` intentionally exits with code `2`.
+`--read-only` permits stdout-only dry-run previews but blocks saved-plan files and apply.
+
+### 5. Verify and clean up
+
+After a mutation, query the target and compare the observed state with the requested state. On
+`kind=ambiguous_mutation`, never repeat blindly: search the target first because the server may
+have committed the request.
+
+Normal Confluence page/blog/attachment deletion moves content to trash. `--purge` applies only to
+an already-trashed item and requires space-admin permission; draft deletion is already permanent.
+Keep cleanup failures and trash IDs visible in the result.
+
+## Runtime source of truth
+
+Use the references for command discovery and traps. Before relying on exact syntax, run:
+
+```bash
+atla <command path> --help
+```
+
+The runtime parser is authoritative. Repository examples are parse-checked, but parser checks do
+not prove tenant permissions, API semantics, or cleanup success.
+
+## Global execution controls
+
+| Flag | Contract |
+|------|----------|
+| `-o, --output json\|table\|csv\|keys` | Output format; use JSON for agents |
+| `--profile NAME` | Select the exact auth/config profile |
+| `--dry-run` | Preview without executing the mutation |
+| `--read-only` | Reject local and remote writes |
+| `--max-pages N` | Bound pages fetched during pagination |
+| `--max-items N` | Bound accumulated records |
+| `--max-bytes N` | Bound JSON output; requires `--output json` |
+| `--timeout SECONDS` | Per-request timeout, including upload/download |
+| `--no-input` | Disable interactive input for automation and CI |
+| `--verbose` | Emit request/response diagnostics on stderr |
+
+Runtime failures use exit codes `2` usage/policy, `3` auth, `4` not found, `5` safely retryable,
+and `1` other. With JSON output, stderr contains a versioned error object. Stdout remains one JSON
+document; warnings and pagination hints use stderr.
+
+## Pagination
+
+`--limit N` caps the current invocation. If more data exists, table output prints a next command,
+JSON includes `pagination.nextPageToken` and `pagination.nextCommand`, and CSV/keys keep stdout
+record-only while writing the hint to stderr. Tokens are opaque and query-bound.
+
+`--all` is mutually exclusive with `--limit` and `--page-token`. Unbounded `--all` runs to
+exhaustion; when global page/item budgets stop it, atla returns a resume token. Agents should
+prefer bounded runs.
+
+## Command tree
 
 ### Core
 
-- `atla auth login/logout/status/switch` — manage profiles and credentials
-- `atla config set/get/list` — configuration and aliases
-- `atla completion bash/elvish/fish/powershell/zsh` — shell completions
+- `auth login/discover/logout/status/switch`
+- `config set/get/list`
+- `completion bash/elvish/fish/powershell/zsh`
+- `plan jira ...` / `plan confluence ...`
+- `apply <PLAN> --yes`
 
-### Jira (`atla jira ...`)
+### Jira
 
 - `project list/view/issue-types`
-- `search <JQL>` — run JQL queries
-- `issue list/create/view/update/edit/delete`
-- `issue fields` — list create-meta fields (required flag, type, allowed values)
-- `issue assign/transition`
-- `issue comment add/list/update/delete` (supports `--attachment` and `--attachment-mode`)
+- `search <JQL>`
+- `issue list/create/view/update/edit/delete/fields/assign/transition`
+- `issue comment add/list/update/delete`
 - `issue attachment upload/list/download/delete`
-- `issue link add/list/remove` (and `github-links` / `github-commits`)
+- `issue link add/list/remove/github-links/github-commits`
 - `issue worklog add/list`
 - `board list/view`
 - `sprint list/active/view/create/start/close/add/remove/issues`
 
-### Confluence (`atla confluence ...`)
+### Confluence
 
 - `space list/view/create/update/delete`
 - `page list/view/children/copy/create/update/move/delete`
 - `page label list/add/remove`
-- `page comment list/add/delete` (supports markdown options and page attachment references)
+- `page comment list/add/delete`
 - `blog list/view/create/update/delete`
 - `blog label list/add/remove`
 - `blog comment list/add/delete`
-- `search <CQL>` — run CQL queries
+- `search <CQL>`
 - `attachment list/view/upload/download/delete`
 
-## Quick Patterns
+## Quick patterns
 
-### Find my open Jira work
-
-```bash
-atla jira search 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC'
-```
-
-### Discover required fields before creating an issue
+### Find open work
 
 ```bash
-atla jira issue fields --project PROJ --type Bug --required-only
+atla --read-only --output json jira search \
+  'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC' --limit 50
 ```
 
-Use `issue fields` before `issue create` when a project has required custom fields.
-The output shows each field's ID (for `--field`), type, and allowed values.
-
-For **string** type fields, wrap the value as a JSON string:
-`--field 'customfield_10166="5.1.0"'` — not `--field customfield_10166=5.1.0`
-
-Plain values without quotes are auto-wrapped as `{"name":"..."}`, which the API rejects for string fields.
-
-### Create a Jira issue
+### Discover required fields, then create
 
 ```bash
-atla jira issue create --project PROJ --type Task --summary "Fix login bug" \
-  --description "Users see 500 error on /login" --labels bug,urgent
+atla jira issue fields --project APP --type Task --required-only
+atla jira issue create --project APP --type Task --summary 'Fix login failure'
 ```
 
-### Transition an issue
+String custom fields require JSON string syntax, for example
+`--field 'customfield_10166="5.1.0"'`; read `references/jira.md` before supplying arbitrary fields.
+
+### Read or author Confluence Markdown
 
 ```bash
-atla jira issue transition PROJ-123 --to Done
+atla --read-only confluence page view 123456 --format markdown
+atla confluence page create --space ENG --title 'Meeting Notes' \
+  --body-file notes.md --representation markdown --parent 654321
 ```
 
-### Comment with attachments
+### Comment with an attachment
 
 ```bash
-atla jira issue comment add PROJ-123 --body 'Please check logs' \
-  --attachment ./error.log --attachment-mode link
-atla confluence page comment add 123456 'Screenshot attached' \
-  --attachment ./screenshot.png --attachment-mode auto
+atla confluence page comment add 123456 'See attached evidence' \
+  --attachment ./evidence.png --attachment-mode auto
 ```
 
-### Batch transition with keys output
+Confluence-hosted files must be uploaded as attachments before they are referenced. See the
+storage/ADF examples and CSP caveat in `references/confluence.md` rather than embedding an external
+URL.
 
-```bash
-atla jira issue list --project PROJ --status 'To Do' --output keys \
-  | xargs -I{} atla --no-input jira issue transition {} --to 'In Progress'
-```
+## Common traps
 
-### Read a Confluence page as Markdown
+- `confluence page view` and `blog view` return metadata unless `--format` is supplied.
+- Page/blog create/update and page/blog comments default body input to `storage`; always pass
+  `--representation markdown` for Markdown files. Markdown input is converted to ADF.
+- Page/blog update plans are offline: supply explicit title, body/body-file, and next version.
+  Create plans that name a Confluence space must use `--space-id`.
+- Confluence footer-comment replies must identify the parent comment; do not reuse an unrelated
+  page/blog comment ID.
+- Confluence `--purge` is a second delete after trashing and requires space-admin permission.
+- Jira transitions may prompt only when `--to` is omitted and both stdin/stdout are TTYs. Use
+  `--no-input` for agents.
+- Treat `--page-token` and plan hashes as opaque. A plan digest detects modification but is not a
+  signature; never apply an untrusted plan.
 
-```bash
-atla confluence page view 123456 --format markdown
-```
+## Load the relevant reference
 
-### Create a Confluence page from a Markdown file
+Read only the file needed for the task:
 
-```bash
-atla confluence page create --space ENG --title "Meeting Notes" \
-  --body-file notes.md --representation markdown
-
-# Add numbered rows support in Markdown tables
-atla confluence page create --space ENG --title "Release Notes" \
-  --body-file release-notes.md --representation markdown --numbered-table-rows
-```
-
-### Search Confluence
-
-```bash
-atla confluence search 'type = page AND space = ENG AND label = runbook' --limit 25
-```
-
-## Confluence: Always Use Attachments, Never External URLs
-
-Confluence Cloud blocks externally referenced files (images, PDFs, etc.) via Content Security Policy. Any `<ri:url>` reference will silently fail to render without admin-level domain allowlisting — this applies to **all file types**, not just images.
-
-**Rule: if a file needs to appear in a page, upload it first, then reference it by filename.**
-
-```bash
-# 1. Download the file locally
-curl -sL -o /tmp/file.jpg "https://example.com/file.jpg"
-
-# 2. Upload as a page attachment
-atla confluence attachment upload PAGE_ID /tmp/file.jpg
-
-# 3. Reference by attachment name in Storage Format — never by URL
-# Images:  <ac:image><ri:attachment ri:filename="file.jpg"/></ac:image>
-# Files:   <ac:structured-macro ac:name="view-file">
-#             <ac:parameter ac:name="name"><ri:attachment ri:filename="file.pdf"/></ac:parameter>
-#           </ac:structured-macro>
-```
-
-If a page was already created with external URL references, fix it:
-
-```bash
-atla confluence page update PAGE_ID --body-file fixed.xml --representation storage --version 4
-```
-
-## Common Traps
-
-- `confluence page view <ID>` / `blog view <ID>` return **metadata only** (no body).
-  To get content, pass `--format markdown` (or `storage` / `atlas-doc-format`).
-- `page create/update` and comment `--body-file` default to `--representation storage`
-  (XHTML). Feeding a Markdown file without `--representation markdown` produces broken
-  content — always pass the flag when the source is Markdown.
-- Runtime errors use classified exit codes: `2` usage, `3` auth, `4` not found,
-  `5` safe-to-retry transient, `1` anything else. With `-o json`, stderr carries
-  `{"schemaVersion": 1, "error": {"kind", "message", "status", "retryable"}}` instead of prose. For
-  `kind=ambiguous_mutation`, query the target to verify whether it committed; never blindly
-  repeat it. Auth errors include the exact `atla auth login ...` command to fix them.
-
-## Safety Rules
-
-- Use `--read-only` for discovery/planning agents. A dry-run mutation preview remains allowed.
-  Persistent profile rules use `profiles.<name>.policy.mode/allow/deny`; deny wins over allow,
-  and `*` is an anchored wildcard over the complete operation ID.
-- Bound broad reads with `--max-pages`, `--max-items`, `--max-bytes`, and `--timeout`;
-  bounded `--all` runs return a resume token.
-- Always use `--dry-run` before destructive operations (delete, transition) when unsure.
-  Jira issue and Confluence page/blog create/update support `--output json` operation plans with
-  exact method, URL, and body; use them to verify field assembly and Markdown→ADF conversion.
-  Supported plans can be saved with `atla plan ... --out FILE` and executed only via
-  `atla apply FILE --yes`; apply verifies hash, expiry, active profile/site, policy, and URL.
-- Always pass `--yes` for delete commands to skip confirmation, or omit it to get a prompt.
-- Use `--no-input` in automated/scripted contexts to prevent hanging on prompts.
-- For bulk operations, preview with `--dry-run` first, then remove it to execute.
-
-## Detailed References
-
-For full syntax, all flags, and advanced patterns for each command group, read:
-
-- **Jira commands**: `references/jira.md` — projects, search, issues, comments, attachments, links, worklogs, boards, sprints, JQL reference, `--fields` usage, `--field KEY=VALUE` patterns
-- **Confluence commands**: `references/confluence.md` — spaces, pages, blogs, search, attachments, labels, comments, CQL reference, content representations (storage/wiki/ADF/markdown)
-- **Auth & config**: `references/auth-config.md` — login flows, multi-profile setup, aliases, environment variables, credential storage strategies
-- **Saved plans**: `references/plans.md` — supported operations, plan/apply validation, hashes, and receipts
-
-Read the appropriate reference file when you need exact flag syntax or edge-case details for a specific command.
-
-## Configuration Essentials
-
-Config file: `~/.config/atla/config.toml`
-
-```bash
-atla config set default-project PROJ          # default Jira project
-atla config set default-space ENG             # default Confluence space
-atla config set aliases.mine "jira search 'assignee = currentUser() order by updated desc'"
-atla mine  # alias expands before parsing
-```
-
-## Environment Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `ATLA_TOKEN` / `ATLA_API_TOKEN` | API token override (highest priority) |
-| `ATLA_CONFIG` | Custom config file path |
-| `ATLA_CREDENTIALS` | Custom credentials file path |
-| `ATLA_READ_ONLY` | Enforce mutation blocking |
-
-## Output Formats for Scripting
-
-| Format | Best for |
-|--------|----------|
-| `json` | `jq` pipelines, API payload inspection |
-| `csv` | Spreadsheets, simple exports |
-| `keys` | Shell loops, `xargs`, batch operations |
-| `table` | Human reading (default) |
-
-```bash
-# JSON + jq
-atla jira search 'project = PROJ' -o json | jq '.issues[] | {key, summary: .fields.summary}'
-
-# Keys for loops
-for key in $(atla jira issue list --project PROJ -o keys); do
-  atla jira issue view "$key"
-done
-```
+- `references/jira.md` — exact Jira syntax, fields, JQL, boards, and sprints
+- `references/confluence.md` — exact Confluence syntax, representations, CQL, and attachments
+- `references/auth-config.md` — login, discovery, profiles, policy, aliases, and environment
+- `references/plans.md` — supported plan/apply operations and validation requirements

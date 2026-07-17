@@ -1,5 +1,16 @@
 # Saved Plan Reference
 
+Use `atla plan --help` and `atla apply --help` as the runtime syntax authority. Saved plans are
+available only for the operation IDs listed below and always use JSON output.
+
+## Supported operations
+
+- `jira.issue.create`
+- `confluence.page.create`
+- `confluence.page.update`
+- `confluence.blog.create`
+- `confluence.blog.update`
+
 ## Generate
 
 ```bash
@@ -10,13 +21,33 @@ atla plan confluence page create --space-id 123 --title 'Runbook' \
   --body-file runbook.md --representation markdown --out page-plan.json
 ```
 
-Optional: `--expires-in 1800` (range 1–86,400 seconds; default 3,600).
+Plan generation is local and network-free, so values that normally require a lookup must be
+explicit:
 
-Supported IDs: `jira.issue.create`, `confluence.page.create`, `confluence.page.update`,
-`confluence.blog.create`, and `confluence.blog.update`.
+- Confluence create plans require `--space-id`; `--space` cannot be resolved offline.
+- Page/blog update plans require `--title`, `--body` or `--body-file`, and the explicit next
+  `--version`.
+- `--resolve-mentions` is unavailable offline; use deterministic `--mention NAME=ACCOUNT_ID` on
+  page operations.
 
-Plan generation is local and network-free. The JSON includes exact URL/body, profile/site,
-preconditions, input-file hashes, expiration, and `planHash`; it excludes credentials.
+Optional `--expires-in 1800` accepts 1–86,400 seconds and defaults to 3,600. A plan file is at most
+1 MiB and is written atomically with user-only permissions on Unix. It contains the exact URL/body,
+profile/site, preconditions, input-file hashes, expiration, and `planHash`; it excludes credentials.
+
+`--read-only` allows a stdout JSON dry-run preview but blocks writing a saved plan file. Operations
+outside the supported list reject `--dry-run --output json`; use a non-JSON dry-run for those.
+
+## Review
+
+Before apply, verify:
+
+1. `operation`, `profile`, and `site` match the approved target.
+2. Every request uses the expected method, same-origin URL, path, and query.
+3. `unresolved` is empty and input-file hashes still match.
+4. The body and expected effect match the user's request.
+
+A SHA-256 plan digest is tamper-evident, not a signature. Never apply a plan from an untrusted
+source.
 
 ## Apply
 
@@ -24,10 +55,9 @@ preconditions, input-file hashes, expiration, and `planHash`; it excludes creden
 atla apply create-plan.json --yes --output json
 ```
 
-Apply requires `--yes` and validates schema, digest, expiry, input hashes, profile/site, original
-operation policy, same-origin URL, and a built-in method/path/query allowlist. It is not arbitrary
-HTTP replay. `--read-only` blocks apply.
+Apply requires `--yes`; there is no prompt. It validates schema, digest, expiry, input hashes,
+active profile/site, operation policy, same-origin URL, and a built-in method/path/query allowlist.
+It is not arbitrary HTTP replay, and `--read-only` blocks it.
 
-A digest is not a signature. Review the plan and never apply one from an untrusted source.
-Successful JSON includes mutation receipt fields. On `ambiguous_mutation`, verify remote state and
-do not blindly apply again.
+Successful output includes mutation-receipt metadata. On `ambiguous_mutation`, query the target to
+determine whether it committed before considering another apply.

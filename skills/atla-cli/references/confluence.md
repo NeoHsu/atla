@@ -1,11 +1,9 @@
 # Confluence Command Reference
 
-Complete syntax and flags for all `atla confluence` commands. All commands accept global flags:
-`-o/--output`, `--profile`, `--verbose`, `--dry-run`, `--read-only`, `--max-pages`,
-`--max-items`, `--max-bytes`, `--timeout`, `--no-input`.
-
-**Pagination.** `--limit`/`--page-token`/`--all` semantics are defined once in SKILL.md
-(section "Pagination"); the syntaxes below only show which commands accept them.
+Use a concrete help path such as `atla confluence page create --help` as the runtime syntax
+authority. Global flags,
+operation gates, and pagination-token semantics live in `../SKILL.md`; the summaries below show
+which Confluence collection commands accept pagination controls.
 
 ---
 
@@ -41,7 +39,7 @@ atla confluence space update <KEY> [--name NAME] [--description TEXT | --descrip
 ### Delete a space
 
 ```
-atla confluence space delete <KEY> [--yes]
+atla confluence space delete <KEY> --yes
 ```
 
 ---
@@ -92,7 +90,6 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
                               [--draft] [--private]
 ```
 
-`--numbered-table-rows`, `--mention`, and `--resolve-mentions` apply when using `--representation markdown`.
 `--numbered-table-rows` enables numbered rows in Markdown tables.
 `--mention` maps a single `NAME=ACCOUNT_ID` pair and `--resolve-mentions` attempts to auto-resolve `@name` mentions.
 
@@ -117,12 +114,13 @@ atla confluence page update <ID> [--title TITLE] [--parent ID]
 
 Use `page move` for parent-only moves. `page update --parent ...` is for when also updating body/version.
 
-`--numbered-table-rows`, `--mention`, and `--resolve-mentions` apply when using `--representation markdown`.
+For both page create and update, `--numbered-table-rows`, `--mention`, and
+`--resolve-mentions` require `--representation markdown`.
 
 ### Delete a page
 
 ```
-atla confluence page delete <ID> [--purge] [--draft] [--yes]
+atla confluence page delete <ID> [--purge] [--draft] --yes
 ```
 
 `--purge` permanently removes an item that is already in trash and requires space-admin
@@ -184,7 +182,7 @@ atla confluence page comment add <PAGE_ID> [BODY | --body TEXT | --body-file FIL
 ### Delete a comment
 
 ```
-atla confluence page comment delete <PAGE_ID> <COMMENT_ID> [--yes]
+atla confluence page comment delete <PAGE_ID> <COMMENT_ID> --yes
 ```
 
 When `--attachment` is used, `atla` uploads each file to the page first, then appends attachment references to the new comment. `auto` embeds image-style references where supported and links other files; use `link` for links only or `embed` for richer embed-style references where supported.
@@ -229,7 +227,7 @@ atla confluence blog update <ID> [--title TITLE]
 ### Delete a blog post
 
 ```
-atla confluence blog delete <ID> [--purge] [--draft] [--yes]
+atla confluence blog delete <ID> [--purge] [--draft] --yes
 ```
 
 For `--purge`, first move the blog post to trash with a normal delete; purging requires
@@ -250,7 +248,7 @@ atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN] 
 atla confluence blog comment add <BLOG_ID> [BODY | --body TEXT | --body-file FILE]
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
-atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
+atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> --yes
 ```
 
 ---
@@ -300,7 +298,7 @@ atla confluence attachment download <ATTACHMENT_ID> [--save-to FILE | -f FILE]
 ### Delete an attachment
 
 ```
-atla confluence attachment delete <ATTACHMENT_ID> [--purge] [--yes]
+atla confluence attachment delete <ATTACHMENT_ID> [--purge] --yes
 ```
 
 For `--purge`, first move the attachment to trash with a normal delete; purging requires
@@ -310,7 +308,7 @@ space-admin permission.
 
 ## Content Body Representations
 
-### For write commands (`create`, `update`)
+### For body-writing commands (create, update, and comments)
 
 | Representation | Meaning | Best for |
 |----------------|---------|----------|

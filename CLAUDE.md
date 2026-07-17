@@ -48,6 +48,9 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   `npx skills add --copy` (a copy caused a 3-week doc/CLI drift in 2026-05/06).
 - Skill content policy: SKILL.md holds the command tree, common traps, and quick
   patterns; exact flag syntax lives in `references/*.md`.
+- The distributable skill must remain self-contained around the installed `atla` CLI. Do not
+  reference or bundle repository-only maintainer, CI, release, or live-smoke tooling there;
+  document those workflows under `docs/` instead.
 
 ## API codegen / specs
 
