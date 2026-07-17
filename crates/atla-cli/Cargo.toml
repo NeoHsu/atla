@@ -1,6 +1,6 @@
 [package]
 name = "atla"
-version = "0.5.1"
+version = "0.9.0"
 description = "Unified Atlassian CLI for Jira and Confluence"
 edition.workspace = true
 license.workspace = true
