@@ -134,18 +134,25 @@ Jira Software Agile endpoints (boards, sprints) are not part of the Jira platfor
 
 Filters the Confluence v1 spec and applies compatibility patches:
 
-- Paths included: content search, general search, user search, attachments, space info, content labels
-- Patches: normalizes multipart operations, fixes form-data fields, removes unsupported query parameters
-- Provides simplified schemas for `Content`, `SearchResult`, `Space`, etc.
+- Paths included: content search, general search, user search, space info, and
+  content labels.
+- Unsupported query parameters are removed.
+- Simplified schemas are provided for `Content`, `SearchResult`, `Space`, and
+  related response models.
 
-Page label mutation also uses Confluence v1 raw REST calls because the v2 API does not expose label add/remove endpoints.
+Attachment uploads are deliberately excluded from the generated client because
+progenitor does not support `multipart/form-data`. atla sends them through its
+raw reqwest multipart path while reusing the generated v1 response model. Page
+label mutation also uses Confluence v1 raw REST calls because the v2 API does
+not expose label add/remove endpoints.
 
 ### Confluence v2 partial spec (`scripts/confluence-v2-partial-spec.js`)
 
-Filters the upstream v2 spec to the operations used by atla, then follows their `$ref` closure so
-all required schemas remain available. The filter also applies the documented enum compatibility
-patches from `specs/PATCHES.md`. When core starts calling a new generated v2 operation, add its
-snake_case operation name to `usedOperations` and refresh the specs.
+Filters the upstream v2 spec to the operations used by atla, then follows their
+`$ref` closure so all required schemas remain available. The filter also
+applies the documented enum and malformed-upstream-schema repairs from
+`specs/PATCHES.md`. When core starts calling a new generated v2 operation, add
+its snake_case operation name to `usedOperations` and refresh the specs.
 
 ---
 
@@ -153,9 +160,11 @@ snake_case operation name to `usedOperations` and refresh the specs.
 
 ### Scheduled refresh
 
-`.github/workflows/spec-refresh.yml` runs weekly and on manual dispatch. It executes the update
-script, verifies fmt/check/workspace tests, and opens a review PR containing only `specs/**`
-changes; it never pushes directly to `main`. Review enum patches and operation diffs before merging.
+`.github/workflows/spec-refresh.yml` runs weekly and on manual dispatch. It
+executes the update script, verifies fmt/check/workspace tests, and opens a
+review PR containing only `specs/**` changes; it never pushes directly to
+`main`. Review every invariant in `specs/PATCHES.md` and all operation diffs
+before merging.
 
 ### Refresh workflow
 

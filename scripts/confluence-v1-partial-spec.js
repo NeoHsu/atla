@@ -4,17 +4,29 @@ const fs = require("fs");
 
 const [, , inputPath, outputPath] = process.argv;
 
-if (!inputPath || !outputPath) {
-  console.error("Usage: scripts/confluence-v1-partial-spec.js INPUT OUTPUT");
-  process.exit(2);
+function fail(message, exitCode = 1) {
+  process.stderr.write(`${message}\n`);
+  process.exit(exitCode);
 }
 
-const spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+if (!inputPath || !outputPath) {
+  fail("Usage: scripts/confluence-v1-partial-spec.js INPUT OUTPUT", 2);
+}
+
+let spec;
+try {
+  spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+} catch (error) {
+  fail(`failed to read Confluence v1 spec ${inputPath}: ${error.message}`);
+}
+
+// Attachment uploads use the raw reqwest multipart path. Progenitor does not
+// support multipart/form-data request bodies, so keep that operation out of
+// this model-only v1 client.
 const selectedPaths = new Set([
   "/wiki/rest/api/content/search",
   "/wiki/rest/api/search",
   "/wiki/rest/api/search/user",
-  "/wiki/rest/api/content/{id}/child/attachment",
   "/wiki/rest/api/space/{spaceKey}",
   "/wiki/rest/api/content/{id}/label",
 ]);
@@ -46,20 +58,9 @@ const partial = {
 
 for (const path of selectedPaths) {
   if (!spec.paths[path]) {
-    console.error(`missing selected path in source spec: ${path}`);
-    process.exit(1);
+    fail(`missing selected path in source spec: ${path}`);
   }
-  partial.paths[path] = JSON.parse(JSON.stringify(spec.paths[path]));
-}
-
-for (const path of [
-  "/wiki/rest/api/content/{id}/child/attachment",
-  "/wiki/rest/api/content/{id}/child/attachment/{attachmentId}/data",
-]) {
-  if (!partial.paths[path]) continue;
-  for (const operation of Object.values(partial.paths[path])) {
-    normalizeAttachmentMultipartOperation(operation);
-  }
+  partial.paths[path] = structuredClone(spec.paths[path]);
 }
 
 for (const pathItem of Object.values(partial.paths)) {
@@ -69,51 +70,6 @@ for (const pathItem of Object.values(partial.paths)) {
 }
 
 Object.assign(partial.components.schemas, simplifiedSchemas());
-
-function normalizeAttachmentMultipartOperation(operation) {
-  if (!operation || typeof operation !== "object") return;
-
-  operation.parameters ||= [];
-  const hasXsrfHeader = operation.parameters.some(
-    (parameter) =>
-      parameter.name?.toLowerCase() === "x-atlassian-token" &&
-      parameter.in === "header",
-  );
-  if (!hasXsrfHeader) {
-    operation.parameters.push({
-      name: "X-Atlassian-Token",
-      in: "header",
-      description:
-        "Required by Confluence for attachment multipart requests. Use `nocheck`.",
-      required: true,
-      schema: {
-        type: "string",
-        default: "nocheck",
-      },
-    });
-  }
-
-  const schema =
-    operation.requestBody?.content?.["multipart/form-data"]?.schema;
-  if (!schema?.properties) return;
-
-  if (schema.properties.comment) {
-    schema.properties.comment = {
-      ...schema.properties.comment,
-      type: "string",
-    };
-    delete schema.properties.comment.format;
-  }
-
-  if (schema.properties.minorEdit) {
-    schema.properties.minorEdit = {
-      ...schema.properties.minorEdit,
-      type: "boolean",
-      default: false,
-    };
-    delete schema.properties.minorEdit.format;
-  }
-}
 
 function removeUnsupportedParameters(operation) {
   if (!operation?.parameters) return;
@@ -237,8 +193,7 @@ while (queue.length > 0) {
 
   const [, , section, name] = ref.split("/");
   if (!section || !name) {
-    console.error(`unsupported ref: ${ref}`);
-    process.exit(1);
+    fail(`unsupported ref: ${ref}`);
   }
 
   const source = spec.components?.[section]?.[name];
@@ -247,8 +202,7 @@ while (queue.length > 0) {
     continue;
   }
   if (!source) {
-    console.error(`missing referenced component: ${ref}`);
-    process.exit(1);
+    fail(`missing referenced component: ${ref}`);
   }
 
   partial.components[section] ||= {};

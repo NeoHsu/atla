@@ -14,9 +14,13 @@
 const fs = require("fs");
 
 const [, , inputPath, outputPath] = process.argv;
+function fail(message, exitCode = 1) {
+  process.stderr.write(`${message}\n`);
+  process.exit(exitCode);
+}
+
 if (!inputPath || !outputPath) {
-  console.error("Usage: scripts/confluence-v2-partial-spec.js INPUT OUTPUT");
-  process.exit(2);
+  fail("Usage: scripts/confluence-v2-partial-spec.js INPUT OUTPUT", 2);
 }
 
 // snake_case progenitor method names for every v2 operation atla-core calls.
@@ -59,9 +63,49 @@ function snakeCase(operationId) {
     .toLowerCase();
 }
 
-const spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+let spec;
+try {
+  spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+} catch (error) {
+  fail(`failed to read Confluence v2 spec ${inputPath}: ${error.message}`);
+}
 
 const HTTP_METHODS = ["get", "put", "post", "delete", "options", "head", "patch", "trace"];
+normalizeKnownUpstreamDefects(spec);
+
+// Atlassian occasionally publishes scalar schemas as `format: string` with no
+// type, or as `type: string` plus an array-only `items` reference. Both forms
+// are invalid for the scalar fields involved and break or drift progenitor.
+function normalizeKnownUpstreamDefects(document) {
+  const pageUpdateProperties =
+    document.components?.requestBodies?.PageUpdateRequest?.content?.[
+      "application/json"
+    ]?.schema?.properties;
+  for (const name of ["spaceId", "parentId", "ownerId"]) {
+    const schema = pageUpdateProperties?.[name];
+    if (schema?.format === "string" && schema.type === undefined) {
+      schema.type = "string";
+      delete schema.format;
+    }
+  }
+
+  for (const pathItem of Object.values(document.paths ?? {})) {
+    for (const method of HTTP_METHODS) {
+      const operation = pathItem[method];
+      for (const parameter of operation?.parameters ?? []) {
+        const schema = parameter?.schema;
+        if (
+          parameter?.name === "sort" &&
+          schema?.type === "string" &&
+          schema.items?.$ref
+        ) {
+          parameter.schema = { $ref: schema.items.$ref };
+        }
+      }
+    }
+  }
+}
+
 const keptPaths = {};
 const seenOperations = new Set();
 for (const [path, item] of Object.entries(spec.paths ?? {})) {
@@ -84,8 +128,7 @@ for (const [path, item] of Object.entries(spec.paths ?? {})) {
 
 const missing = [...usedOperations].filter((op) => !seenOperations.has(op));
 if (missing.length > 0) {
-  console.error(`operations not found in ${inputPath}: ${missing.join(", ")}`);
-  process.exit(1);
+  fail(`operations not found in ${inputPath}: ${missing.join(", ")}`);
 }
 
 // Transitive $ref closure starting from the kept paths.
@@ -116,8 +159,7 @@ while (queue.length > 0) {
   if (keptComponents[section]?.[name] !== undefined) continue;
   const definition = componentsIn[section]?.[name];
   if (definition === undefined) {
-    console.error(`unresolved reference: #/components/${section}/${name}`);
-    process.exit(1);
+    fail(`unresolved reference: #/components/${section}/${name}`);
   }
   (keptComponents[section] ??= {})[name] = definition;
   collectRefs(definition);
@@ -157,7 +199,7 @@ const opCount = Object.values(keptPaths).reduce(
   (n, item) => n + HTTP_METHODS.filter((m) => m in item).length,
   0,
 );
-console.log(
+process.stdout.write(
   `kept ${opCount} operations across ${Object.keys(keptPaths).length} paths, ` +
-    `${Object.keys(sortedComponents.schemas ?? {}).length} schemas`,
+    `${Object.keys(sortedComponents.schemas ?? {}).length} schemas\n`,
 );

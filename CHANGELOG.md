@@ -7,6 +7,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Normalized upstream Confluence OpenAPI regressions so scheduled spec refreshes remain buildable,
+  while keeping unsupported generated multipart upload operations excluded.
+
 ## [0.9.0] - 2026-07-17
 
 ### Added
