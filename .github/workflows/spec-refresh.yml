@@ -1,0 +1,54 @@
+name: Refresh Atlassian specs
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: spec-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - name: Refresh partial specs and manifest
+        run: scripts/update-specs.sh
+      - name: Verify generated clients and contracts
+        run: |
+          cargo fmt --all -- --check
+          cargo check --workspace
+          cargo test --workspace
+      - name: Open a reviewable update PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: automation/refresh-atlassian-specs
+          delete-branch: true
+          commit-message: "chore(specs): refresh Atlassian partial specs"
+          title: "chore(specs): refresh Atlassian partial specs"
+          body: |
+            Automated weekly spec refresh.
+
+            Validation completed:
+            - `cargo fmt --all -- --check`
+            - `cargo check --workspace`
+            - `cargo test --workspace`
+
+            Review `specs/PATCHES.md`, operation changes, generated-client diffs, and manifest hashes before merging.
+          labels: dependencies
+          add-paths: |
+            specs/**

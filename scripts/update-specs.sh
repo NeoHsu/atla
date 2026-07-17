@@ -10,27 +10,28 @@ confluence_v2_url="https://dac-static.atlassian.com/cloud/confluence/openapi-v2.
 confluence_v1_url="https://dac-static.atlassian.com/cloud/confluence/swagger.v3.json"
 
 curl -fL "${jira_url}" \
-  -o "${repo_root}/specs/jira-v3.json"
+	-o "${repo_root}/specs/jira-v3.json"
 
 curl -fL "${confluence_v2_url}" \
-  -o "${repo_root}/specs/confluence-v2.json"
+	-o "${repo_root}/specs/confluence-v2.json"
 
 curl -fL "${confluence_v1_url}" \
-  -o "${repo_root}/specs/confluence-v1.json"
+	-o "${repo_root}/specs/confluence-v1.json"
 
 "${repo_root}/scripts/jira-v3-partial-spec.js" \
-  "${repo_root}/specs/jira-v3.json" \
-  "${repo_root}/specs/jira-v3-partial.json"
+	"${repo_root}/specs/jira-v3.json" \
+	"${repo_root}/specs/jira-v3-partial.json"
 
 "${repo_root}/scripts/confluence-v1-partial-spec.js" \
-  "${repo_root}/specs/confluence-v1.json" \
-  "${repo_root}/specs/confluence-v1-partial.json"
+	"${repo_root}/specs/confluence-v1.json" \
+	"${repo_root}/specs/confluence-v1-partial.json"
 
 "${repo_root}/scripts/confluence-v2-partial-spec.js" \
-  "${repo_root}/specs/confluence-v2.json" \
-  "${repo_root}/specs/confluence-v2-partial.json"
+	"${repo_root}/specs/confluence-v2.json" \
+	"${repo_root}/specs/confluence-v2-partial.json"
 
 python3 - "${repo_root}" "${manifest_path}" "${generator_version}" "${jira_url}" "${confluence_v2_url}" "${confluence_v1_url}" <<'PY'
+from datetime import datetime, timezone
 from pathlib import Path
 import hashlib
 import json
@@ -88,8 +89,7 @@ else:
     data = {}
 
 data["generator"] = {**data.get("generator", {}), **base["generator"]}
-if "generated_at" not in data:
-    data["generated_at"] = None
+data["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 specs = data.setdefault("specs", {})
 for name, metadata in base["specs"].items():
