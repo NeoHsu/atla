@@ -44,6 +44,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Converted Markdown bodies for Confluence blog create/update/comments instead of rejecting the
+  documented representation.
+- Omitted page/blog IDs from footer-comment reply payloads as required by Confluence Cloud.
+- Kept attachment-upload and page-delete JSON output in versioned objects, and omitted false
+  delete query flags instead of serializing them explicitly.
 - Corrected API-token expiration guidance and Confluence v2 code-generation documentation.
 - Kept content `--version` flags in the generated CLI surface snapshot.
 - Made spec manifest refresh timestamps update on every refresh.

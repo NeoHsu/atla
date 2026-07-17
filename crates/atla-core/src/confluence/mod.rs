@@ -256,24 +256,46 @@ mod tests {
 
     #[test]
     fn builds_generated_footer_comment_request() {
-        let comment = ConfluenceCommentCreate {
+        let reply = ConfluenceCommentCreate {
             content_id: "111".to_owned(),
             parent_comment_id: Some("222".to_owned()),
             body: "<p>Looks good</p>".to_owned(),
             representation: ConfluenceBodyRepresentation::Storage,
         };
 
-        let generated = comment.to_generated_page_footer();
-
-        assert_eq!(generated.page_id.as_deref(), Some("111"));
-        assert_eq!(generated.parent_comment_id.as_deref(), Some("222"));
-        let Some(body) = generated.body else {
+        let generated_page_reply = reply.to_generated_page_footer();
+        assert_eq!(generated_page_reply.page_id, None);
+        assert_eq!(
+            generated_page_reply.parent_comment_id.as_deref(),
+            Some("222")
+        );
+        let Some(body) = generated_page_reply.body else {
             panic!("expected body");
         };
         let generated_models::CreateFooterCommentModelBody::BodyWrite(body) = body else {
             panic!("expected comment body write");
         };
         assert_eq!(body.value.as_deref(), Some("<p>Looks good</p>"));
+
+        let generated_blog_reply = reply.to_generated_blog_footer();
+        assert_eq!(generated_blog_reply.blog_post_id, None);
+        assert_eq!(
+            generated_blog_reply.parent_comment_id.as_deref(),
+            Some("222")
+        );
+
+        let top_level = ConfluenceCommentCreate {
+            parent_comment_id: None,
+            ..reply
+        };
+        assert_eq!(
+            top_level.to_generated_page_footer().page_id.as_deref(),
+            Some("111")
+        );
+        assert_eq!(
+            top_level.to_generated_blog_footer().blog_post_id.as_deref(),
+            Some("111")
+        );
     }
 
     #[test]

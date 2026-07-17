@@ -125,7 +125,9 @@ Use `page move` for parent-only moves. `page update --parent ...` is for when al
 atla confluence page delete <ID> [--purge] [--draft] [--yes]
 ```
 
-`--purge` permanently removes (bypasses trash).
+`--purge` permanently removes an item that is already in trash and requires space-admin
+permission. Run a normal delete first, then repeat with `--purge`; draft deletion with `--draft`
+is already permanent.
 
 ### Move a page
 
@@ -230,6 +232,9 @@ atla confluence blog update <ID> [--title TITLE]
 atla confluence blog delete <ID> [--purge] [--draft] [--yes]
 ```
 
+For `--purge`, first move the blog post to trash with a normal delete; purging requires
+space-admin permission. Draft deletion with `--draft` is already permanent.
+
 ### Blog labels
 
 ```
@@ -297,6 +302,9 @@ atla confluence attachment download <ATTACHMENT_ID> [--save-to FILE | -f FILE]
 ```
 atla confluence attachment delete <ATTACHMENT_ID> [--purge] [--yes]
 ```
+
+For `--purge`, first move the attachment to trash with a normal delete; purging requires
+space-admin permission.
 
 ---
 

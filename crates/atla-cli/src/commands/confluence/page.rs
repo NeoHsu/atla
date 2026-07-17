@@ -11,7 +11,7 @@ use crate::context::AppContext;
 use super::format::{
     markdown_to_adf_options_for_body, open_web_url, prepare_optional_body_with_options,
     prepare_required_body_with_options, print_content_nodes, print_content_nodes_with_footer,
-    print_page, print_page_body_view, print_page_with_attachments, print_pages,
+    print_deleted, print_page, print_page_body_view, print_page_with_attachments, print_pages,
     print_pages_with_footer, read_body, resolve_required_space_id, resolve_space_id,
     status_from_draft, view_format_body_representation,
 };
@@ -714,7 +714,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     )
                 }
             })?;
-            println!("Deleted Confluence page {id}");
+            print_deleted("page", &id, global)?;
         }
         PageAction::Move { id, parent } => {
             let ctx = AppContext::load(global)?;

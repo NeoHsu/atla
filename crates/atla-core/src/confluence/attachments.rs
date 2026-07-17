@@ -127,14 +127,9 @@ impl ConfluenceClient {
     }
 
     pub async fn delete_attachment(&self, id: &str, purge: bool) -> Result<(), ApiError> {
-        self.generated
-            .delete_attachment()
-            .id(parse_i64_id(id)?)
-            .purge(purge)
-            .send()
-            .await
-            .or_api_error()
-            .await?;
+        let request = self.generated.delete_attachment().id(parse_i64_id(id)?);
+        let request = if purge { request.purge(true) } else { request };
+        request.send().await.or_api_error().await?;
         Ok(())
     }
 

@@ -1276,7 +1276,7 @@ pub enum PageAction {
     Delete {
         /// Page ID
         id: String,
-        /// Permanently purge instead of moving to trash
+        /// Permanently remove an already-trashed page (requires space admin)
         #[arg(long)]
         purge: bool,
         /// Operate on a draft (unpublished) version
@@ -1501,7 +1501,7 @@ pub enum BlogAction {
     Delete {
         /// Blog post ID
         id: String,
-        /// Permanently purge instead of moving to trash
+        /// Permanently remove an already-trashed blog post (requires space admin)
         #[arg(long)]
         purge: bool,
         /// Operate on a draft (unpublished) version
@@ -1734,7 +1734,7 @@ pub enum AttachmentAction {
     Delete {
         /// Attachment ID (with or without the `att` prefix)
         attachment_id: String,
-        /// Permanently purge instead of moving to trash
+        /// Permanently remove an already-trashed attachment (requires space admin)
         #[arg(long)]
         purge: bool,
         /// Confirm the destructive operation (required; there is no prompt)

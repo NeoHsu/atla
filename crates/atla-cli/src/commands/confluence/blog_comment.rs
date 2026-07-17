@@ -5,7 +5,7 @@ use crate::cli::{BlogCommentAction, GlobalArgs, OutputFormat};
 use crate::context::AppContext;
 
 use super::format::{
-    confluence_body_representation, print_comment, print_comments, print_comments_with_footer,
+    prepare_required_body_with_options, print_comment, print_comments, print_comments_with_footer,
     print_deleted, read_body,
 };
 
@@ -109,9 +109,13 @@ pub(super) async fn run_blog_comment(
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let body = read_body(body.or(body_flag), body_file.as_deref())?
-                .ok_or_else(|| anyhow::anyhow!("missing comment body"))?;
-            let representation = confluence_body_representation(representation)?;
+            let body = read_body(body.or(body_flag), body_file.as_deref())?;
+            let (body, representation) = prepare_required_body_with_options(
+                body,
+                representation,
+                Default::default(),
+                "missing comment body",
+            )?;
 
             if global.dry_run {
                 println!(

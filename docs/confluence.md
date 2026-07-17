@@ -281,8 +281,12 @@ atla confluence page delete <ID> [--purge] [--draft] [--yes]
 **Example**
 
 ```bash
+atla confluence page delete 123456 --yes
 atla confluence page delete 123456 --purge --yes
 ```
+
+`--purge` applies only after the first command has moved the page to trash and requires
+permission to administer the space. Draft deletion uses `--draft` and is permanent.
 
 ### Move a page
 
@@ -471,7 +475,11 @@ atla confluence blog delete <ID> [--purge] [--draft] [--yes]
 
 ```bash
 atla confluence blog delete 234567 --yes
+atla confluence blog delete 234567 --purge --yes
 ```
+
+`--purge` applies only to an already-trashed blog post and requires permission to administer
+its space. Draft deletion uses `--draft` and is permanent.
 
 ### Blog labels
 
@@ -648,8 +656,12 @@ atla confluence attachment delete <ATTACHMENT_ID> [--purge] [--yes]
 **Example**
 
 ```bash
+atla confluence attachment delete 987654 --yes
 atla confluence attachment delete 987654 --purge --yes
 ```
+
+`--purge` applies only to an already-trashed attachment and requires permission to administer
+its space.
 
 ## Content body representations
 

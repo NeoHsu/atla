@@ -256,15 +256,10 @@ impl ConfluenceClient {
     }
 
     pub async fn delete_page(&self, id: &str, purge: bool, draft: bool) -> Result<(), ApiError> {
-        self.generated
-            .delete_page()
-            .id(parse_i64_id(id)?)
-            .purge(purge)
-            .draft(draft)
-            .send()
-            .await
-            .or_api_error()
-            .await?;
+        let request = self.generated.delete_page().id(parse_i64_id(id)?);
+        let request = if purge { request.purge(true) } else { request };
+        let request = if draft { request.draft(true) } else { request };
+        request.send().await.or_api_error().await?;
         Ok(())
     }
 

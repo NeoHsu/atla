@@ -172,7 +172,11 @@ pub(super) async fn run_attachment(
                     )
                 })?;
 
-            print_attachments(&page.results, global)?;
+            if global.output == Some(OutputFormat::Json) {
+                crate::output::print_json(&serde_json::json!({ "results": page.results }))?;
+            } else {
+                print_attachments(&page.results, global)?;
+            }
         }
         AttachmentAction::Download {
             attachment_id,

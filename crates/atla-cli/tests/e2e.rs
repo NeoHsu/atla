@@ -1431,6 +1431,156 @@ async fn binary_attachment_download_preserves_bytes() {
 }
 
 #[tokio::test]
+async fn confluence_blog_markdown_dry_run_converts_to_adf_without_network() {
+    let server = MockServer::start().await;
+    let (directory, config) = setup(&server.uri()).await;
+    let body = directory.path().join("blog.md");
+    std::fs::write(&body, "# Release\n\nReady to ship.\n").expect("write Markdown body");
+
+    let output = atla(
+        &config,
+        &[
+            "--output",
+            "json",
+            "--dry-run",
+            "confluence",
+            "blog",
+            "create",
+            "--space-id",
+            "123",
+            "--title",
+            "Release",
+            "--body-file",
+            body.to_str().expect("UTF-8 temp path"),
+            "--representation",
+            "markdown",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let plan: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("structured blog plan");
+    assert_eq!(plan["operation"], "confluence.blog.create");
+    assert_eq!(
+        plan["requests"][0]["body"]["body"]["representation"],
+        "atlas_doc_format"
+    );
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn confluence_attachment_upload_json_is_a_versioned_object() {
+    let server = MockServer::start().await;
+    let (directory, config) = setup(&server.uri()).await;
+    let file = directory.path().join("evidence.txt");
+    std::fs::write(&file, b"evidence\n").expect("write attachment");
+    Mock::given(method("PUT"))
+        .and(path("/wiki/rest/api/content/123/child/attachment"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{
+                "id": "att456",
+                "type": "attachment",
+                "status": "current",
+                "title": "evidence.txt",
+                "version": {"number": 1},
+                "_links": {"download": "/download/attachments/123/evidence.txt"}
+            }],
+            "size": 1
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(
+        &config,
+        &[
+            "--output",
+            "json",
+            "confluence",
+            "attachment",
+            "upload",
+            "123",
+            file.to_str().expect("UTF-8 temp path"),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let uploaded: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("versioned attachment result");
+    assert_eq!(uploaded["schemaVersion"], 1);
+    assert_eq!(uploaded["operation"], "confluence.attachment.upload");
+    assert_eq!(uploaded["results"][0]["id"], "att456");
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn confluence_delete_options_are_omitted_unless_enabled() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+    for endpoint in [
+        "/wiki/api/v2/pages/123",
+        "/wiki/api/v2/blogposts/123",
+        "/wiki/api/v2/attachments/123",
+    ] {
+        Mock::given(method("DELETE"))
+            .and(path(endpoint))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(2)
+            .mount(&server)
+            .await;
+    }
+
+    for arguments in [
+        vec!["confluence", "page", "delete", "123", "--yes"],
+        vec!["confluence", "page", "delete", "123", "--purge", "--yes"],
+        vec!["confluence", "blog", "delete", "123", "--yes"],
+        vec!["confluence", "blog", "delete", "123", "--purge", "--yes"],
+        vec!["confluence", "attachment", "delete", "att123", "--yes"],
+        vec![
+            "confluence",
+            "attachment",
+            "delete",
+            "att123",
+            "--purge",
+            "--yes",
+        ],
+    ] {
+        let mut command = vec!["--output", "json"];
+        command.extend(arguments);
+        let output = atla(&config, &command);
+        assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+        let deleted: serde_json::Value =
+            serde_json::from_str(&stdout(&output)).expect("structured deletion result");
+        assert_eq!(deleted["schemaVersion"], 1);
+        assert_eq!(deleted["deleted"], true);
+    }
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("request recording should be enabled");
+    assert_eq!(requests.len(), 6);
+    for pair in requests.chunks_exact(2) {
+        let first_query = pair[0]
+            .url
+            .query_pairs()
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect::<Vec<_>>();
+        let second_query = pair[1]
+            .url
+            .query_pairs()
+            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+            .collect::<Vec<_>>();
+        assert!(
+            first_query.is_empty(),
+            "unexpected false options: {first_query:?}"
+        );
+        assert_eq!(second_query, vec![("purge".to_owned(), "true".to_owned())]);
+    }
+    server.verify().await;
+}
+
+#[tokio::test]
 async fn output_formats_render_the_same_data() {
     let server = MockServer::start().await;
     let (_dir, config) = setup(&server.uri()).await;

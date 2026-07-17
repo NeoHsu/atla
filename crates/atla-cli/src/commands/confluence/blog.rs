@@ -7,7 +7,7 @@ use crate::context::AppContext;
 use super::blog_comment::run_blog_comment;
 use super::blog_label::run_blog_label;
 use super::format::{
-    confluence_body_representation, print_blog_body_view, print_blog_post, print_blog_posts,
+    prepare_optional_body_with_options, print_blog_body_view, print_blog_post, print_blog_posts,
     print_blog_posts_with_footer, print_deleted, read_body, resolve_required_space_id,
     resolve_space_id, status_from_draft, view_format_body_representation,
 };
@@ -27,7 +27,6 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let representation = confluence_body_representation(representation)?;
 
             if global.dry_run
                 && let Some(path) = body_file.as_deref()
@@ -35,6 +34,8 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 crate::output::register_plan_input(path)?;
             }
             let body = read_body(body, body_file.as_deref())?;
+            let (body, representation) =
+                prepare_optional_body_with_options(body, representation, Default::default())?;
             let status = status_from_draft(draft);
 
             if global.dry_run {
@@ -255,7 +256,6 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
-            let representation = confluence_body_representation(representation)?;
 
             if global.dry_run
                 && let Some(path) = body_file.as_deref()
@@ -263,6 +263,8 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 crate::output::register_plan_input(path)?;
             }
             let body = read_body(body, body_file.as_deref())?;
+            let (body, representation) =
+                prepare_optional_body_with_options(body, representation, Default::default())?;
             let status = status_from_draft(draft);
 
             if global.dry_run {

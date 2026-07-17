@@ -614,7 +614,10 @@ impl ConfluenceCommentCreate {
                 .into(),
             ),
             custom_content_id: None,
-            page_id: Some(self.content_id.clone()),
+            page_id: self
+                .parent_comment_id
+                .is_none()
+                .then(|| self.content_id.clone()),
             parent_comment_id: self.parent_comment_id.clone(),
         }
     }
@@ -622,7 +625,10 @@ impl ConfluenceCommentCreate {
     pub(super) fn to_generated_blog_footer(&self) -> generated_types::CreateFooterCommentModel {
         generated_types::CreateFooterCommentModel {
             attachment_id: None,
-            blog_post_id: Some(self.content_id.clone()),
+            blog_post_id: self
+                .parent_comment_id
+                .is_none()
+                .then(|| self.content_id.clone()),
             body: Some(
                 generated_types::CommentBodyWrite {
                     representation: Some(self.representation.as_comment_body_write()),
