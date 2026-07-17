@@ -13,11 +13,13 @@ atla-jira-api = { path = "../atla-jira-api" }
 base64.workspace = true
 chrono.workspace = true
 comrak = { version = "0.53", default-features = false }
+httpdate.workspace = true
 keyring.workspace = true
 progenitor-client = "0.14"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tempfile.workspace = true
 tokio = { version = "1", default-features = false, features = ["time"] }
 toml.workspace = true
 reqwest.workspace = true
@@ -30,3 +32,5 @@ libc = { workspace = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio.workspace = true
+wiremock.workspace = true

@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "crates/atla-cli",
-    "crates/atla-core",
-    "crates/atla-jira-api",
-    "crates/atla-confluence-api",
-    "crates/atla-confluence-v1-api",
+  "crates/atla-cli",
+  "crates/atla-core",
+  "crates/atla-jira-api",
+  "crates/atla-confluence-api",
+  "crates/atla-confluence-v1-api",
 ]
 resolver = "3"
 
@@ -17,7 +17,10 @@ rust-version = "1.91"
 
 [workspace.dependencies]
 anyhow = "1"
-chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+chrono = { version = "0.4", default-features = false, features = [
+  "clock",
+  "serde",
+] }
 clap = { version = "4", features = ["derive", "env"] }
 clap_complete = "4"
 comfy-table = "7"
@@ -26,15 +29,22 @@ dialoguer = "0.11"
 directories = "6"
 indicatif = "0.18"
 keyring = { version = "3", features = [
-    "apple-native",
-    "linux-native",
-    "windows-native",
+  "apple-native",
+  "linux-native",
+  "windows-native",
 ] }
-reqwest = { version = "0.13", default-features = false, features = ["json", "multipart", "rustls", "stream"] }
+httpdate = "1"
+reqwest = { version = "0.13", default-features = false, features = [
+  "json",
+  "multipart",
+  "rustls",
+  "stream",
+] }
 base64 = "0.22"
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 shell-words = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
