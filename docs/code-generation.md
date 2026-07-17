@@ -37,7 +37,7 @@ Atlassian CDN (upstream specs)
 | Crate | Spec file | Upstream source | Filter script |
 |-------|-----------|-----------------|---------------|
 | `atla-jira-api` | `specs/jira-v3-partial.json` | Jira Cloud v3 | `scripts/jira-v3-partial-spec.js` |
-| `atla-confluence-api` | `specs/confluence-v2.json` | Confluence Cloud v2 | None (full spec) |
+| `atla-confluence-api` | `specs/confluence-v2-partial.json` | Confluence Cloud v2 | `scripts/confluence-v2-partial-spec.js` |
 | `atla-confluence-v1-api` | `specs/confluence-v1-partial.json` | Confluence Cloud v1 | `scripts/confluence-v1-partial-spec.js` |
 
 Each crate contains only three hand-maintained files:
@@ -140,13 +140,22 @@ Filters the Confluence v1 spec and applies compatibility patches:
 
 Page label mutation also uses Confluence v1 raw REST calls because the v2 API does not expose label add/remove endpoints.
 
-### Confluence v2
+### Confluence v2 partial spec (`scripts/confluence-v2-partial-spec.js`)
 
-Uses the full upstream spec without filtering. The v2 spec is small enough to generate directly.
+Filters the upstream v2 spec to the operations used by atla, then follows their `$ref` closure so
+all required schemas remain available. The filter also applies the documented enum compatibility
+patches from `specs/PATCHES.md`. When core starts calling a new generated v2 operation, add its
+snake_case operation name to `usedOperations` and refresh the specs.
 
 ---
 
 ## Updating specs
+
+### Scheduled refresh
+
+`.github/workflows/spec-refresh.yml` runs weekly and on manual dispatch. It executes the update
+script, verifies fmt/check/workspace tests, and opens a review PR containing only `specs/**`
+changes; it never pushes directly to `main`. Review enum patches and operation diffs before merging.
 
 ### Refresh workflow
 
@@ -210,7 +219,8 @@ Auth is handled via `reqwest::Client` default headers — progenitor's `Client` 
 To expose a new Jira or Confluence endpoint in atla:
 
 1. **Identify the endpoint** in the upstream spec (check the downloaded spec in `specs/`)
-2. **Add the path** to the relevant JS filter script (e.g. `scripts/jira-v3-partial-spec.js`)
+2. **Add the operation** to the relevant JS filter script (for Confluence v2, add its snake_case
+   operation name to `usedOperations`; the Jira/v1 scripts select paths)
 3. **Re-run filtering**: `scripts/update-specs.sh`
 4. **Verify**: `cargo check --workspace`
 5. **Consume** the new generated method in `atla-core`

@@ -7,7 +7,8 @@ description: Complete Confluence command reference for atla.
 
 `atla confluence` covers spaces, pages, blogs, CQL search, comments, labels, and attachments.
 All commands also accept the global flags described in [`output-formats.md`](./output-formats.md):
-`-o, --output`, `--profile`, `--verbose`, `--dry-run`, and `--no-input`.
+`-o, --output`, `--profile`, `--verbose`, `--dry-run`, `--read-only`, `--max-pages`,
+`--max-items`, `--max-bytes`, `--timeout`, and `--no-input`.
 
 ## Pagination
 
@@ -46,10 +47,9 @@ and using one with a different query fails fast.
 
 ### `--all`
 
-When you want every matching record without guessing an upper bound, use `--all`. It
-follows the cursor (or `start`/`totalSize`) until the server reports no more results,
-ignores the `--limit` clamp, and does not emit next-page metadata because it fetches until
-exhaustion:
+When you want every matching record without guessing an upper bound, use `--all`. Without a
+global budget it follows the cursor (or `start`/`totalSize`) until exhaustion and emits no
+next-page metadata. If `--max-pages` or `--max-items` stops it, atla returns a resume token:
 
 ```bash
 atla confluence search 'type = page AND space = ENG' --all --output keys > all-pages.txt
@@ -165,7 +165,7 @@ atla confluence page list --space ENG --title 'Runbook' --limit 20
 
 ```bash
 atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format]
-                           [--preserve-table-options]
+                           [--preserve-table-options] [--with-attachments]
 ```
 
 **Examples**
@@ -177,7 +177,11 @@ atla confluence page view 123456 --format markdown --preserve-table-options
 atla confluence page view 123456 --web
 ```
 
-Use `--preserve-table-options` with `--format markdown` to emit `<!-- atla:table ... -->` directives for ADF table metadata such as numbered rows.
+Use `--preserve-table-options` with `--format markdown` to emit `<!-- atla:table ... -->`
+directives for ADF table metadata such as numbered rows. With `--output json`, a body view remains
+one JSON document and adds `renderedBody`/`renderedFormat`; `--with-attachments` adds an
+`attachments` array to that object. CSV uses one combined row schema, and keys output remains one
+page ID per line.
 
 ### List page children
 
@@ -329,13 +333,13 @@ atla confluence page label add 123456 runbook production urgent
 **Syntax**
 
 ```bash
-atla confluence page label remove <PAGE_ID> <LABEL>
+atla confluence page label remove <PAGE_ID> <LABEL> --yes
 ```
 
 **Example**
 
 ```bash
-atla confluence page label remove 123456 urgent
+atla confluence page label remove 123456 urgent --yes
 ```
 
 ### Page comments
@@ -504,13 +508,13 @@ atla confluence blog label add 234567 release-notes engineering
 **Syntax**
 
 ```bash
-atla confluence blog label remove <BLOG_ID> <LABEL>
+atla confluence blog label remove <BLOG_ID> <LABEL> --yes
 ```
 
 **Example**
 
 ```bash
-atla confluence blog label remove 234567 engineering
+atla confluence blog label remove 234567 engineering --yes
 ```
 
 ### Blog comments

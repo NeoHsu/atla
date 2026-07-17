@@ -72,13 +72,30 @@ The interactive prompt will ask for:
 2. Your email address
 3. An API token (generate one at <https://id.atlassian.com/manage-profile/security/api-tokens>)
 
-You can also pass flags directly:
+Atlassian tokens expire after a configurable 1–365 days. Record the chosen expiry and rotate the
+stored token before it expires. Unscoped tokens use your `https://SITE.atlassian.net` URL. For a
+scoped token, pass `--cloud-id`; atla uses separate Jira and Confluence
+`api.atlassian.com/ex/{product}/{cloudId}` gateway roots.
+
+For non-interactive setup, pass the token over stdin so it is absent from shell history and
+process arguments:
 
 ```bash
-atla auth login \
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
   --instance https://example.atlassian.net \
   --email you@example.com \
-  --token YOUR_API_TOKEN
+  --token-stdin
+```
+
+For a scoped token:
+
+```bash
+atla --output json auth discover --site https://example.atlassian.net
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
+  --instance https://example.atlassian.net \
+  --cloud-id 11111111-2222-3333-4444-555555555555 \
+  --email you@example.com \
+  --token-stdin
 ```
 
 ### 2. Verify your authentication
@@ -214,6 +231,11 @@ These flags work with any command:
 | `--profile` | | Use a specific named profile |
 | `--verbose` | | Enable verbose/debug output |
 | `--dry-run` | | Show what would happen without making changes |
+| `--read-only` | | Reject every local or remote mutation |
+| `--max-pages` | | Stop automatic pagination after N API pages |
+| `--max-items` | | Return at most N records |
+| `--max-bytes` | | Refuse oversized structured output |
+| `--timeout` | | Set a per-request timeout in seconds |
 | `--no-input` | | Disable interactive prompts |
 
 ---

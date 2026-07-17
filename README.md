@@ -11,21 +11,31 @@ human-friendly tables, and machine-friendly output formats.
 - Work with Jira issues, boards, and sprints without leaving the terminal.
 - Read and update Confluence spaces, pages, blogs, labels, comments, and
   attachments from scripts or interactive workflows.
-- Automate reporting and CI with `table`, `json`, `csv`, and `keys` output,
-  plus global `--dry-run` support for mutating commands.
+- Automate reporting and CI with stable `table`, `json`, `csv`, and `keys` output,
+  mutation policies (`--dry-run`, `--read-only`), and context budgets.
 
 ## Install
 
-Installer script:
+Verified installer script (macOS/Linux):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/atla/releases/latest/download/atla-installer.sh | sh
+base=https://github.com/NeoHsu/atla/releases/latest/download
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/atla-installer.sh"
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/atla-installer.sh.sha256"
+shasum -a 256 -c atla-installer.sh.sha256
+sh atla-installer.sh
 ```
 
-Windows PowerShell:
+Verified Windows PowerShell installer:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/atla/releases/latest/download/atla-installer.ps1 | iex"
+$base = "https://github.com/NeoHsu/atla/releases/latest/download"
+Invoke-WebRequest "$base/atla-installer.ps1" -OutFile atla-installer.ps1
+Invoke-WebRequest "$base/atla-installer.ps1.sha256" -OutFile atla-installer.ps1.sha256
+$expected = ((Get-Content -Raw atla-installer.ps1.sha256).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 atla-installer.ps1).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "installer checksum verification failed" }
+& .\atla-installer.ps1
 ```
 
 Direct release downloads:
@@ -38,8 +48,9 @@ Direct release downloads:
 | x64 Linux | `atla-x86_64-unknown-linux-gnu.tar.xz` |
 | x64 Windows | `atla-x86_64-pc-windows-msvc.zip` |
 
-Each archive contains the prebuilt `atla` executable plus README, license, and
-changelog files. Checksums are published next to the release assets.
+Each archive contains the prebuilt `atla` executable plus README and license files.
+Checksums, build-provenance attestations, and a CycloneDX 1.5 binary SBOM (`atla.cdx.xml` plus
+`atla.cdx.xml.sha256`) are published with the release assets; release notes come from the changelog.
 
 mise:
 
@@ -63,9 +74,12 @@ cargo install --git https://github.com/NeoHsu/atla atla
 ## Common workflows
 
 ```bash
-atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
+  --email you@example.com --token-stdin
 atla jira search "assignee = currentUser() order by updated desc" --limit 10
 atla jira issue transition PROJ-123 --to Done --dry-run
+atla plan jira issue create --project PROJ --type Task --summary 'Agent task' --out issue-plan.json
+atla apply issue-plan.json --yes --output json
 atla confluence page view 67890 --format markdown
 atla confluence search "type=page AND space=DEV" --output json
 ```
@@ -80,6 +94,13 @@ atla confluence search "type=page AND space=DEV" --output json
 | [Jira](docs/jira.md) | Full Jira command reference: projects, issues, boards, sprints |
 | [Confluence](docs/confluence.md) | Full Confluence command reference: spaces, pages, blogs, attachments |
 | [Output Formats](docs/output-formats.md) | Global flags, output formats, scripting/CI patterns |
+| [JSON Contracts](docs/json-schemas.md) | Versioned schemas, plans, receipts, compatibility policy |
+| [Saved Plans](docs/plans.md) | Generate and safely apply expiring mutation plans |
+| [Operation Policy](docs/policy.md) | Read-only enforcement, allow/deny rules, context budgets |
+| [Config Migration](docs/migration-v1.md) | Schema v2 migration, backups, and rollback |
+| [Compatibility](docs/compatibility.md) | Supported platforms and v1 stability policy |
+| [Release Procedure](docs/releasing.md) | Artifacts, SBOM, provenance, and workflow hardening |
+| [Contributing](CONTRIBUTING.md) | Development checks, CLI contracts, and PR process |
 | [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
 | [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
 
@@ -138,7 +159,8 @@ back to the repo checkout.
 | Confluence | Search | CQL search through scoped v1 REST endpoint |
 | Confluence | Attachments | `list`, `view`, `upload`, `download`, `delete` |
 | Output | Formats | `table`, `json`, `csv`, `keys` |
-| Safety | Dry runs | Global `--dry-run` for mutating workflows |
+| Safety | Mutation policy | Global `--dry-run` previews and `--read-only` enforcement |
+| Safety | Context budgets | `--max-pages`, `--max-items`, `--max-bytes`, `--timeout` |
 
 ## Configuration
 
@@ -148,19 +170,31 @@ API tokens are stored through the OS keyring and are not written to config files
 Initial auth:
 
 ```bash
-atla auth login --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
+  --email you@example.com --token-stdin
 atla auth status
 atla config set default-project PROJ
 atla config set alias.mine "jira search 'assignee = currentUser() order by updated desc'"
 atla config list --output json
 ```
 
-`atla` stores API tokens in the OS keyring by default. In headless or container
-environments where keyring access is unavailable, use an explicit file-backed
-credential store or provide a token through the environment:
+`atla` stores API tokens in the OS keyring by default. Atlassian tokens have a
+configurable expiration of 1–365 days, so rotate them before expiry and re-run
+`atla auth login` when needed. Unscoped tokens use the site URL. For a scoped token,
+pass the tenant cloud ID; atla then routes Jira and Confluence through their respective
+`api.atlassian.com/ex/{product}/{cloudId}` gateways while retaining the site URL for web links:
 
 ```bash
-atla auth login --storage file --instance https://example.atlassian.net --email you@example.com --token "$ATLASSIAN_TOKEN"
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
+  --cloud-id 11111111-2222-3333-4444-555555555555 --email you@example.com --token-stdin
+```
+
+In headless or container environments where keyring access is unavailable, use an explicit
+file-backed credential store or provide a token through the environment:
+
+```bash
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --storage file \
+  --instance https://example.atlassian.net --email you@example.com --token-stdin
 ATLA_TOKEN="$ATLASSIAN_TOKEN" atla jira project list
 ```
 
@@ -246,7 +280,16 @@ Next page:
 JSON output includes the same information under `pagination.nextPageToken` and
 `pagination.nextCommand`. The token is opaque and validated against the command/query that
 created it. Use `--all` instead of `--limit` when you intentionally want to fetch every
-matching record.
+matching record. For agent runs, bound context and network work globally:
+
+```bash
+atla --read-only --max-pages 5 --max-items 200 --max-bytes 1000000 --timeout 30 \
+  --output json jira search 'project = PROJ ORDER BY updated DESC'
+```
+
+When `--max-pages` or `--max-items` stops an `--all` request, atla emits a resume token instead
+of pretending the result is complete. `--read-only` rejects local and remote mutations before
+credentials or network access.
 
 ## Development
 

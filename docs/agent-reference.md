@@ -9,6 +9,11 @@ description: Compact complete reference for AI agents and automation using atla.
 
 `atla` is a unified Atlassian Cloud CLI for Jira and Confluence, written in Rust. It provides profile-based authentication, machine-friendly and human-friendly output modes, global dry-run safety, and command coverage for Jira projects/issues/boards/sprints plus Confluence spaces/pages/blogs/search/comments/labels/attachments.
 
+Atlassian API tokens expire after a configurable 1–365 days; rotate them before expiry.
+Unscoped tokens use the site URL. For a scoped token, pass `--cloud-id` during login; the same
+profile then routes Jira and Confluence through their product-specific
+`api.atlassian.com/ex/{product}/{cloudId}` gateway roots.
+
 ### Install the bundled skill
 
 The repo contains an installable AI-agent skill at `skills/atla-cli`.
@@ -38,13 +43,16 @@ back to the repo checkout.
 
 ### Core
 
-- `atla auth login` — create or update a profile and store its API token.
-- `atla auth logout` — remove stored credentials for the active profile.
+- `atla auth login` — create/update a profile; use `--token-stdin` in automation and add `--cloud-id <ID>` for a scoped token.
+- `atla auth discover --site <URL>` — discover cloud ID and product gateway roots.
+- `atla auth logout --yes` — remove stored credentials for the active profile.
 - `atla auth status` — show whether the current profile is authenticated.
 - `atla auth switch <profile>` — make a profile the default.
 - `atla config set <key> <value>` — set a config key.
 - `atla config get <key>` — read a config key.
 - `atla config list` — print all config entries.
+- `atla plan jira|confluence ... --out <FILE>` — write an expiring, hashed mutation plan.
+- `atla apply <FILE> --yes` — validate and execute an allowlisted saved plan.
 - `atla completion <shell>` — generate shell completions.
 
 ### Jira
@@ -106,7 +114,7 @@ back to the repo checkout.
 - `atla confluence page move <ID>` — move a page to a new parent.
 - `atla confluence page label list <PAGE_ID>` — list labels.
 - `atla confluence page label add <PAGE_ID>` — add labels.
-- `atla confluence page label remove <PAGE_ID>` — remove a label.
+- `atla confluence page label remove <PAGE_ID> <LABEL> --yes` — remove a label.
 - `atla confluence page comment list <PAGE_ID>` — list comments.
 - `atla confluence page comment add <PAGE_ID>` — add a comment.
 - `atla confluence page comment delete <PAGE_ID> <COMMENT_ID>` — delete a comment.
@@ -117,7 +125,7 @@ back to the repo checkout.
 - `atla confluence blog delete <ID>` — delete a blog post.
 - `atla confluence blog label list <BLOG_ID>` — list blog labels.
 - `atla confluence blog label add <BLOG_ID>` — add blog labels.
-- `atla confluence blog label remove <BLOG_ID>` — remove a blog label.
+- `atla confluence blog label remove <BLOG_ID> <LABEL> --yes` — remove a blog label.
 - `atla confluence blog comment list <BLOG_ID>` — list blog comments.
 - `atla confluence blog comment add <BLOG_ID>` — add a blog comment.
 - `atla confluence blog comment delete <BLOG_ID> <COMMENT_ID>` — delete a blog comment.
@@ -135,7 +143,12 @@ back to the repo checkout.
 | `-o, --output` | `json\|table\|csv\|keys` | `table` for tabular results | Human or machine output mode |
 | `--profile` | string | active/default profile | Selects auth/config profile |
 | `--verbose` | boolean | `false` | Enables verbose client logging |
-| `--dry-run` | boolean | `false` | Prints the request (method, URL, and JSON body for Jira issue create/update and comment add) and skips the mutation |
+| `--dry-run` | boolean | `false` | Prints the request and serializable final payload, then skips the mutation |
+| `--read-only` | boolean | `false` | Rejects real local/remote mutations before credential/network access; permits dry-run previews; also settable with `ATLA_READ_ONLY` |
+| `--max-pages` | positive integer | unlimited | Stops automatic pagination after this many API pages and preserves a resume token |
+| `--max-items` | positive integer | command limit | Caps records returned by a list operation |
+| `--max-bytes` | positive integer | unlimited | Requires JSON output; fails before printing an oversized document |
+| `--timeout` | positive integer seconds | API default | Per-request deadline, including uploads and downloads |
 | `--no-input` | boolean | `false` | Disables prompts and interactive selection |
 
 ### Exit codes and error output
@@ -143,16 +156,18 @@ back to the repo checkout.
 | Code | Kind | Meaning |
 | --- | --- | --- |
 | `0` | — | Success |
-| `1` | `other` | Any other failure (non-retryable 4xx business errors, IO) |
+| `1` | `other`, `ambiguous_mutation` | Non-retryable business/IO failures, or a mutation whose remote outcome must be verified |
 | `2` | `usage` | Invalid arguments (emitted by clap) |
 | `3` | `auth` | Missing/invalid credentials or profile (HTTP 401/403) |
 | `4` | `not_found` | Resource does not exist (HTTP 404) |
-| `5` | `retryable` | Transient failure: network error, HTTP 429, or 5xx |
+| `5` | `retryable` | Safe-to-retry transient failure, including HTTP 429 and read/idempotent request failures |
 
-With `-o json`, runtime errors are emitted to stderr as a machine-readable object:
+With `-o json`, object outputs carry additive `schemaVersion: 1`, and runtime errors are emitted
+to stderr as a machine-readable object:
 
 ```json
 {
+  "schemaVersion": 1,
   "error": {
     "kind": "not_found",
     "message": "failed to load Jira issue `NOPE-1`: Atlassian API returned 404 Not Found: Issue does not exist or you do not have permission to see it.",
@@ -163,7 +178,15 @@ With `-o json`, runtime errors are emitted to stderr as a machine-readable objec
 ```
 
 Agents should retry (with backoff) only when the exit code is `5` or
-`error.retryable` is `true`.
+`error.retryable` is `true`. For `ambiguous_mutation`, query the target resource to determine
+whether the mutation committed; do not blindly repeat it.
+
+For machine-readable planning, use `--output json --dry-run`. Jira issue and Confluence page/blog
+create/update commands emit `planVersion: 1`, operation/profile identity, exact request method/URL/body,
+preconditions, unresolved values, and `mutating: true` without network access. Supported operations
+can be persisted with `atla plan ... --out FILE`; `atla apply FILE --yes` validates hash, expiry,
+input files, profile/site, policy, and allowlisted request shape before execution. Successful mutation
+JSON objects include receipt fields: `operation`, `profile`, `target`, `requestId`, and `completedAt`.
 
 ### Pagination
 
@@ -188,11 +211,16 @@ different filters, JQL/CQL, fields, or content IDs.
 
 #### `--all`
 
-For unbounded "fetch everything" runs, use `--all` instead of guessing `--limit`. It
-follows the cursor until the server is empty, ignores the `--limit` clamp, and does not
-emit next-page metadata because it fetches until exhaustion. `--all` is mutually exclusive
-with both `--limit` and `--page-token`. Use `--all` deliberately on broad queries — it can
-fan out into many HTTP round trips.
+For unbounded "fetch everything" runs, use `--all` instead of guessing `--limit`. Without a
+global context budget it follows the cursor until the server is empty and emits no next-page
+metadata. `--all` is mutually exclusive with both `--limit` and `--page-token`. If
+`--max-pages` or `--max-items` stops the run, atla emits a resume token instead of reporting
+exhaustion. Prefer bounded agent calls:
+
+```bash
+atla --read-only --max-pages 5 --max-items 200 --max-bytes 1000000 --timeout 30 \
+  --output json jira search 'project = PROJ ORDER BY updated DESC'
+```
 
 ```bash
 atla jira issue list --jql "project=PROJ" --all --output keys
@@ -269,7 +297,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence page move` | `<ID>` | `--parent` | Move page under a new parent. | `atla confluence page move 123456 --parent 654321` |
 | `confluence page label list` | `<PAGE_ID>` | `--prefix`, `--limit`, `--page-token` | List page labels. | `atla confluence page label list 123456 --limit 20` |
 | `confluence page label add` | `<PAGE_ID> LABEL...` | none | Add page labels. | `atla confluence page label add 123456 runbook urgent` |
-| `confluence page label remove` | `<PAGE_ID> <LABEL>` | none | Remove page label. | `atla confluence page label remove 123456 urgent` |
+| `confluence page label remove` | `<PAGE_ID> <LABEL>` | `--yes` | Remove page label. | `atla confluence page label remove 123456 urgent --yes` |
 | `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
 | `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
@@ -280,7 +308,7 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 | `confluence blog delete` | `<ID>` | `--purge`, `--draft`, `--yes` | Delete a blog post. | `atla confluence blog delete 234567 --yes` |
 | `confluence blog label list` | `<BLOG_ID>` | `--prefix`, `--limit`, `--page-token` | List blog labels. | `atla confluence blog label list 234567 --limit 20` |
 | `confluence blog label add` | `<BLOG_ID> LABEL...` | none | Add blog labels. | `atla confluence blog label add 234567 release-notes engineering` |
-| `confluence blog label remove` | `<BLOG_ID> <LABEL>` | none | Remove blog label. | `atla confluence blog label remove 234567 engineering` |
+| `confluence blog label remove` | `<BLOG_ID> <LABEL>` | `--yes` | Remove blog label. | `atla confluence blog label remove 234567 engineering --yes` |
 | `confluence blog comment list` | `<BLOG_ID>` | `--limit`, `--page-token` | List blog comments. | `atla confluence blog comment list 234567 --limit 10` |
 | `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation` | Add blog comment. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
 | `confluence blog comment delete` | `<BLOG_ID> <COMMENT_ID>` | `--yes` | Delete blog comment. | `atla confluence blog comment delete 234567 78910 --yes` |
@@ -304,16 +332,22 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 
 | Key | Scope | Meaning | Example |
 | --- | --- | --- | --- |
+| `schema-version` | global, read-only | Current config schema (`2`) | `atla config get schema-version` |
 | `default.profile` | global | Default active profile name | `atla config set default.profile work` |
 | `default-profile` | global alias | CLI-friendly alias for `default.profile` | `atla config set default-profile work` |
 | `instance` | active profile shorthand | Base Atlassian site URL for active profile | `atla config set instance https://example.atlassian.net` |
 | `email` | active profile shorthand | Atlassian account email for active profile | `atla config set email you@example.com` |
 | `credential-store` / `credential_store` | active profile shorthand | Token storage backend: `keyring` or `file` | `atla config set credential-store file` |
+| `cloud-id` / `cloud_id` | active profile shorthand | Scoped-token tenant ID; empty clears gateway routing | `atla config set cloud-id 11111111-2222-3333-4444-555555555555` |
 | `default-project` / `default_project` | active profile shorthand | Default Jira project for commands that can infer a project | `atla config set default-project PROJ` |
 | `default-space` / `default_space` | active profile shorthand | Default Confluence space | `atla config set default-space ENG` |
 | `profiles.<name>.instance` | profile-specific | Atlassian site URL for a named profile | `atla config set profiles.work.instance https://example.atlassian.net` |
 | `profiles.<name>.email` | profile-specific | Email for a named profile | `atla config set profiles.work.email you@example.com` |
 | `profiles.<name>.credential-store` / `profiles.<name>.credential_store` | profile-specific | Storage backend for a named profile | `atla config set profiles.work.credential-store keyring` |
+| `profiles.<name>.cloud-id` / `profiles.<name>.cloud_id` | profile-specific | Cloud ID for product-specific scoped-token gateways | `atla config set profiles.work.cloud-id 11111111-2222-3333-4444-555555555555` |
+| `profiles.<name>.policy.mode` | profile-specific | `read-only` or `read-write` default | `atla config set profiles.agent.policy.mode read-only` |
+| `profiles.<name>.policy.allow` | profile-specific | Comma-separated allowed operation patterns | `atla config set profiles.agent.policy.allow jira.issue.view,jira.issue.comment.add` |
+| `profiles.<name>.policy.deny` | profile-specific | Comma-separated denied patterns; highest priority | `atla config set profiles.agent.policy.deny '*.delete'` |
 | `profiles.<name>.default-project` / `profiles.<name>.default_project` | profile-specific | Default Jira project for a named profile | `atla config set profiles.work.default-project PROJ` |
 | `profiles.<name>.default-space` / `profiles.<name>.default_space` | profile-specific | Default Confluence space for a named profile | `atla config set profiles.work.default-space ENG` |
 | `aliases.<name>` / `alias.<name>` | command alias | User-defined alias expanded before parsing | `atla config set aliases.mine "jira search 'assignee = currentUser()'"` |
@@ -328,6 +362,7 @@ Tokens are not config keys; they live in the OS keyring, the file credential sto
 | `ATLA_API_TOKEN` | Alternate token override | Used if `ATLA_TOKEN` is unset |
 | `ATLA_CONFIG` | Main config file path | Defaults to `~/.config/atla/config.toml` |
 | `ATLA_CREDENTIALS` | File credential store path | Defaults to `~/.config/atla/credentials.toml` |
+| `ATLA_READ_ONLY` | Enforce mutation blocking | Unset/false by default |
 
 ## 9. Common Patterns
 
@@ -410,5 +445,6 @@ ATLA_CONFIG=$PWD/.atla-config.toml ATLA_CREDENTIALS=$PWD/.atla-credentials.toml 
 ### 13. Store file-backed credentials for headless runs
 
 ```bash
-atla auth login --storage file --instance https://example.atlassian.net   --email you@example.com --token "$ATLA_TOKEN"
+printf '%s\n' "$ATLA_TOKEN" | atla auth login --no-input --storage file \
+  --instance https://example.atlassian.net --email you@example.com --token-stdin
 ```

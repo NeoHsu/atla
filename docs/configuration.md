@@ -5,7 +5,7 @@ description: Config keys, aliases, environment variables, and multi-profile setu
 
 # Configuration
 
-atla stores configuration in a TOML file at `~/.config/atla/config.toml`. Use the `atla config` commands to read and write values, or edit the file directly.
+atla stores configuration in a TOML file at `~/.config/atla/config.toml`. Use the `atla config` commands to read and write values, or edit the file directly. Current files use schema version 2. Legacy unversioned files are backed up as `config.toml.v1.bak` and migrated atomically on first load.
 
 ---
 
@@ -36,10 +36,15 @@ export ATLA_CREDENTIALS=/path/to/credentials.toml
 
 | Key | Type | Description |
 |-----|------|-------------|
+| `schema-version` | integer, read-only | Current config schema version (`2`) |
 | `default.profile` | string | Name of the active profile |
 | `profiles.<name>.instance` | string | Atlassian instance URL |
 | `profiles.<name>.email` | string | Account email address |
 | `profiles.<name>.credential-store` | string | `keyring` or `file` |
+| `profiles.<name>.cloud-id` | string | Tenant cloud ID; enables product-specific scoped-token gateways |
+| `profiles.<name>.policy.mode` | string | `read-only` or `read-write` operation default |
+| `profiles.<name>.policy.allow` | comma-separated patterns | Explicitly allowed operation IDs |
+| `profiles.<name>.policy.deny` | comma-separated patterns | Explicitly denied operation IDs (highest priority) |
 | `profiles.<name>.default-project` | string | Default Jira project key |
 | `profiles.<name>.default-space` | string | Default Confluence space key |
 | `aliases.<name>` | string | Command alias (expanded before parsing) |
@@ -49,6 +54,8 @@ export ATLA_CREDENTIALS=/path/to/credentials.toml
 ## Full config.toml example
 
 ```toml
+schema_version = 2
+
 [default]
 profile = "work"
 
@@ -56,8 +63,14 @@ profile = "work"
 instance = "https://example.atlassian.net"
 email = "you@example.com"
 credential_store = "keyring"
+cloud_id = "11111111-2222-3333-4444-555555555555"
 default_project = "PROJ"
 default_space = "DEV"
+
+[profiles.work.policy]
+mode = "read-only"
+allow = ["jira.issue.comment.add", "confluence.page.update"]
+deny = ["*.delete"]
 
 [profiles.personal]
 instance = "https://personal.atlassian.net"
@@ -95,6 +108,14 @@ atla config set profiles.work.default-project PROJ
 
 # Set a profile's default Confluence space
 atla config set profiles.work.default-space DEV
+
+# Enable scoped-token gateway routing, or pass an empty value to clear it
+atla config set profiles.work.cloud-id 11111111-2222-3333-4444-555555555555
+
+# Apply an agent policy (patterns are comma-separated)
+atla config set profiles.work.policy.mode read-only
+atla config set profiles.work.policy.allow jira.issue.comment.add,confluence.page.update
+atla config set profiles.work.policy.deny '*.delete'
 
 # Create an alias
 atla config set aliases.mine "jira search 'assignee = currentUser() order by updated desc'"
@@ -200,6 +221,7 @@ atla mine --output json
 | `ATLA_CREDENTIALS` | Override credentials file path |
 | `ATLA_TOKEN` | API token (overrides stored credentials) |
 | `ATLA_API_TOKEN` | API token alias (same as `ATLA_TOKEN`) |
+| `ATLA_READ_ONLY` | Reject config/auth and remote mutations when true |
 
 Priority order for tokens:
 
@@ -215,6 +237,8 @@ Use profiles to manage multiple Atlassian instances from a single CLI installati
 ### Pattern: work + personal
 
 ```toml
+schema_version = 2
+
 [default]
 profile = "work"
 
@@ -263,7 +287,14 @@ atla jira issue view SIDE-5 --profile personal
 
 ---
 
+## Write safety
+
+Config and file-backed credential changes use a same-directory temporary file, sync its
+contents, and atomically replace the destination. On Unix, files are mode `0600`; a newly
+created atla config directory is mode `0700`.
+
 ## See also
 
+- [Operation Policy](./policy.md) — precedence, wildcard semantics, and context budgets
 - [Getting Started](./getting-started.md) — installation and first-time setup
 - [Authentication](./authentication.md) — login, token storage, and troubleshooting

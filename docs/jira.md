@@ -7,7 +7,8 @@ description: Complete Jira command reference for atla.
 
 `atla jira` covers project discovery, JQL search, issue workflows, boards, and sprints.
 All commands also accept the global flags described in [`output-formats.md`](./output-formats.md):
-`-o, --output`, `--profile`, `--verbose`, `--dry-run`, and `--no-input`.
+`-o, --output`, `--profile`, `--verbose`, `--dry-run`, `--read-only`, `--max-pages`,
+`--max-items`, `--max-bytes`, `--timeout`, and `--no-input`.
 
 ## Pagination
 
@@ -46,9 +47,9 @@ and using one with a different query fails fast.
 
 ### `--all`
 
-When you want every matching record without guessing an upper bound, use `--all`. It
-fetches until the server reports no more results, ignores the `--limit` clamp, and
-does not emit next-page metadata because it fetches until exhaustion:
+When you want every matching record without guessing an upper bound, use `--all`. Without a
+global budget it fetches until the server reports no more results and emits no next-page
+metadata. If `--max-pages` or `--max-items` stops it, atla returns a resume token:
 
 ```bash
 atla jira issue list --jql "project = PROJ" --all --output keys > all-keys.txt
@@ -187,7 +188,9 @@ atla jira issue view PROJ-123 --web
 atla jira issue view PROJ-123 --with-github
 ```
 
-`--with-github` fetches GitHub pull requests and commits linked via the development panel and appends them to the output. See [GitHub Development Links](#github-development-links) for details.
+`--with-github` fetches GitHub pull requests and commits linked via the development panel. JSON
+uses one combined object; CSV uses one `record_type` schema; keys remain one issue/PR/commit ID per
+line. See [GitHub Development Links](#github-development-links) for details.
 
 ### Delete an issue
 
@@ -408,6 +411,7 @@ atla jira issue link remove 10500 --yes
 These commands fetch development data from Jira's internal dev-status API (`/rest/dev-status/1.0/issue/detail`). The API is not publicly documented by Atlassian, but is used internally by the Jira UI to render the development panel.
 
 > **Integration note:** The available data depends on which Git integration your Jira instance uses:
+>
 > - **Git Integration for Jira by GitKraken** (`oAuth-com.xiplink.jira.git.jira_git_plugin`) — surfaces both pull requests and commits. Both `github-links` and `github-commits` work.
 > - **GitHub for Jira** (Atlassian's native app) — surfaces pull requests directly.
 >
