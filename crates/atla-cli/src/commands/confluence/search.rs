@@ -31,7 +31,7 @@ pub(super) async fn run_search(
     if global.dry_run {
         println!(
             "Would GET {}/wiki/rest/api/search?limit={} with CQL `{}` using profile `{profile_name}`",
-            profile.instance.trim_end_matches('/'),
+            profile.confluence_api_base_url(),
             search.limit,
             search.cql
         );

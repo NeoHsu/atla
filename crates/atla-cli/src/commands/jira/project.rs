@@ -39,7 +39,7 @@ pub(super) async fn run_project(
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/project/search?startAt={}&maxResults={}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     search.start_at,
                     search.max_results
                 );
@@ -105,11 +105,7 @@ pub(super) async fn run_project(
             let profile = ctx.profile();
 
             if global.dry_run {
-                let url = format!(
-                    "{}/rest/api/3/project/{}",
-                    profile.instance.trim_end_matches('/'),
-                    key
-                );
+                let url = format!("{}/rest/api/3/project/{}", profile.jira_api_base_url(), key);
                 println!("Would GET {url} using profile `{profile_name}`");
                 return Ok(());
             }
@@ -132,7 +128,7 @@ pub(super) async fn run_project(
             if global.dry_run {
                 println!(
                     "Would GET {}/rest/api/3/project/{} then GET /rest/api/3/issuetype/project using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key
                 );
                 return Ok(());

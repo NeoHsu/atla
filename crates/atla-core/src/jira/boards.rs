@@ -5,13 +5,13 @@ use crate::client::{ApiError, read_json};
 
 impl JiraClient {
     pub async fn search_boards(&self, search: &JiraBoardSearch) -> Result<JiraBoardPage, ApiError> {
-        let max_results = search.max_results.max(1);
+        let max_results = self.raw_client.effective_item_limit(search.max_results);
         let mut collected: Vec<JiraBoard> = Vec::new();
         let mut start_at = search.start_at;
         let mut last_is_last: Option<bool> = Some(true);
         let mut last_total: Option<u64> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;

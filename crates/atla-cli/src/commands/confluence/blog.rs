@@ -7,9 +7,9 @@ use crate::context::AppContext;
 use super::blog_comment::run_blog_comment;
 use super::blog_label::run_blog_label;
 use super::format::{
-    confluence_body_representation, print_blog_post, print_blog_posts,
+    confluence_body_representation, print_blog_body_view, print_blog_post, print_blog_posts,
     print_blog_posts_with_footer, print_deleted, read_body, resolve_required_space_id,
-    resolve_space_id, status_from_draft,
+    resolve_space_id, status_from_draft, view_format_body_representation,
 };
 
 pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<()> {
@@ -29,22 +29,52 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             let profile = ctx.profile();
             let representation = confluence_body_representation(representation)?;
 
+            if global.dry_run
+                && let Some(path) = body_file.as_deref()
+            {
+                crate::output::register_plan_input(path)?;
+            }
+            let body = read_body(body, body_file.as_deref())?;
+            let status = status_from_draft(draft);
+
             if global.dry_run {
-                if let Some(space) = &space {
-                    let space_url = format!(
-                        "{}/wiki/api/v2/spaces?keys={space}&limit=1",
-                        profile.instance.trim_end_matches('/')
-                    );
-                    println!("Would GET {space_url} using profile `{profile_name}`");
-                }
-                println!(
-                    "Would POST {}/wiki/api/v2/blogposts using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                let space_id = space_id.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --space-id because --space cannot be resolved without network access"
+                    )
+                })?;
+                let request = ConfluenceBlogPostCreate {
+                    space_id,
+                    title,
+                    body,
+                    representation,
+                    status,
+                    private: private.then_some(true),
+                };
+                let endpoint = format!(
+                    "{}/wiki/api/v2/blogposts{}",
+                    profile.confluence_api_base_url(),
+                    if private { "?private=true" } else { "" }
                 );
+                let body = request.request_body();
+                if global.output == Some(OutputFormat::Json) {
+                    crate::output::print_operation_plan(
+                        "confluence.blog.create",
+                        profile_name,
+                        &profile.instance,
+                        "POST",
+                        endpoint,
+                        Some(body),
+                        vec!["spaceId supplied explicitly".to_owned()],
+                        Vec::new(),
+                    )?;
+                } else {
+                    println!("Would POST {endpoint} using profile `{profile_name}`");
+                    crate::output::print_dry_run_body(&body)?;
+                }
                 return Ok(());
             }
 
-            let body = read_body(body, body_file.as_deref())?;
             let client = ctx.confluence_client()?;
             let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
             let post = client
@@ -53,7 +83,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                     title,
                     body,
                     representation,
-                    status: status_from_draft(draft),
+                    status,
                     private: private.then_some(true),
                 })
                 .await
@@ -83,14 +113,14 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 if let Some(space) = &space {
                     let space_url = format!(
                         "{}/wiki/api/v2/spaces?keys={space}&limit=1",
-                        profile.instance.trim_end_matches('/')
+                        profile.confluence_api_base_url()
                     );
                     println!("Would GET {space_url} using profile `{profile_name}`");
                 }
 
                 let mut url = format!(
                     "{}/wiki/api/v2/blogposts?limit={limit}",
-                    profile.instance.trim_end_matches('/')
+                    profile.confluence_api_base_url()
                 );
                 if let Some(space_id) = &space_id {
                     url.push_str(&format!("&space-id={space_id}"));
@@ -177,7 +207,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 }
             }
         }
-        BlogAction::View { id, .. } => {
+        BlogAction::View { id, format } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -185,7 +215,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             if global.dry_run {
                 let url = format!(
                     "{}/wiki/api/v2/blogposts/{}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     id
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
@@ -193,14 +223,24 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             }
 
             let client = ctx.confluence_client()?;
-            let post = client.get_blog_post(&id).await.with_context(|| {
-                format!(
-                    "failed to load Confluence blog post `{id}` from {}",
-                    client.instance_url()
+            let post = client
+                .get_blog_post_with_body_format(
+                    &id,
+                    format.and_then(view_format_body_representation),
                 )
-            })?;
+                .await
+                .with_context(|| {
+                    format!(
+                        "failed to load Confluence blog post `{id}` from {}",
+                        client.instance_url()
+                    )
+                })?;
 
-            print_blog_post(&post, global)?;
+            if let Some(format) = format {
+                print_blog_body_view(&post, format, global)?;
+            } else {
+                print_blog_post(&post, global)?;
+            }
         }
         BlogAction::Update {
             id,
@@ -217,12 +257,65 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             let profile = ctx.profile();
             let representation = confluence_body_representation(representation)?;
 
+            if global.dry_run
+                && let Some(path) = body_file.as_deref()
+            {
+                crate::output::register_plan_input(path)?;
+            }
+            let body = read_body(body, body_file.as_deref())?;
+            let status = status_from_draft(draft);
+
             if global.dry_run {
-                println!(
-                    "Would PUT {}/wiki/api/v2/blogposts/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                let body = body.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --body or --body-file because the current body cannot be loaded without network access"
+                    )
+                })?;
+                let title = title.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --title because the current title cannot be loaded without network access"
+                    )
+                })?;
+                let version = version.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --version because the next version cannot be loaded without network access"
+                    )
+                })?;
+                let request = ConfluenceBlogPostUpdate {
+                    id: id.clone(),
+                    status,
+                    title,
+                    space_id: None,
+                    body,
+                    representation,
+                    version,
+                    message,
+                };
+                let url = format!(
+                    "{}/wiki/api/v2/blogposts/{}",
+                    profile.confluence_api_base_url(),
                     id
                 );
+                let body = request.request_body();
+                if global.output == Some(OutputFormat::Json) {
+                    crate::output::print_operation_plan(
+                        "confluence.blog.update",
+                        profile_name,
+                        &profile.instance,
+                        "PUT",
+                        url,
+                        Some(body),
+                        vec![
+                            "body supplied explicitly".to_owned(),
+                            "title supplied explicitly".to_owned(),
+                            "version supplied explicitly".to_owned(),
+                        ],
+                        Vec::new(),
+                    )?;
+                } else {
+                    println!("Would PUT {url} using profile `{profile_name}`");
+                    crate::output::print_dry_run_body(&body)?;
+                }
                 return Ok(());
             }
 
@@ -233,7 +326,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                     client.instance_url()
                 )
             })?;
-            let body = read_body(body, body_file.as_deref())?
+            let body = body
                 .or_else(|| existing.body.clone())
                 .ok_or_else(|| anyhow::anyhow!("provide --body or --body-file"))?;
             let title = title
@@ -253,9 +346,9 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             let post = client
                 .update_blog_post(&ConfluenceBlogPostUpdate {
                     id: id.clone(),
-                    status: status_from_draft(draft),
+                    status,
                     title,
-                    space_id: existing.space_id,
+                    space_id: None,
                     body,
                     representation,
                     version: next_version,
@@ -284,7 +377,7 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/api/v2/blogposts/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     id
                 );
                 return Ok(());

@@ -44,7 +44,7 @@ pub(super) async fn run_page_comment(
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/pages/{}/footer-comments?limit={} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     search.content_id,
                     search.limit
                 );
@@ -122,14 +122,14 @@ pub(super) async fn run_page_comment(
                 for attachment in &attachments {
                     println!(
                         "Would PUT {}/wiki/rest/api/content/{}/child/attachment with file `{}` using profile `{profile_name}`",
-                        profile.instance.trim_end_matches('/'),
+                        profile.confluence_api_base_url(),
                         page_id,
                         attachment.display()
                     );
                 }
                 println!(
                     "Would POST {}/wiki/api/v2/footer-comments using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.confluence_api_base_url()
                 );
                 return Ok(());
             }
@@ -213,7 +213,7 @@ pub(super) async fn run_page_comment(
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/api/v2/footer-comments/{} for page `{page_id}` using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     comment_id
                 );
                 return Ok(());

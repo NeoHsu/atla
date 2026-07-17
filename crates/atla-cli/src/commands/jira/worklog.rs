@@ -24,7 +24,7 @@ pub(super) async fn run_issue_worklog(
             if global.dry_run {
                 println!(
                     "Would POST {}/rest/api/3/issue/{}/worklog using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key
                 );
                 return Ok(());
@@ -68,7 +68,7 @@ pub(super) async fn run_issue_worklog(
             if global.dry_run {
                 println!(
                     "Would GET {}/rest/api/3/issue/{}/worklog?startAt=0&maxResults={} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key,
                     max_results
                 );

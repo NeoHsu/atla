@@ -9,7 +9,9 @@ pub fn expand_args(args: Vec<String>) -> anyhow::Result<Vec<String>> {
     }
 
     let store = ConfigStore::default_store().context("failed to find config location")?;
-    let config = store.load().context("failed to load config")?;
+    // Alias expansion is parse preparation and must not migrate or rewrite config before
+    // operation policy and destructive-confirmation checks run.
+    let config = store.load_read_only().context("failed to load config")?;
     expand_args_with_config(args, &config)
 }
 
@@ -42,9 +44,18 @@ fn command_index(args: &[String]) -> Option<usize> {
     while index < args.len() {
         match args[index].as_str() {
             "--" => return (index + 1 < args.len()).then_some(index + 1),
-            "--verbose" | "--dry-run" | "--no-input" => index += 1,
-            "-o" | "--output" | "--profile" => index += 2,
-            arg if arg.starts_with("--output=") || arg.starts_with("--profile=") => index += 1,
+            "--verbose" | "--dry-run" | "--no-input" | "--read-only" => index += 1,
+            "-o" | "--output" | "--profile" | "--max-pages" | "--max-items" | "--max-bytes"
+            | "--timeout" => index += 2,
+            arg if arg.starts_with("--output=")
+                || arg.starts_with("--profile=")
+                || arg.starts_with("--max-pages=")
+                || arg.starts_with("--max-items=")
+                || arg.starts_with("--max-bytes=")
+                || arg.starts_with("--timeout=") =>
+            {
+                index += 1;
+            }
             arg if arg.starts_with('-') => return Some(index),
             _ => return Some(index),
         }
@@ -109,6 +120,21 @@ mod tests {
         assert_eq!(
             command_index(&args(&["atla", "--dry-run", "jira"])),
             Some(2)
+        );
+    }
+
+    #[test]
+    fn command_index_skips_read_only_and_budget_flags() {
+        assert_eq!(
+            command_index(&args(&[
+                "atla",
+                "--read-only",
+                "--max-pages",
+                "2",
+                "--max-items=10",
+                "jira",
+            ])),
+            Some(5)
         );
     }
 

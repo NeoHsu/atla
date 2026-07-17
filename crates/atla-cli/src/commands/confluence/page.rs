@@ -1,7 +1,7 @@
 use anyhow::Context;
 use atla_core::{
     ConfluenceAttachmentSearch, ConfluenceContentTreeSearch, ConfluencePageCopy,
-    ConfluencePageCreate, ConfluencePageSearch, ConfluencePageUpdate,
+    ConfluencePageCreate, ConfluencePageSearch, ConfluencePageTitleUpdate, ConfluencePageUpdate,
     markdown::AdfToMarkdownOptions,
 };
 
@@ -10,11 +10,10 @@ use crate::context::AppContext;
 
 use super::format::{
     markdown_to_adf_options_for_body, open_web_url, prepare_optional_body_with_options,
-    prepare_required_body_with_options, print_attachments, print_content_nodes,
-    print_content_nodes_with_footer, print_page, print_page_body, print_page_body_markdown,
-    print_page_with_attachments, print_pages, print_pages_with_footer, read_body,
-    resolve_required_space_id, resolve_space_id, status_from_draft,
-    view_format_body_representation,
+    prepare_required_body_with_options, print_content_nodes, print_content_nodes_with_footer,
+    print_page, print_page_body_view, print_page_with_attachments, print_pages,
+    print_pages_with_footer, read_body, resolve_required_space_id, resolve_space_id,
+    status_from_draft, view_format_body_representation,
 };
 use super::page_comment::run_page_comment;
 use super::page_label::run_page_label;
@@ -40,22 +39,17 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
 
-            if global.dry_run {
-                if let Some(space) = &space {
-                    let space_url = format!(
-                        "{}/wiki/api/v2/spaces?keys={space}&limit=1",
-                        profile.instance.trim_end_matches('/')
-                    );
-                    println!("Would GET {space_url} using profile `{profile_name}`");
-                }
-                println!(
-                    "Would POST {}/wiki/api/v2/pages using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
-                );
-                return Ok(());
+            if global.dry_run
+                && let Some(path) = body_file.as_deref()
+            {
+                crate::output::register_plan_input(path)?;
             }
-
             let body = read_body(body, body_file.as_deref())?;
+            if global.dry_run && resolve_mentions {
+                anyhow::bail!(
+                    "--dry-run cannot resolve mentions without network access; pass explicit --mention values or omit --resolve-mentions"
+                );
+            }
             let jira_client = if resolve_mentions {
                 Some(ctx.jira_client()?)
             } else {
@@ -72,6 +66,56 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             .await?;
             let (body, representation) =
                 prepare_optional_body_with_options(body, representation, markdown_options)?;
+            let status = status_from_draft(draft);
+
+            if global.dry_run {
+                let space_id = space_id.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --space-id because --space cannot be resolved without network access"
+                    )
+                })?;
+                let request = ConfluencePageCreate {
+                    space_id,
+                    title,
+                    parent_id: parent,
+                    body,
+                    representation,
+                    status,
+                    private: private.then_some(true),
+                    root_level: root_level.then_some(true),
+                };
+                let mut endpoint =
+                    format!("{}/wiki/api/v2/pages", profile.confluence_api_base_url());
+                let mut query = Vec::new();
+                if private {
+                    query.push("private=true");
+                }
+                if root_level {
+                    query.push("root-level=true");
+                }
+                if !query.is_empty() {
+                    endpoint.push('?');
+                    endpoint.push_str(&query.join("&"));
+                }
+                let body = request.request_body();
+                if global.output == Some(crate::cli::OutputFormat::Json) {
+                    crate::output::print_operation_plan(
+                        "confluence.page.create",
+                        profile_name,
+                        &profile.instance,
+                        "POST",
+                        endpoint,
+                        Some(body),
+                        vec!["spaceId supplied explicitly".to_owned()],
+                        Vec::new(),
+                    )?;
+                } else {
+                    println!("Would POST {endpoint} using profile `{profile_name}`");
+                    crate::output::print_dry_run_body(&body)?;
+                }
+                return Ok(());
+            }
+
             let client = ctx.confluence_client()?;
             let space_id = resolve_required_space_id(&client, space.as_deref(), space_id).await?;
             let page = client
@@ -81,7 +125,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     parent_id: parent,
                     body,
                     representation,
-                    status: status_from_draft(draft),
+                    status,
                     private: private.then_some(true),
                     root_level: root_level.then_some(true),
                 })
@@ -112,14 +156,14 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 if let Some(space) = &space {
                     let space_url = format!(
                         "{}/wiki/api/v2/spaces?keys={space}&limit=1",
-                        profile.instance.trim_end_matches('/')
+                        profile.confluence_api_base_url()
                     );
                     println!("Would GET {space_url} using profile `{profile_name}`");
                 }
 
                 let mut url = format!(
                     "{}/wiki/api/v2/pages?limit={limit}",
-                    profile.instance.trim_end_matches('/')
+                    profile.confluence_api_base_url()
                 );
                 if let Some(space_id) = &space_id {
                     url.push_str(&format!("&space-id={space_id}"));
@@ -214,14 +258,14 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             if global.dry_run {
                 let url = format!(
                     "{}/wiki/api/v2/pages/{}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     id
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
                 if with_attachments {
                     let att_url = format!(
                         "{}/wiki/api/v2/pages/{}/attachments",
-                        profile.instance.trim_end_matches('/'),
+                        profile.confluence_api_base_url(),
                         id
                     );
                     println!("Would GET {att_url} using profile `{profile_name}`");
@@ -249,35 +293,33 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     )
                 })?;
 
-            if with_attachments {
+            let attachments = if with_attachments {
                 let search = ConfluenceAttachmentSearch {
                     page_id: id.clone(),
                     filename: None,
                     limit: 250,
                     cursor: None,
                 };
-                let attachments = client
-                    .list_page_attachments(&search)
-                    .await
-                    .with_context(|| format!("failed to list attachments for page `{id}`"))?;
-                if matches!(format, Some(ContentViewFormat::Markdown)) {
-                    print_page_body_markdown(&page, markdown_options)?;
-                } else if format.is_some() {
-                    print_page_body(&page)?;
-                } else {
-                    print_page_with_attachments(&page, &attachments.results, global)?;
-                    return Ok(());
-                }
-                // body-format view: print attachments separately (body is already printed above)
-                if attachments.results.is_empty() {
-                    eprintln!("(no attachments)");
-                } else {
-                    print_attachments(&attachments.results, global)?;
-                }
-            } else if matches!(format, Some(ContentViewFormat::Markdown)) {
-                print_page_body_markdown(&page, markdown_options)?;
-            } else if format.is_some() {
-                print_page_body(&page)?;
+                Some(
+                    client
+                        .list_page_attachments(&search)
+                        .await
+                        .with_context(|| format!("failed to list attachments for page `{id}`"))?
+                        .results,
+                )
+            } else {
+                None
+            };
+            if let Some(format) = format {
+                print_page_body_view(
+                    &page,
+                    format,
+                    attachments.as_deref(),
+                    global,
+                    markdown_options,
+                )?;
+            } else if let Some(attachments) = attachments {
+                print_page_with_attachments(&page, &attachments, global)?;
             } else {
                 print_page(&page, global)?;
             }
@@ -316,14 +358,14 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 let endpoint = if let Some(depth) = search.depth {
                     format!(
                         "{}/wiki/api/v2/pages/{}/descendants?limit={}&depth={depth}",
-                        profile.instance.trim_end_matches('/'),
+                        profile.confluence_api_base_url(),
                         search.page_id,
                         search.limit
                     )
                 } else {
                     format!(
                         "{}/wiki/api/v2/pages/{}/direct-children?limit={}",
-                        profile.instance.trim_end_matches('/'),
+                        profile.confluence_api_base_url(),
                         search.page_id,
                         search.limit
                     )
@@ -400,17 +442,17 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 if let Some(space) = &space {
                     println!(
                         "Would GET {}/wiki/api/v2/spaces?keys={space}&limit=1 using profile `{profile_name}`",
-                        profile.instance.trim_end_matches('/')
+                        profile.confluence_api_base_url()
                     );
                 }
                 println!(
                     "Would GET {}/wiki/api/v2/pages/{}?body-format=storage using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     source_id
                 );
                 println!(
                     "Would POST {}/wiki/api/v2/pages using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.confluence_api_base_url()
                 );
                 return Ok(());
             }
@@ -453,31 +495,6 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
 
-            if global.dry_run {
-                let endpoint = if body.is_none() && body_file.is_none() && parent.is_none() {
-                    format!(
-                        "{}/wiki/api/v2/pages/{}/title",
-                        profile.instance.trim_end_matches('/'),
-                        id
-                    )
-                } else {
-                    format!(
-                        "{}/wiki/api/v2/pages/{}",
-                        profile.instance.trim_end_matches('/'),
-                        id
-                    )
-                };
-                println!("Would PUT {endpoint} using profile `{profile_name}`");
-                return Ok(());
-            }
-
-            let client = ctx.confluence_client()?;
-            let existing = client.get_page(&id).await.with_context(|| {
-                format!(
-                    "failed to load Confluence page `{id}` from {}",
-                    client.instance_url()
-                )
-            })?;
             let status = status_from_draft(draft);
 
             if body.is_none() && body_file.is_none() && parent.is_none() {
@@ -486,8 +503,35 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                         "nothing to update; provide --title, --body-file, --body, or --parent"
                     )
                 })?;
+                let request = ConfluencePageTitleUpdate { title, status };
+                if global.dry_run {
+                    let url = format!(
+                        "{}/wiki/api/v2/pages/{}/title",
+                        profile.confluence_api_base_url(),
+                        id
+                    );
+                    let body = request.request_body();
+                    if global.output == Some(crate::cli::OutputFormat::Json) {
+                        crate::output::print_operation_plan(
+                            "confluence.page.update",
+                            profile_name,
+                            &profile.instance,
+                            "PUT",
+                            url,
+                            Some(body),
+                            vec!["title supplied explicitly".to_owned()],
+                            Vec::new(),
+                        )?;
+                    } else {
+                        println!("Would PUT {url} using profile `{profile_name}`");
+                        crate::output::print_dry_run_body(&body)?;
+                    }
+                    return Ok(());
+                }
+
+                let client = ctx.confluence_client()?;
                 let page = client
-                    .update_page_title(&id, &title, status)
+                    .update_page_title(&id, &request.title, request.status)
                     .await
                     .with_context(|| {
                         format!(
@@ -499,7 +543,17 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 return Ok(());
             }
 
+            if global.dry_run
+                && let Some(path) = body_file.as_deref()
+            {
+                crate::output::register_plan_input(path)?;
+            }
             let body = read_body(body, body_file.as_deref())?;
+            if global.dry_run && resolve_mentions {
+                anyhow::bail!(
+                    "--dry-run cannot resolve mentions without network access; pass explicit --mention values or omit --resolve-mentions"
+                );
+            }
             let jira_client = if resolve_mentions {
                 Some(ctx.jira_client()?)
             } else {
@@ -520,6 +574,63 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                 markdown_options,
                 "page body update and move require --body or --body-file",
             )?;
+
+            if global.dry_run {
+                let title = title.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --title for a full page update because the current title cannot be loaded without network access"
+                    )
+                })?;
+                let version = version.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--dry-run requires --version for a full page update because the next version cannot be loaded without network access"
+                    )
+                })?;
+                let request = ConfluencePageUpdate {
+                    id: id.clone(),
+                    status,
+                    title,
+                    space_id: None,
+                    parent_id: parent,
+                    body,
+                    representation,
+                    version,
+                    message,
+                };
+                let url = format!(
+                    "{}/wiki/api/v2/pages/{}",
+                    profile.confluence_api_base_url(),
+                    id
+                );
+                let body = request.request_body();
+                if global.output == Some(crate::cli::OutputFormat::Json) {
+                    crate::output::print_operation_plan(
+                        "confluence.page.update",
+                        profile_name,
+                        &profile.instance,
+                        "PUT",
+                        url,
+                        Some(body),
+                        vec![
+                            "title supplied explicitly".to_owned(),
+                            "version supplied explicitly".to_owned(),
+                        ],
+                        Vec::new(),
+                    )?;
+                } else {
+                    println!("Would PUT {url} using profile `{profile_name}`");
+                    crate::output::print_dry_run_body(&body)?;
+                }
+                return Ok(());
+            }
+
+            let client = ctx.confluence_client()?;
+            let existing = client.get_page(&id).await.with_context(|| {
+                format!(
+                    "failed to load Confluence page `{id}` from {}",
+                    client.instance_url()
+                )
+            })?;
             let title = title
                 .or(existing.title)
                 .ok_or_else(|| anyhow::anyhow!("page `{id}` did not include a title"))?;
@@ -540,7 +651,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     id: id.clone(),
                     status,
                     title,
-                    space_id: existing.space_id,
+                    space_id: None,
                     parent_id: parent,
                     body,
                     representation,
@@ -570,7 +681,7 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/api/v2/pages/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     id
                 );
                 return Ok(());
@@ -613,12 +724,12 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/pages/{}?body-format=storage using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     id
                 );
                 println!(
                     "Would PUT {}/wiki/api/v2/pages/{} with parentId `{}` using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     id,
                     parent
                 );

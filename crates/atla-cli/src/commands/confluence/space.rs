@@ -37,7 +37,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let mut url = format!(
                     "{}/wiki/api/v2/spaces?limit={}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     search.limit
                 );
                 if let Some(key) = &search.key {
@@ -105,7 +105,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let url = format!(
                     "{}/wiki/api/v2/spaces?keys={}&limit=1",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     key
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
@@ -150,7 +150,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 println!(
                     "Would POST {}/wiki/api/v2/spaces using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.confluence_api_base_url()
                 );
                 return Ok(());
             }
@@ -187,7 +187,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 println!(
                     "Would PUT {}/wiki/rest/api/space/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     update.key
                 );
                 return Ok(());
@@ -212,7 +212,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/rest/api/space/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     key
                 );
                 return Ok(());

@@ -1,8 +1,10 @@
+use std::time::Duration;
+
 use anyhow::Context;
 use atla_core::auth::{CredentialStore, env_token};
 use atla_core::{
-    AtlassianClient, ConfigStore, ConfluenceClient, CredentialStorage, FileCredentialStore,
-    JiraClient, KeyringCredentialStore, Profile,
+    AtlassianClient, AtlassianProduct, ConfigStore, ConfluenceClient, CredentialStorage,
+    FileCredentialStore, HttpPolicy, JiraClient, KeyringCredentialStore, Profile,
 };
 
 use crate::cli::GlobalArgs;
@@ -13,13 +15,21 @@ use crate::error::AuthSetupError;
 pub struct AppContext {
     profile_name: String,
     profile: Profile,
+    http_policy: HttpPolicy,
+    max_pages: Option<u32>,
+    max_items: Option<u32>,
     verbose: bool,
 }
 
 impl AppContext {
     pub fn load(global: &GlobalArgs) -> anyhow::Result<Self> {
         let store = ConfigStore::default_store().context("failed to find config location")?;
-        let atla_config = store.load().context("failed to load config")?;
+        let atla_config = if global.read_only {
+            store.load_read_only()
+        } else {
+            store.load()
+        }
+        .context("failed to load config")?;
         let active_profile_name = config::active_profile(global);
         let (profile_name, profile) = atla_config
             .active_profile(active_profile_name)
@@ -38,9 +48,16 @@ impl AppContext {
                 anyhow::Error::new(AuthSetupError(message))
             })?;
 
+        let http_policy = global.timeout.map_or_else(HttpPolicy::default, |seconds| {
+            HttpPolicy::default().with_timeout(Duration::from_secs(seconds))
+        });
+        crate::output::configure_profile(profile_name);
         Ok(Self {
             profile_name: profile_name.to_owned(),
             profile: profile.clone(),
+            http_policy,
+            max_pages: global.max_pages,
+            max_items: global.max_items,
             verbose: global.verbose,
         })
     }
@@ -77,15 +94,29 @@ impl AppContext {
         })
     }
 
-    pub fn atlassian_client(&self) -> anyhow::Result<AtlassianClient> {
-        Ok(AtlassianClient::from_profile(&self.profile, self.token()?).with_verbose(self.verbose))
+    pub(crate) fn atlassian_client(
+        &self,
+        product: AtlassianProduct,
+    ) -> anyhow::Result<AtlassianClient> {
+        Ok(AtlassianClient::from_profile_for_product_with_policy(
+            &self.profile,
+            self.token()?,
+            product,
+            self.http_policy,
+        )
+        .with_execution_limits(self.max_pages, self.max_items)
+        .with_verbose(self.verbose))
     }
 
     pub fn jira_client(&self) -> anyhow::Result<JiraClient> {
-        Ok(JiraClient::new(self.atlassian_client()?))
+        Ok(JiraClient::new(
+            self.atlassian_client(AtlassianProduct::Jira)?,
+        ))
     }
 
     pub fn confluence_client(&self) -> anyhow::Result<ConfluenceClient> {
-        Ok(ConfluenceClient::new(self.atlassian_client()?))
+        Ok(ConfluenceClient::new(
+            self.atlassian_client(AtlassianProduct::Confluence)?,
+        ))
     }
 }

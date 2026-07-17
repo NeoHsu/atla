@@ -19,7 +19,7 @@ pub(super) async fn run_issue_attachment(
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/issue/{key}/attachments",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 println!("Would POST {url} using profile `{profile_name}`");
                 return Ok(());
@@ -46,7 +46,7 @@ pub(super) async fn run_issue_attachment(
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/issue/{key}?fields=attachment",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
                 return Ok(());
@@ -71,13 +71,13 @@ pub(super) async fn run_issue_attachment(
                 if all {
                     println!(
                         "Would GET {}/rest/api/3/issue/{}?fields=attachment, then download each attachment using profile `{profile_name}`",
-                        profile.instance.trim_end_matches('/'),
+                        profile.jira_api_base_url(),
                         target
                     );
                 } else {
                     println!(
                         "Would GET {}/rest/api/3/attachment/{}, then download its content using profile `{profile_name}`",
-                        profile.instance.trim_end_matches('/'),
+                        profile.jira_api_base_url(),
                         target
                     );
                 }
@@ -123,7 +123,7 @@ pub(super) async fn run_issue_attachment(
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/attachment/{attachment_id}",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 println!("Would DELETE {url} using profile `{profile_name}`");
                 return Ok(());
@@ -141,9 +141,15 @@ pub(super) async fn run_issue_attachment(
                 })?;
 
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => {
-                    output::print_json(&serde_json::json!({ "deleted": attachment_id }))
-                }
+                OutputFormat::Json => output::print_json(&output::schema::MutationReceipt {
+                    schema_version: output::schema::SCHEMA_VERSION,
+                    operation: "jira.issue.attachment.delete",
+                    profile: profile_name.to_owned(),
+                    target: Some(attachment_id.clone()),
+                    request_id: None,
+                    result: serde_json::json!({ "deleted": attachment_id }),
+                    completed_at: chrono::Utc::now().to_rfc3339(),
+                }),
                 OutputFormat::Keys => {
                     println!("{attachment_id}");
                     Ok(())

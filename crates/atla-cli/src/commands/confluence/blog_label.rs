@@ -43,7 +43,7 @@ pub(super) async fn run_blog_label(
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/blogposts/{}/labels?limit={} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     search.content_id,
                     search.limit
                 );
@@ -112,7 +112,7 @@ pub(super) async fn run_blog_label(
             if global.dry_run {
                 println!(
                     "Would POST {}/wiki/rest/api/content/{}/label using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     blog_id
                 );
                 return Ok(());
@@ -130,7 +130,11 @@ pub(super) async fn run_blog_label(
                 })?;
             print_labels(&labels, global)?;
         }
-        BlogLabelAction::Remove { blog_id, label } => {
+        BlogLabelAction::Remove {
+            blog_id,
+            label,
+            yes: _,
+        } => {
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -138,7 +142,7 @@ pub(super) async fn run_blog_label(
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/rest/api/content/{}/label?name={} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     blog_id,
                     label
                 );

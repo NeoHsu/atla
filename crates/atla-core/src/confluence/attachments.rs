@@ -64,12 +64,12 @@ impl ConfluenceClient {
         search: &ConfluenceAttachmentSearch,
     ) -> Result<ConfluenceAttachmentPage, ApiError> {
         let page_id = parse_i64_id(&search.page_id)?;
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluenceAttachment> = Vec::new();
         let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;

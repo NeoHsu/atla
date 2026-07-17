@@ -610,12 +610,56 @@ pub(super) fn print_issue_with_github(
     issue: &JiraIssue,
     prs: &[JiraGithubPullRequest],
     commits: &[JiraGithubCommit],
+    global: &GlobalArgs,
 ) -> anyhow::Result<()> {
-    output::print_json(&serde_json::json!({
-        "issue": issue,
-        "pull_requests": prs,
-        "commits": commits,
-    }))
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => output::print_json(&serde_json::json!({
+            "issue": issue,
+            "pull_requests": prs,
+            "commits": commits,
+        })),
+        OutputFormat::Csv => {
+            println!("record_type,key,id,title_or_message,status,url");
+            println!(
+                "issue,{},{},{},{},",
+                output::csv_cell(issue.key.as_deref().unwrap_or_default()),
+                output::csv_cell(issue.id.as_deref().unwrap_or_default()),
+                output::csv_cell(&issue_column_cell(issue, "summary")),
+                output::csv_cell(&issue_column_cell(issue, "status")),
+            );
+            for pr in prs {
+                println!(
+                    "pull_request,,{},{},{},{}",
+                    output::csv_cell(pr.id.as_deref().unwrap_or_default()),
+                    output::csv_cell(pr.title.as_deref().unwrap_or_default()),
+                    output::csv_cell(pr.status.as_deref().unwrap_or_default()),
+                    output::csv_cell(pr.url.as_deref().unwrap_or_default()),
+                );
+            }
+            for commit in commits {
+                println!(
+                    "commit,,{},{},,{}",
+                    output::csv_cell(commit.id.as_deref().unwrap_or_default()),
+                    output::csv_cell(commit.message.as_deref().unwrap_or_default()),
+                    output::csv_cell(commit.url.as_deref().unwrap_or_default()),
+                );
+            }
+            Ok(())
+        }
+        OutputFormat::Keys => {
+            if let Some(key) = &issue.key {
+                println!("{key}");
+            }
+            for id in prs.iter().filter_map(|pr| pr.id.as_deref()) {
+                println!("{id}");
+            }
+            for id in commits.iter().filter_map(|commit| commit.id.as_deref()) {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Table => unreachable!("table output renders sections in the caller"),
+    }
 }
 
 pub(super) fn print_github_pull_requests(

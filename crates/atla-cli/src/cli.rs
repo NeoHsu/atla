@@ -34,6 +34,26 @@ pub struct GlobalArgs {
     /// Never prompt; fail instead (for scripts and CI)
     #[arg(long, global = true)]
     pub no_input: bool,
+
+    /// Reject every command that can modify local or remote state
+    #[arg(long, global = true, env = "ATLA_READ_ONLY")]
+    pub read_only: bool,
+
+    /// Stop automatic pagination after this many API pages
+    #[arg(long, global = true, value_parser = clap::value_parser!(u32).range(1..))]
+    pub max_pages: Option<u32>,
+
+    /// Return at most this many records from a list operation
+    #[arg(long, global = true, value_parser = clap::value_parser!(u32).range(1..))]
+    pub max_items: Option<u32>,
+
+    /// Refuse to print JSON output larger than this many bytes (requires --output json)
+    #[arg(long, global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    pub max_bytes: Option<u64>,
+
+    /// Per-request timeout in seconds (including uploads and downloads)
+    #[arg(long, global = true, value_parser = clap::value_parser!(u64).range(1..))]
+    pub timeout: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -82,11 +102,333 @@ pub enum Command {
     Jira(JiraCommand),
     /// Confluence spaces, pages, blogs, search, and attachments
     Confluence(ConfluenceCommand),
+    /// Build a validated, expiring mutation plan without network access
+    Plan {
+        /// Write the plan to this file
+        #[arg(long, global = true)]
+        out: Option<PathBuf>,
+        /// Plan lifetime in seconds
+        #[arg(long, global = true, default_value_t = 3600, value_parser = clap::value_parser!(u64).range(1..=86400))]
+        expires_in: u64,
+        #[command(subcommand)]
+        command: PlannableCommand,
+    },
+    /// Validate and execute a saved mutation plan
+    Apply {
+        /// Plan JSON file
+        plan: PathBuf,
+        /// Confirm execution of the saved mutation
+        #[arg(long)]
+        yes: bool,
+    },
     /// Generate shell completions
     Completion {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlannableCommand {
+    /// Plan a Jira mutation
+    Jira(PlanJiraCommand),
+    /// Plan a Confluence mutation
+    Confluence(PlanConfluenceCommand),
+}
+
+impl PlannableCommand {
+    pub fn into_command(self) -> Command {
+        match self {
+            Self::Jira(command) => Command::Jira(JiraCommand {
+                resource: match command.resource {
+                    PlanJiraResource::Issue(command) => JiraResource::Issue(IssueCommand {
+                        action: match command.action {
+                            PlanIssueAction::Create {
+                                project,
+                                issue_type,
+                                summary,
+                                description,
+                                description_file,
+                                fields,
+                                labels,
+                            } => IssueAction::Create {
+                                project,
+                                issue_type,
+                                summary,
+                                description,
+                                description_file,
+                                fields,
+                                labels,
+                            },
+                        },
+                    }),
+                },
+            }),
+            Self::Confluence(command) => Command::Confluence(ConfluenceCommand {
+                resource: match command.resource {
+                    PlanConfluenceResource::Page(command) => {
+                        ConfluenceResource::Page(PageCommand {
+                            action: match command.action {
+                                PlanPageAction::Create {
+                                    space_id,
+                                    title,
+                                    parent,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    numbered_table_rows,
+                                    mentions,
+                                    draft,
+                                    private,
+                                    root_level,
+                                } => PageAction::Create {
+                                    space: None,
+                                    space_id: Some(space_id),
+                                    title,
+                                    parent,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    numbered_table_rows,
+                                    mentions,
+                                    resolve_mentions: false,
+                                    draft,
+                                    private,
+                                    root_level,
+                                },
+                                PlanPageAction::Update {
+                                    id,
+                                    title,
+                                    parent,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    numbered_table_rows,
+                                    mentions,
+                                    version,
+                                    message,
+                                    draft,
+                                } => PageAction::Update {
+                                    id,
+                                    title,
+                                    parent,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    numbered_table_rows,
+                                    mentions,
+                                    resolve_mentions: false,
+                                    version,
+                                    message,
+                                    draft,
+                                },
+                            },
+                        })
+                    }
+                    PlanConfluenceResource::Blog(command) => {
+                        ConfluenceResource::Blog(BlogCommand {
+                            action: match command.action {
+                                PlanBlogAction::Create {
+                                    space_id,
+                                    title,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    draft,
+                                    private,
+                                } => BlogAction::Create {
+                                    space: None,
+                                    space_id: Some(space_id),
+                                    title,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    draft,
+                                    private,
+                                },
+                                PlanBlogAction::Update {
+                                    id,
+                                    title,
+                                    body,
+                                    body_file,
+                                    representation,
+                                    version,
+                                    message,
+                                    draft,
+                                } => BlogAction::Update {
+                                    id,
+                                    title: Some(title),
+                                    body,
+                                    body_file,
+                                    representation,
+                                    version: Some(version),
+                                    message,
+                                    draft,
+                                },
+                            },
+                        })
+                    }
+                },
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct PlanJiraCommand {
+    #[command(subcommand)]
+    pub resource: PlanJiraResource,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlanJiraResource {
+    /// Plan a Jira issue mutation
+    Issue(PlanIssueCommand),
+}
+
+#[derive(Debug, Args)]
+pub struct PlanIssueCommand {
+    #[command(subcommand)]
+    pub action: PlanIssueAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlanIssueAction {
+    /// Plan creating an issue
+    Create {
+        #[arg(long)]
+        project: String,
+        #[arg(long = "type")]
+        issue_type: String,
+        #[arg(long)]
+        summary: String,
+        #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]
+        description: Option<String>,
+        #[arg(long)]
+        description_file: Option<PathBuf>,
+        #[arg(long = "field")]
+        fields: Vec<String>,
+        #[arg(long)]
+        labels: Option<String>,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct PlanConfluenceCommand {
+    #[command(subcommand)]
+    pub resource: PlanConfluenceResource,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlanConfluenceResource {
+    /// Plan a page mutation
+    Page(PlanPageCommand),
+    /// Plan a blog-post mutation
+    Blog(PlanBlogCommand),
+}
+
+#[derive(Debug, Args)]
+pub struct PlanPageCommand {
+    #[command(subcommand)]
+    pub action: PlanPageAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlanPageAction {
+    /// Plan creating a page (requires an explicit space ID)
+    Create {
+        #[arg(long)]
+        space_id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long, conflicts_with = "root_level")]
+        parent: Option<String>,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        numbered_table_rows: bool,
+        #[arg(long = "mention", value_name = "NAME=ACCOUNT_ID")]
+        mentions: Vec<String>,
+        #[arg(long)]
+        draft: bool,
+        #[arg(long)]
+        private: bool,
+        #[arg(long, conflicts_with = "parent")]
+        root_level: bool,
+    },
+    /// Plan updating a page; full updates require explicit title, body, and version
+    Update {
+        id: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        numbered_table_rows: bool,
+        #[arg(long = "mention", value_name = "NAME=ACCOUNT_ID")]
+        mentions: Vec<String>,
+        #[arg(long)]
+        version: Option<u64>,
+        #[arg(long)]
+        message: Option<String>,
+        #[arg(long)]
+        draft: bool,
+    },
+}
+
+#[derive(Debug, Args)]
+pub struct PlanBlogCommand {
+    #[command(subcommand)]
+    pub action: PlanBlogAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PlanBlogAction {
+    /// Plan creating a blog post (requires an explicit space ID)
+    Create {
+        #[arg(long)]
+        space_id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long)]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        draft: bool,
+        #[arg(long)]
+        private: bool,
+    },
+    /// Plan updating a blog post with explicit body, title, and version
+    Update {
+        id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long, conflicts_with = "body_file")]
+        body: Option<String>,
+        #[arg(long, required_unless_present = "body")]
+        body_file: Option<PathBuf>,
+        #[arg(long, value_enum, default_value_t = BodyRepresentation::Storage)]
+        representation: BodyRepresentation,
+        #[arg(long)]
+        version: u64,
+        #[arg(long)]
+        message: Option<String>,
+        #[arg(long)]
+        draft: bool,
     },
 }
 
@@ -103,18 +445,34 @@ pub enum AuthAction {
         /// Site URL, e.g. https://your-site.atlassian.net
         #[arg(long)]
         instance: Option<String>,
+        /// Cloud ID for an Atlassian scoped API token (routes through api.atlassian.com)
+        #[arg(long)]
+        cloud_id: Option<String>,
         /// Atlassian account email
         #[arg(long)]
         email: Option<String>,
-        /// API token (create at id.atlassian.com); omit to be prompted
+        /// API token (create at id.atlassian.com); prefer --token-stdin in automation
         #[arg(long)]
         token: Option<String>,
+        /// Read the API token from stdin (avoids shell history and process arguments)
+        #[arg(long, conflicts_with = "token")]
+        token_stdin: bool,
         /// Token storage backend
         #[arg(long, value_enum)]
         storage: Option<AuthStorage>,
     },
-    /// Remove stored credentials for the active profile
-    Logout,
+    /// Discover a site's cloud ID and scoped-token API endpoints
+    Discover {
+        /// Atlassian site URL, e.g. https://your-site.atlassian.net
+        #[arg(long)]
+        site: String,
+    },
+    /// Remove stored credentials for the active profile (requires --yes)
+    Logout {
+        /// Confirm removal of the stored credential
+        #[arg(long)]
+        yes: bool,
+    },
     /// Show authentication status for the active profile
     Status,
     /// Set the default profile
@@ -980,6 +1338,9 @@ pub enum PageLabelAction {
         page_id: String,
         /// Label to remove
         label: String,
+        /// Confirm the destructive operation (required; there is no prompt)
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -1194,6 +1555,9 @@ pub enum BlogLabelAction {
         blog_id: String,
         /// Label to remove
         label: String,
+        /// Confirm the destructive operation (required; there is no prompt)
+        #[arg(long)]
+        yes: bool,
     },
 }
 

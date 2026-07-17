@@ -13,13 +13,13 @@ impl JiraClient {
         &self,
         search: &JiraSprintSearch,
     ) -> Result<JiraSprintPage, ApiError> {
-        let max_results = search.max_results.max(1);
+        let max_results = self.raw_client.effective_item_limit(search.max_results);
         let mut collected: Vec<JiraSprint> = Vec::new();
         let mut start_at = search.start_at;
         let mut last_is_last: Option<bool> = Some(true);
         let mut last_total: Option<u64> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;
@@ -97,13 +97,13 @@ impl JiraClient {
         start_at: u64,
     ) -> Result<JiraIssueSearchPage, ApiError> {
         let fields_str = issue_fields(fields.as_deref()).join(",");
-        let max_results = max_results.max(1);
+        let max_results = self.raw_client.effective_item_limit(max_results);
         let mut collected: Vec<JiraIssue> = Vec::new();
         let initial_start_at = start_at;
         let mut start_at: u64 = start_at;
         let mut last_total: Option<u64> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;

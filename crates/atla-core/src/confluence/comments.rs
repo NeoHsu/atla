@@ -10,12 +10,12 @@ impl ConfluenceClient {
         search: &ConfluenceCommentSearch,
     ) -> Result<ConfluenceCommentPage, ApiError> {
         let content_id = parse_i64_id(&search.content_id)?;
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluenceComment> = Vec::new();
         let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;
@@ -91,12 +91,12 @@ impl ConfluenceClient {
         search: &ConfluenceCommentSearch,
     ) -> Result<ConfluenceCommentPage, ApiError> {
         let content_id = parse_i64_id(&search.content_id)?;
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluenceComment> = Vec::new();
         let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;

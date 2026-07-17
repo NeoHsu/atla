@@ -276,28 +276,141 @@ pub(super) fn view_format_body_representation(
     }
 }
 
-pub(super) fn print_page_body(page: &ConfluencePage) -> anyhow::Result<()> {
+fn render_page_body(
+    page: &ConfluencePage,
+    format: ContentViewFormat,
+    options: markdown::AdfToMarkdownOptions,
+) -> anyhow::Result<String> {
     let body = page
         .body
         .as_deref()
         .ok_or_else(|| anyhow::anyhow!("page did not include a body"))?;
-    println!("{body}");
-    Ok(())
+    if matches!(format, ContentViewFormat::Markdown) {
+        Ok(serde_json::from_str::<serde_json::Value>(body)
+            .map(|adf| markdown::adf_to_markdown_with_options(&adf, options))
+            .unwrap_or_else(|_| body.to_owned()))
+    } else {
+        Ok(body.to_owned())
+    }
 }
 
-pub(super) fn print_page_body_markdown(
+pub(super) fn print_page_body_view(
     page: &ConfluencePage,
+    format: ContentViewFormat,
+    attachments: Option<&[ConfluenceAttachment]>,
+    global: &GlobalArgs,
     options: markdown::AdfToMarkdownOptions,
 ) -> anyhow::Result<()> {
-    let body = page
+    let body = render_page_body(page, format, options)?;
+    let format_name = match format {
+        ContentViewFormat::Markdown => "markdown",
+        ContentViewFormat::Storage => "storage",
+        ContentViewFormat::AtlasDocFormat => "atlas_doc_format",
+    };
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => {
+            let mut value = serde_json::to_value(page).context("failed to serialize page")?;
+            value["renderedBody"] = body.into();
+            value["renderedFormat"] = format_name.into();
+            if let Some(attachments) = attachments {
+                value["attachments"] =
+                    serde_json::to_value(attachments).context("failed to serialize attachments")?;
+            }
+            output::print_json(&value)
+        }
+        OutputFormat::Csv => {
+            println!("id,title,rendered_format,rendered_body,attachment_ids");
+            let attachment_ids = attachments
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|attachment| attachment.id.as_deref())
+                .collect::<Vec<_>>()
+                .join(";");
+            println!(
+                "{},{},{},{},{}",
+                output::csv_cell(page.id.as_deref().unwrap_or_default()),
+                output::csv_cell(page.title.as_deref().unwrap_or_default()),
+                output::csv_cell(format_name),
+                output::csv_cell(&body),
+                output::csv_cell(&attachment_ids),
+            );
+            Ok(())
+        }
+        OutputFormat::Keys => {
+            if let Some(id) = &page.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{body}");
+            if let Some(attachments) = attachments {
+                if attachments.is_empty() {
+                    eprintln!("(no attachments)");
+                } else {
+                    print_attachments(attachments, global)?;
+                }
+            }
+            Ok(())
+        }
+    }
+}
+
+pub(super) fn print_blog_body_view(
+    post: &ConfluenceBlogPost,
+    format: ContentViewFormat,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    let body = post
         .body
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("page did not include a body"))?;
-    let markdown = serde_json::from_str::<serde_json::Value>(body)
-        .map(|adf| markdown::adf_to_markdown_with_options(&adf, options))
-        .unwrap_or_else(|_| body.to_owned());
-    println!("{markdown}");
-    Ok(())
+        .ok_or_else(|| anyhow::anyhow!("blog post did not include a body"))?;
+    let rendered = if matches!(format, ContentViewFormat::Markdown) {
+        serde_json::from_str::<serde_json::Value>(body)
+            .map(|adf| {
+                markdown::adf_to_markdown_with_options(
+                    &adf,
+                    markdown::AdfToMarkdownOptions::default(),
+                )
+            })
+            .unwrap_or_else(|_| body.to_owned())
+    } else {
+        body.to_owned()
+    };
+    let format_name = match format {
+        ContentViewFormat::Markdown => "markdown",
+        ContentViewFormat::Storage => "storage",
+        ContentViewFormat::AtlasDocFormat => "atlas_doc_format",
+    };
+    match global.output.unwrap_or(OutputFormat::Table) {
+        OutputFormat::Json => {
+            let mut value = serde_json::to_value(post).context("failed to serialize blog post")?;
+            value["renderedBody"] = rendered.into();
+            value["renderedFormat"] = format_name.into();
+            output::print_json(&value)
+        }
+        OutputFormat::Csv => {
+            println!("id,title,rendered_format,rendered_body");
+            println!(
+                "{},{},{},{}",
+                output::csv_cell(post.id.as_deref().unwrap_or_default()),
+                output::csv_cell(post.title.as_deref().unwrap_or_default()),
+                output::csv_cell(format_name),
+                output::csv_cell(&rendered),
+            );
+            Ok(())
+        }
+        OutputFormat::Keys => {
+            if let Some(id) = &post.id {
+                println!("{id}");
+            }
+            Ok(())
+        }
+        OutputFormat::Table => {
+            println!("{rendered}");
+            Ok(())
+        }
+    }
 }
 
 pub(super) fn open_web_url(url: &str) -> anyhow::Result<()> {

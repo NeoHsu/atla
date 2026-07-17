@@ -1,10 +1,12 @@
-use std::io::{IsTerminal, stdin, stdout};
+use std::io::{IsTerminal, Read, stdin, stdout};
+use std::time::Duration;
 
 use anyhow::{Context, bail};
 use atla_core::auth::{CredentialStore, env_token};
+use atla_core::profile::normalize_cloud_id;
 use atla_core::{
-    AtlaConfig, AtlassianInstance, ConfigStore, CredentialStorage, FileCredentialStore,
-    KeyringCredentialStore, Profile,
+    AtlaConfig, AtlassianInstance, ConfigStore, CredentialStorage, FileCredentialStore, HttpPolicy,
+    KeyringCredentialStore, Profile, ProfilePolicy, discover_tenant,
 };
 use dialoguer::{Input, Password};
 
@@ -18,17 +20,27 @@ struct AuthStatusOutput<'a> {
     instance: &'a str,
     email: &'a str,
     credential_store: String,
+    api_target: &'static str,
+    cloud_id: Option<&'a str>,
+    policy_mode: String,
     token: String,
 }
 
 pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     let store = ConfigStore::default_store().context("failed to find config location")?;
-    let mut atla_config = store.load().context("failed to load config")?;
+    let mut atla_config = if global.read_only {
+        store.load_read_only()
+    } else {
+        store.load()
+    }
+    .context("failed to load config")?;
     match command.action {
         AuthAction::Login {
             instance,
+            cloud_id,
             email,
             token,
+            token_stdin,
             storage,
         } => {
             let profile_name = config::active_profile(global).unwrap_or("default");
@@ -38,8 +50,17 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 instance,
                 global,
             )?);
+            let cloud_id = cloud_id
+                .as_deref()
+                .map(normalize_cloud_id)
+                .transpose()?
+                .flatten();
             let email = required_text("Email", "--email", email, global)?;
-            let token = required_secret("API token", "--token", token, global)?;
+            let token = if token_stdin {
+                read_token_stdin()?
+            } else {
+                required_secret("API token", "--token or --token-stdin", token, global)?
+            };
             let credential_store = storage
                 .map(Into::into)
                 .or_else(|| {
@@ -56,6 +77,8 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 credential_store,
                 default_project: None,
                 default_space: None,
+                cloud_id,
+                policy: ProfilePolicy::default(),
             };
             let credential = profile.credential_ref(profile_name);
 
@@ -82,7 +105,45 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 );
             }
         }
-        AuthAction::Logout => {
+        AuthAction::Discover { site } => {
+            let site = normalize_instance(&site);
+            let url = format!("{}/_edge/tenant_info", site.trim_end_matches('/'));
+            if global.dry_run {
+                println!("Would GET {url}");
+                return Ok(());
+            }
+            let policy = global.timeout.map_or_else(HttpPolicy::default, |seconds| {
+                HttpPolicy::default().with_timeout(Duration::from_secs(seconds))
+            });
+            let discovery = discover_tenant(&site, policy)
+                .await
+                .with_context(|| format!("failed to discover Atlassian tenant at {site}"))?;
+            match global.output {
+                Some(OutputFormat::Json) => output::print_json(&discovery)?,
+                Some(format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys)) => {
+                    output::print_records(
+                        format,
+                        &discovery,
+                        vec![discovery.cloud_id.clone()],
+                        &["site", "cloud_id", "jira_endpoint", "confluence_endpoint"],
+                        vec![vec![
+                            discovery.site.clone(),
+                            discovery.cloud_id.clone(),
+                            discovery.jira_endpoint.clone(),
+                            discovery.confluence_endpoint.clone(),
+                        ]],
+                        None,
+                    )?;
+                }
+                None => {
+                    println!("Site: {}", discovery.site);
+                    println!("Cloud ID: {}", discovery.cloud_id);
+                    println!("Jira endpoint: {}", discovery.jira_endpoint);
+                    println!("Confluence endpoint: {}", discovery.confluence_endpoint);
+                }
+            }
+        }
+        AuthAction::Logout { .. } => {
             let (profile_name, profile) = active_profile(&atla_config, global)?;
             let credential = profile.credential_ref(profile_name);
 
@@ -116,6 +177,13 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 instance: &profile.instance,
                 email: &profile.email,
                 credential_store: profile.credential_store.to_string(),
+                api_target: if profile.uses_scoped_token_gateway() {
+                    "scoped-token-gateway"
+                } else {
+                    "site"
+                },
+                cloud_id: profile.cloud_id.as_deref(),
+                policy_mode: profile.policy.mode.to_string(),
                 token: token_status,
             };
 
@@ -126,12 +194,24 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                         format,
                         &status,
                         vec![status.profile.to_owned()],
-                        &["profile", "instance", "email", "credential_store", "token"],
+                        &[
+                            "profile",
+                            "instance",
+                            "email",
+                            "credential_store",
+                            "api_target",
+                            "cloud_id",
+                            "policy_mode",
+                            "token",
+                        ],
                         vec![vec![
                             status.profile.to_owned(),
                             status.instance.to_owned(),
                             status.email.to_owned(),
                             status.credential_store.clone(),
+                            status.api_target.to_owned(),
+                            status.cloud_id.unwrap_or("").to_owned(),
+                            status.policy_mode.clone(),
                             status.token.clone(),
                         ]],
                         None,
@@ -142,6 +222,11 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                     println!("Instance: {}", status.instance);
                     println!("Email: {}", status.email);
                     println!("Credential store: {}", status.credential_store);
+                    println!("API target: {}", status.api_target);
+                    if let Some(cloud_id) = status.cloud_id {
+                        println!("Cloud ID: {cloud_id}");
+                    }
+                    println!("Policy mode: {}", status.policy_mode);
                     println!("Token: {}", status.token);
                 }
             }
@@ -248,6 +333,27 @@ fn required_text(
     }
 
     bail!("missing required flag: {flag}");
+}
+
+fn read_token_stdin() -> anyhow::Result<String> {
+    const MAX_TOKEN_BYTES: u64 = 64 * 1024;
+
+    let mut input = String::new();
+    stdin()
+        .take(MAX_TOKEN_BYTES + 1)
+        .read_to_string(&mut input)
+        .context("failed to read API token from stdin")?;
+    if input.len() as u64 > MAX_TOKEN_BYTES {
+        bail!("API token from stdin exceeds {MAX_TOKEN_BYTES} bytes");
+    }
+    let token = input.trim_end_matches(['\r', '\n']);
+    if token.is_empty() {
+        bail!("API token from stdin is empty");
+    }
+    if token.contains(['\r', '\n']) {
+        bail!("API token from stdin must be a single line");
+    }
+    Ok(token.to_owned())
 }
 
 fn required_secret(

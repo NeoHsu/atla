@@ -26,7 +26,7 @@ pub(super) async fn run_issue_link(
             if global.dry_run {
                 println!(
                     "Would POST {}/rest/api/3/issueLink using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 return Ok(());
             }
@@ -55,7 +55,7 @@ pub(super) async fn run_issue_link(
             if global.dry_run {
                 println!(
                     "Would GET {}/rest/api/3/issue/{}?fields=issuelinks using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key
                 );
                 return Ok(());
@@ -78,7 +78,7 @@ pub(super) async fn run_issue_link(
             if global.dry_run {
                 println!(
                     "Would GET {}/rest/dev-status/1.0/issue/detail?issueId={{id}}&applicationType=GitHub&dataType=pullrequest using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 return Ok(());
             }
@@ -103,7 +103,7 @@ pub(super) async fn run_issue_link(
             if global.dry_run {
                 println!(
                     "Would GET {}/rest/dev-status/1.0/issue/detail?issueId={{id}}&applicationType={{auto}}&dataType=repository using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 return Ok(());
             }
@@ -129,7 +129,7 @@ pub(super) async fn run_issue_link(
             if global.dry_run {
                 println!(
                     "Would DELETE {}/rest/api/3/issueLink/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     link_id
                 );
                 return Ok(());

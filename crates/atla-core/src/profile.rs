@@ -7,14 +7,34 @@ use serde::{Deserialize, Serialize};
 
 use crate::{CredentialRef, CredentialStorage};
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
+const LEGACY_CONFIG_SCHEMA_VERSION: u32 = 1;
+
+const fn legacy_config_schema_version() -> u32 {
+    LEGACY_CONFIG_SCHEMA_VERSION
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AtlaConfig {
+    #[serde(default = "legacy_config_schema_version")]
+    pub schema_version: u32,
     #[serde(default)]
     pub default: DefaultSection,
     #[serde(default)]
     pub profiles: BTreeMap<String, Profile>,
     #[serde(default)]
     pub aliases: BTreeMap<String, String>,
+}
+
+impl Default for AtlaConfig {
+    fn default() -> Self {
+        Self {
+            schema_version: CURRENT_CONFIG_SCHEMA_VERSION,
+            default: DefaultSection::default(),
+            profiles: BTreeMap::new(),
+            aliases: BTreeMap::new(),
+        }
+    }
 }
 
 impl AtlaConfig {
@@ -36,6 +56,10 @@ impl AtlaConfig {
         if let Some(existing) = self.profiles.get(&name) {
             profile.default_project = profile.default_project.or(existing.default_project.clone());
             profile.default_space = profile.default_space.or(existing.default_space.clone());
+            profile.cloud_id = profile.cloud_id.or(existing.cloud_id.clone());
+            if profile.policy.is_default() {
+                profile.policy = existing.policy.clone();
+            }
         }
 
         self.profiles.insert(name.clone(), profile);
@@ -73,6 +97,23 @@ impl AtlaConfig {
         }
 
         if let Some(rest) = key.strip_prefix("profiles.") {
+            if let Some((profile_name, field)) = rest.rsplit_once(".policy.") {
+                let profile = self
+                    .profiles
+                    .get_mut(profile_name)
+                    .ok_or_else(|| ProfileError::MissingProfile(profile_name.to_owned()))?;
+                match normalized_key(field).as_str() {
+                    "mode" => profile.policy.mode = parse_policy_mode(&value)?,
+                    "allow" => profile.policy.allow = parse_policy_patterns(&value)?,
+                    "deny" => profile.policy.deny = parse_policy_patterns(&value)?,
+                    _ => {
+                        return Err(ProfileError::UnsupportedConfigKey(format!(
+                            "profiles.{profile_name}.policy.{field}"
+                        )));
+                    }
+                }
+                return Ok(());
+            }
             if let Some(dot_pos) = rest.rfind('.') {
                 let profile_name = &rest[..dot_pos];
                 let field = normalized_key(&rest[dot_pos + 1..]);
@@ -88,6 +129,7 @@ impl AtlaConfig {
                     }
                     "default-project" => profile.default_project = Some(value),
                     "default-space" => profile.default_space = Some(value),
+                    "cloud-id" => profile.cloud_id = normalize_cloud_id(&value)?,
                     _ => {
                         return Err(ProfileError::UnsupportedConfigKey(format!(
                             "profiles.{profile_name}.{field}"
@@ -126,6 +168,26 @@ impl AtlaConfig {
                 profile.credential_store = parse_credential_storage(&value)?;
                 Ok(())
             }
+            "cloud-id" => {
+                let profile = self.active_profile_mut(profile_name)?;
+                profile.cloud_id = normalize_cloud_id(&value)?;
+                Ok(())
+            }
+            "policy-mode" => {
+                let profile = self.active_profile_mut(profile_name)?;
+                profile.policy.mode = parse_policy_mode(&value)?;
+                Ok(())
+            }
+            "policy-allow" => {
+                let profile = self.active_profile_mut(profile_name)?;
+                profile.policy.allow = parse_policy_patterns(&value)?;
+                Ok(())
+            }
+            "policy-deny" => {
+                let profile = self.active_profile_mut(profile_name)?;
+                profile.policy.deny = parse_policy_patterns(&value)?;
+                Ok(())
+            }
             _ => Err(ProfileError::UnsupportedConfigKey(key.to_owned())),
         }
     }
@@ -146,8 +208,28 @@ impl AtlaConfig {
         if key == "default.profile" {
             return Ok(self.default.profile.clone());
         }
+        if key == "schema-version" {
+            return Ok(Some(self.schema_version.to_string()));
+        }
 
         if let Some(rest) = key.strip_prefix("profiles.") {
+            if let Some((profile_name, field)) = rest.rsplit_once(".policy.") {
+                let profile = self
+                    .profiles
+                    .get(profile_name)
+                    .ok_or_else(|| ProfileError::MissingProfile(profile_name.to_owned()))?;
+                let value = match normalized_key(field).as_str() {
+                    "mode" => Some(profile.policy.mode.to_string()),
+                    "allow" => Some(profile.policy.allow.join(",")),
+                    "deny" => Some(profile.policy.deny.join(",")),
+                    _ => {
+                        return Err(ProfileError::UnsupportedConfigKey(format!(
+                            "profiles.{profile_name}.policy.{field}"
+                        )));
+                    }
+                };
+                return Ok(value);
+            }
             if let Some(dot_pos) = rest.rfind('.') {
                 let profile_name = &rest[..dot_pos];
                 let field = normalized_key(&rest[dot_pos + 1..]);
@@ -161,6 +243,7 @@ impl AtlaConfig {
                     "credential-store" => Some(profile.credential_store.to_string()),
                     "default-project" => profile.default_project.clone(),
                     "default-space" => profile.default_space.clone(),
+                    "cloud-id" => profile.cloud_id.clone(),
                     _ => {
                         return Err(ProfileError::UnsupportedConfigKey(format!(
                             "profiles.{profile_name}.{field}"
@@ -204,6 +287,30 @@ impl AtlaConfig {
                     .ok_or(ProfileError::MissingActiveProfile)?;
                 Some(profile.credential_store.to_string())
             }
+            "cloud-id" => {
+                let (_, profile) = self
+                    .active_profile(profile_name)
+                    .ok_or(ProfileError::MissingActiveProfile)?;
+                profile.cloud_id.clone()
+            }
+            "policy-mode" => {
+                let (_, profile) = self
+                    .active_profile(profile_name)
+                    .ok_or(ProfileError::MissingActiveProfile)?;
+                Some(profile.policy.mode.to_string())
+            }
+            "policy-allow" => {
+                let (_, profile) = self
+                    .active_profile(profile_name)
+                    .ok_or(ProfileError::MissingActiveProfile)?;
+                Some(profile.policy.allow.join(","))
+            }
+            "policy-deny" => {
+                let (_, profile) = self
+                    .active_profile(profile_name)
+                    .ok_or(ProfileError::MissingActiveProfile)?;
+                Some(profile.policy.deny.join(","))
+            }
             _ => return Err(ProfileError::UnsupportedConfigKey(key.to_owned())),
         };
 
@@ -230,6 +337,72 @@ pub struct DefaultSection {
     pub profile: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtlassianProduct {
+    Jira,
+    Confluence,
+}
+
+impl AtlassianProduct {
+    fn gateway_segment(self) -> &'static str {
+        match self {
+            Self::Jira => "jira",
+            Self::Confluence => "confluence",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PolicyMode {
+    ReadOnly,
+    #[default]
+    ReadWrite,
+}
+
+impl std::fmt::Display for PolicyMode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ReadOnly => formatter.write_str("read-only"),
+            Self::ReadWrite => formatter.write_str("read-write"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProfilePolicy {
+    #[serde(default)]
+    pub mode: PolicyMode,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deny: Vec<String>,
+}
+
+impl ProfilePolicy {
+    pub fn is_default(&self) -> bool {
+        self.mode == PolicyMode::ReadWrite && self.allow.is_empty() && self.deny.is_empty()
+    }
+
+    pub fn allows(&self, operation_id: &str, mutates: bool) -> bool {
+        if self
+            .deny
+            .iter()
+            .any(|pattern| wildcard_matches(pattern, operation_id))
+        {
+            return false;
+        }
+        if self
+            .allow
+            .iter()
+            .any(|pattern| wildcard_matches(pattern, operation_id))
+        {
+            return true;
+        }
+        self.mode == PolicyMode::ReadWrite || !mutates
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Profile {
     pub instance: String,
@@ -238,6 +411,10 @@ pub struct Profile {
     pub credential_store: CredentialStorage,
     pub default_project: Option<String>,
     pub default_space: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_id: Option<String>,
+    #[serde(default, skip_serializing_if = "ProfilePolicy::is_default")]
+    pub policy: ProfilePolicy,
 }
 
 impl Profile {
@@ -247,6 +424,30 @@ impl Profile {
             email: self.email.clone(),
             instance: self.instance.clone(),
         }
+    }
+
+    /// Product API root. Profiles without a cloud ID use the site URL;
+    /// scoped-token profiles route through Atlassian's product gateway.
+    pub fn api_base_url(&self, product: AtlassianProduct) -> String {
+        match &self.cloud_id {
+            Some(cloud_id) => format!(
+                "https://api.atlassian.com/ex/{}/{cloud_id}",
+                product.gateway_segment()
+            ),
+            None => self.instance.trim_end_matches('/').to_owned(),
+        }
+    }
+
+    pub fn jira_api_base_url(&self) -> String {
+        self.api_base_url(AtlassianProduct::Jira)
+    }
+
+    pub fn confluence_api_base_url(&self) -> String {
+        self.api_base_url(AtlassianProduct::Confluence)
+    }
+
+    pub fn uses_scoped_token_gateway(&self) -> bool {
+        self.cloud_id.is_some()
     }
 }
 
@@ -280,22 +481,49 @@ impl ConfigStore {
     }
 
     pub fn load(&self) -> Result<AtlaConfig, ProfileError> {
+        self.load_with_migration(true)
+    }
+
+    /// Loads and upgrades legacy data in memory without modifying the file.
+    /// Used by the CLI's strict read-only execution policy.
+    pub fn load_read_only(&self) -> Result<AtlaConfig, ProfileError> {
+        self.load_with_migration(false)
+    }
+
+    fn load_with_migration(&self, persist_migration: bool) -> Result<AtlaConfig, ProfileError> {
         if !self.path.exists() {
             return Ok(AtlaConfig::default());
         }
 
         let contents = fs::read_to_string(&self.path)?;
-        toml::from_str(&contents).map_err(|error| ProfileError::Decode(error.to_string()))
+        let mut config: AtlaConfig =
+            toml::from_str(&contents).map_err(|error| ProfileError::Decode(error.to_string()))?;
+        if config.schema_version > CURRENT_CONFIG_SCHEMA_VERSION
+            || config.schema_version < LEGACY_CONFIG_SCHEMA_VERSION
+        {
+            return Err(ProfileError::UnsupportedConfigVersion {
+                found: config.schema_version,
+                supported: CURRENT_CONFIG_SCHEMA_VERSION,
+            });
+        }
+        if config.schema_version < CURRENT_CONFIG_SCHEMA_VERSION {
+            let previous_version = config.schema_version;
+            config.schema_version = CURRENT_CONFIG_SCHEMA_VERSION;
+            if persist_migration {
+                let backup = migration_backup_path(&self.path, previous_version);
+                if !backup.exists() {
+                    crate::secure_file::atomic_write(&backup, contents.as_bytes())?;
+                }
+                self.save(&config)?;
+            }
+        }
+        Ok(config)
     }
 
     pub fn save(&self, config: &AtlaConfig) -> Result<(), ProfileError> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
         let contents = toml::to_string_pretty(config)
             .map_err(|error| ProfileError::Encode(error.to_string()))?;
-        fs::write(&self.path, contents)?;
+        crate::secure_file::atomic_write(&self.path, contents.as_bytes())?;
         Ok(())
     }
 }
@@ -312,6 +540,18 @@ pub enum ProfileError {
     UnsupportedConfigKey(String),
     #[error("unsupported credential store `{0}`; expected `keyring` or `file`")]
     UnsupportedCredentialStore(String),
+    #[error(
+        "unsupported config schema version {found}; this atla build supports version {supported}"
+    )]
+    UnsupportedConfigVersion { found: u32, supported: u32 },
+    #[error(
+        "invalid cloud ID `{0}`; expected an Atlassian cloud ID containing letters, digits, `_`, or `-`"
+    )]
+    InvalidCloudId(String),
+    #[error("invalid policy mode `{0}`; expected `read-only` or `read-write`")]
+    InvalidPolicyMode(String),
+    #[error("invalid operation policy pattern `{0}`")]
+    InvalidPolicyPattern(String),
     #[error("could not parse config: {0}")]
     Decode(String),
     #[error("could not encode config: {0}")]
@@ -355,6 +595,77 @@ fn home_dir_from_passwd() -> Option<PathBuf> {
     }
 }
 
+fn migration_backup_path(path: &Path, from_version: u32) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("config.toml");
+    path.with_file_name(format!("{file_name}.v{from_version}.bak"))
+}
+
+fn wildcard_matches(pattern: &str, value: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let value = value.as_bytes();
+    let mut previous = vec![false; value.len() + 1];
+    previous[0] = true;
+
+    for token in pattern {
+        let mut current = vec![false; value.len() + 1];
+        if *token == b'*' {
+            current[0] = previous[0];
+            for index in 1..=value.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=value.len() {
+                current[index] = previous[index - 1] && *token == value[index - 1];
+            }
+        }
+        previous = current;
+    }
+    previous[value.len()]
+}
+
+fn parse_policy_patterns(value: &str) -> Result<Vec<String>, ProfileError> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|pattern| !pattern.is_empty())
+        .map(|pattern| {
+            if pattern.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'*')
+            }) {
+                Ok(pattern.to_owned())
+            } else {
+                Err(ProfileError::InvalidPolicyPattern(pattern.to_owned()))
+            }
+        })
+        .collect()
+}
+
+fn parse_policy_mode(value: &str) -> Result<PolicyMode, ProfileError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "read-only" | "readonly" => Ok(PolicyMode::ReadOnly),
+        "read-write" | "readwrite" => Ok(PolicyMode::ReadWrite),
+        _ => Err(ProfileError::InvalidPolicyMode(value.to_owned())),
+    }
+}
+
+pub fn normalize_cloud_id(value: &str) -> Result<Option<String>, ProfileError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        Ok(Some(value.to_owned()))
+    } else {
+        Err(ProfileError::InvalidCloudId(value.to_owned()))
+    }
+}
+
 fn normalized_key(key: &str) -> String {
     key.replace('_', "-").to_ascii_lowercase()
 }
@@ -394,16 +705,211 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: Some("PROJ".to_owned()),
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
         store.save(&config).expect("save config");
         let loaded = store.load().expect("load config");
 
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = fs::metadata(store.path())
+                .expect("config metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600);
+        }
         assert_eq!(loaded.default.profile.as_deref(), Some("work"));
         assert_eq!(
             loaded.profiles["work"].default_project.as_deref(),
             Some("PROJ")
+        );
+    }
+
+    #[test]
+    fn migrates_legacy_config_and_preserves_a_backup() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("config.toml");
+        let store = ConfigStore::new(&path);
+        let legacy = r#"
+[default]
+profile = "work"
+
+[profiles.work]
+instance = "https://example.atlassian.net"
+email = "neo@example.com"
+"#;
+        fs::write(&path, legacy).expect("write legacy config");
+
+        let config = store.load().expect("migrate config");
+
+        assert_eq!(config.schema_version, CURRENT_CONFIG_SCHEMA_VERSION);
+        assert_eq!(
+            fs::read_to_string(directory.path().join("config.toml.v1.bak"))
+                .expect("migration backup"),
+            legacy
+        );
+        let migrated = fs::read_to_string(&path).expect("migrated config");
+        assert!(migrated.contains("schema_version = 2"));
+    }
+
+    #[test]
+    fn read_only_load_upgrades_in_memory_without_writing() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("config.toml");
+        let legacy = "[profiles.work]\ninstance = \"https://example.atlassian.net\"\nemail = \"neo@example.com\"\n";
+        fs::write(&path, legacy).expect("write legacy config");
+        let store = ConfigStore::new(&path);
+
+        let config = store.load_read_only().expect("read-only load");
+
+        assert_eq!(config.schema_version, CURRENT_CONFIG_SCHEMA_VERSION);
+        assert_eq!(fs::read_to_string(&path).expect("unchanged config"), legacy);
+        assert!(!directory.path().join("config.toml.v1.bak").exists());
+    }
+
+    #[test]
+    fn rejects_newer_config_schema() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let path = directory.path().join("config.toml");
+        fs::write(&path, "schema_version = 99\n").expect("write future config");
+        let store = ConfigStore::new(path);
+
+        let error = store.load().expect_err("future schema should fail");
+
+        assert!(matches!(
+            error,
+            ProfileError::UnsupportedConfigVersion {
+                found: 99,
+                supported: CURRENT_CONFIG_SCHEMA_VERSION,
+            }
+        ));
+    }
+
+    #[test]
+    fn scoped_profile_builds_product_specific_gateway_urls() {
+        let profile = Profile {
+            instance: "https://example.atlassian.net".to_owned(),
+            email: "neo@example.com".to_owned(),
+            credential_store: CredentialStorage::Keyring,
+            default_project: None,
+            default_space: None,
+            cloud_id: Some("cloud-123".to_owned()),
+            policy: ProfilePolicy::default(),
+        };
+
+        assert_eq!(
+            profile.api_base_url(AtlassianProduct::Jira),
+            "https://api.atlassian.com/ex/jira/cloud-123"
+        );
+        assert_eq!(
+            profile.api_base_url(AtlassianProduct::Confluence),
+            "https://api.atlassian.com/ex/confluence/cloud-123"
+        );
+    }
+
+    #[test]
+    fn cloud_id_config_can_be_set_and_cleared() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
+            },
+        );
+
+        config
+            .set_value("cloud-id", "cloud-123".to_owned(), Some("work"))
+            .expect("set cloud ID");
+        assert_eq!(
+            config.get_value("cloud-id", Some("work")).expect("get"),
+            Some("cloud-123".to_owned())
+        );
+        config
+            .set_value("cloud-id", String::new(), Some("work"))
+            .expect("clear cloud ID");
+        assert_eq!(
+            config.get_value("cloud-id", Some("work")).expect("get"),
+            None
+        );
+    }
+
+    #[test]
+    fn operation_policy_applies_deny_allow_then_mode() {
+        let mut policy = ProfilePolicy {
+            mode: PolicyMode::ReadOnly,
+            allow: vec!["jira.issue.comment.add".to_owned()],
+            deny: vec!["*.delete".to_owned()],
+        };
+
+        assert!(policy.allows("jira.issue.view", false));
+        assert!(policy.allows("jira.issue.comment.add", true));
+        assert!(!policy.allows("jira.issue.create", true));
+        assert!(!policy.allows("jira.issue.delete", true));
+
+        policy.allow.push("jira.issue.delete".to_owned());
+        assert!(!policy.allows("jira.issue.delete", true));
+    }
+
+    #[test]
+    fn policy_config_keys_round_trip() {
+        let mut config = AtlaConfig::default();
+        config.upsert_profile(
+            "work",
+            Profile {
+                instance: "https://example.atlassian.net".to_owned(),
+                email: "neo@example.com".to_owned(),
+                credential_store: CredentialStorage::Keyring,
+                default_project: None,
+                default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
+            },
+        );
+
+        config
+            .set_value("profiles.work.policy.mode", "read-only".to_owned(), None)
+            .expect("set mode");
+        config
+            .set_value(
+                "profiles.work.policy.allow",
+                "jira.issue.view, jira.issue.comment.add".to_owned(),
+                None,
+            )
+            .expect("set allow");
+        config
+            .set_value("profiles.work.policy.deny", "*.delete".to_owned(), None)
+            .expect("set deny");
+
+        assert_eq!(
+            config
+                .get_value("profiles.work.policy.mode", None)
+                .expect("get mode")
+                .as_deref(),
+            Some("read-only")
+        );
+        assert_eq!(
+            config
+                .get_value("profiles.work.policy.allow", None)
+                .expect("get allow")
+                .as_deref(),
+            Some("jira.issue.view,jira.issue.comment.add")
+        );
+        assert!(
+            !config.profiles["work"]
+                .policy
+                .allows("confluence.page.delete", true)
         );
     }
 
@@ -418,6 +924,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -439,6 +947,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: Some("PROJ".to_owned()),
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -476,6 +986,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -542,6 +1054,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -562,6 +1076,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
         config.upsert_profile(
@@ -572,6 +1088,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -593,6 +1111,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
         config.upsert_profile(
@@ -603,6 +1123,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -636,6 +1158,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: Some("PROJ".to_owned()),
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -659,6 +1183,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: Some("DEV".to_owned()),
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -682,6 +1208,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -705,6 +1233,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -736,6 +1266,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
         config.upsert_profile(
@@ -746,6 +1278,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -774,6 +1308,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
         config
@@ -806,6 +1342,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -827,6 +1365,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
         config.upsert_profile(
@@ -837,6 +1377,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 
@@ -884,6 +1426,8 @@ mod tests {
                 credential_store: CredentialStorage::Keyring,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
         config.upsert_profile(
@@ -894,6 +1438,8 @@ mod tests {
                 credential_store: CredentialStorage::File,
                 default_project: None,
                 default_space: None,
+                cloud_id: None,
+                policy: ProfilePolicy::default(),
             },
         );
 

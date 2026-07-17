@@ -47,7 +47,7 @@ pub(super) async fn run_attachment(
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/pages/{}/attachments?limit={} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     search.page_id,
                     search.limit
                 );
@@ -116,7 +116,7 @@ pub(super) async fn run_attachment(
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/attachments/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     attachment_id
                 );
                 return Ok(());
@@ -154,7 +154,7 @@ pub(super) async fn run_attachment(
             if global.dry_run {
                 println!(
                     "Would PUT {}/wiki/rest/api/content/{}/child/attachment with file `{}` using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     upload.page_id,
                     upload.file.display()
                 );
@@ -185,7 +185,7 @@ pub(super) async fn run_attachment(
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/attachments/{} then download its file using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     attachment_id
                 );
                 return Ok(());
@@ -220,7 +220,7 @@ pub(super) async fn run_attachment(
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/api/v2/attachments/{} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     attachment_id
                 );
                 return Ok(());

@@ -9,12 +9,12 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceBlogPostSearch,
     ) -> Result<ConfluenceBlogPostPage, ApiError> {
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluenceBlogPost> = Vec::new();
         let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;
@@ -62,17 +62,24 @@ impl ConfluenceClient {
     }
 
     pub async fn get_blog_post(&self, id: &str) -> Result<ConfluenceBlogPost, ApiError> {
-        let post = self
+        self.get_blog_post_with_body_format(id, Some(ConfluenceBodyRepresentation::Storage))
+            .await
+    }
+
+    pub async fn get_blog_post_with_body_format(
+        &self,
+        id: &str,
+        body_format: Option<ConfluenceBodyRepresentation>,
+    ) -> Result<ConfluenceBlogPost, ApiError> {
+        let mut request = self
             .generated
             .get_blog_post_by_id()
             .id(parse_i64_id(id)?)
-            .body_format(atla_confluence_api::types::PrimaryBodyRepresentationSingle::Storage)
-            .include_version(true)
-            .send()
-            .await
-            .or_api_error()
-            .await?
-            .into_inner();
+            .include_version(true);
+        if let Some(body_format) = body_format {
+            request = request.body_format(body_format.as_primary_body_single());
+        }
+        let post = request.send().await.or_api_error().await?.into_inner();
 
         Ok(post.into())
     }

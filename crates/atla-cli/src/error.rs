@@ -19,6 +19,12 @@ use atla_core::client::ApiError;
 #[error("{0}")]
 pub struct AuthSetupError(pub String);
 
+/// Marker for runtime policy and budget violations that should use the same
+/// exit code as clap argument errors.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct UsageError(pub String);
+
 pub struct Classification {
     pub exit_code: i32,
     pub kind: &'static str,
@@ -39,11 +45,19 @@ impl Classification {
 
 pub fn classify(err: &anyhow::Error) -> Classification {
     for cause in err.chain() {
+        if cause.downcast_ref::<UsageError>().is_some() {
+            return Classification::new(2, "usage");
+        }
         if cause.downcast_ref::<AuthSetupError>().is_some() {
             return Classification::new(3, "auth");
         }
         if let Some(api) = cause.downcast_ref::<ApiError>() {
             let status = api.status();
+            if matches!(api, ApiError::AmbiguousMutation { .. }) {
+                let mut classification = Classification::new(1, "ambiguous_mutation");
+                classification.status = status.map(|status| status.as_u16());
+                return classification;
+            }
             let mut classification = match status.map(|s| s.as_u16()) {
                 Some(401 | 403) => Classification::new(3, "auth"),
                 Some(404) => Classification::new(4, "not_found"),
@@ -92,6 +106,27 @@ mod tests {
         let classification = classify(&network);
         assert_eq!(classification.exit_code, 5);
         assert!(classification.retryable);
+    }
+
+    #[test]
+    fn classifies_ambiguous_mutations_as_non_retryable() {
+        let err = anyhow::Error::new(ApiError::AmbiguousMutation {
+            method: reqwest::Method::POST,
+            status: Some(reqwest::StatusCode::SERVICE_UNAVAILABLE),
+            message: "unknown".to_owned(),
+        });
+        let classification = classify(&err);
+        assert_eq!(classification.exit_code, 1);
+        assert_eq!(classification.kind, "ambiguous_mutation");
+        assert!(!classification.retryable);
+    }
+
+    #[test]
+    fn classifies_usage_policy_errors() {
+        let err = anyhow::Error::new(UsageError("blocked".to_owned()));
+        let classification = classify(&err);
+        assert_eq!(classification.exit_code, 2);
+        assert_eq!(classification.kind, "usage");
     }
 
     #[test]

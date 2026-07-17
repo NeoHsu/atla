@@ -42,10 +42,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             let profile = ctx.profile();
 
             if global.dry_run {
-                let url = format!(
-                    "{}/rest/agile/1.0/sprint/{id}",
-                    profile.instance.trim_end_matches('/')
-                );
+                let url = format!("{}/rest/agile/1.0/sprint/{id}", profile.jira_api_base_url());
                 println!("Would GET {url} using profile `{profile_name}`");
                 return Ok(());
             }
@@ -74,7 +71,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             if global.dry_run {
                 println!(
                     "Would POST {}/rest/agile/1.0/sprint using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 return Ok(());
             }
@@ -105,7 +102,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             if global.dry_run {
                 println!(
                     "Would PUT {}/rest/agile/1.0/sprint/{} with state active using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     id
                 );
                 return Ok(());
@@ -147,7 +144,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             if global.dry_run {
                 println!(
                     "Would PUT {}/rest/agile/1.0/sprint/{} with state closed using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     id
                 );
                 return Ok(());
@@ -183,7 +180,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             if global.dry_run {
                 println!(
                     "Would POST {}/rest/agile/1.0/sprint/{}/issue using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     id
                 );
                 return Ok(());
@@ -212,7 +209,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             if global.dry_run {
                 println!(
                     "Would POST {}/rest/agile/1.0/backlog/issue for sprint `{id}` using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 return Ok(());
             }
@@ -260,7 +257,7 @@ pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> a
             if global.dry_run {
                 let url = format!(
                     "{}/rest/agile/1.0/sprint/{id}/issue",
-                    profile.instance.trim_end_matches('/')
+                    profile.jira_api_base_url()
                 );
                 println!("Would GET {url} using profile `{profile_name}`");
                 return Ok(());
@@ -363,7 +360,7 @@ pub(super) async fn run_sprint_list(
     if global.dry_run {
         let url = format!(
             "{}/rest/agile/1.0/board/{}/sprint?startAt={}&maxResults={}",
-            profile.instance.trim_end_matches('/'),
+            profile.jira_api_base_url(),
             search.board_id,
             search.start_at,
             search.max_results

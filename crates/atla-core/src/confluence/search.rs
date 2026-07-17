@@ -9,12 +9,12 @@ impl ConfluenceClient {
         &self,
         search: &ConfluenceSearch,
     ) -> Result<ConfluenceSearchPage, ApiError> {
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluenceSearchResult> = Vec::new();
         let mut start: i32 = limit_i32(search.start);
         let mut last_total: Option<u64> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;

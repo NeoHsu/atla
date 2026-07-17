@@ -36,7 +36,7 @@ pub(super) async fn run_search(
     if global.dry_run {
         let url = format!(
             "{}/rest/api/3/search/jql?maxResults={}&fields={}",
-            profile.instance.trim_end_matches('/'),
+            profile.jira_api_base_url(),
             search.max_results,
             issue_fields_for_url(requested_fields.as_deref())
         );
@@ -86,10 +86,10 @@ pub(super) async fn run_search(
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => crate::output::print_json(&serde_json::json!({
             "issues": page.issues,
-            "pagination": {
-                "isLast": page.is_last.unwrap_or(true),
-                "nextPageToken": next_cli_token,
-                "nextCommand": next_command,
+            "pagination": crate::output::schema::Pagination {
+                is_last: page.is_last.unwrap_or(true),
+                next_page_token: next_cli_token,
+                next_command,
             }
         }))?,
         OutputFormat::Table => {

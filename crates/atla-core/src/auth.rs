@@ -8,6 +8,74 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_SERVICE: &str = "atla";
 const ENV_TOKEN_KEYS: [&str; 2] = ["ATLA_TOKEN", "ATLA_API_TOKEN"];
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TenantDiscovery {
+    pub site: String,
+    pub cloud_id: String,
+    pub jira_endpoint: String,
+    pub confluence_endpoint: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TenantInfoResponse {
+    cloud_id: String,
+}
+
+pub async fn discover_tenant(
+    site: &str,
+    policy: crate::HttpPolicy,
+) -> Result<TenantDiscovery, crate::client::ApiError> {
+    let mut site_url = reqwest::Url::parse(site)
+        .map_err(|error| crate::client::ApiError::Decode(format!("invalid site URL: {error}")))?;
+    if !matches!(site_url.scheme(), "http" | "https")
+        || site_url.host_str().is_none()
+        || !site_url.username().is_empty()
+        || site_url.password().is_some()
+    {
+        return Err(crate::client::ApiError::Decode(
+            "site URL must be an HTTP(S) origin without embedded credentials".to_owned(),
+        ));
+    }
+    site_url.set_path("");
+    site_url.set_query(None);
+    site_url.set_fragment(None);
+    let site = site_url.as_str().trim_end_matches('/').to_owned();
+    let tenant_info_url = site_url
+        .join("/_edge/tenant_info")
+        .map_err(|error| crate::client::ApiError::Decode(error.to_string()))?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(policy.connect_timeout)
+        .timeout(policy.request_timeout)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let response = client.get(tenant_info_url).send().await?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(crate::client::ApiError::Http {
+            status,
+            body: crate::client::extract_api_error_body(&body),
+        });
+    }
+    let tenant: TenantInfoResponse = serde_json::from_str(&body).map_err(|error| {
+        crate::client::ApiError::Decode(format!("invalid tenant-info response: {error}"))
+    })?;
+    let cloud_id = crate::profile::normalize_cloud_id(&tenant.cloud_id)
+        .map_err(|error| crate::client::ApiError::Decode(error.to_string()))?
+        .ok_or_else(|| {
+            crate::client::ApiError::Decode("tenant-info cloudId is empty".to_owned())
+        })?;
+
+    Ok(TenantDiscovery {
+        site,
+        jira_endpoint: format!("https://api.atlassian.com/ex/jira/{cloud_id}"),
+        confluence_endpoint: format!("https://api.atlassian.com/ex/confluence/{cloud_id}"),
+        cloud_id,
+    })
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CredentialStorage {
@@ -138,14 +206,9 @@ impl FileCredentialStore {
     }
 
     fn save(&self, credentials: &FileCredentials) -> Result<(), AuthError> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
         let contents = toml::to_string_pretty(credentials)
             .map_err(|error| AuthError::Encode(error.to_string()))?;
-        fs::write(&self.path, contents)?;
-        restrict_file_permissions(&self.path)?;
+        crate::secure_file::atomic_write(&self.path, contents.as_bytes())?;
         Ok(())
     }
 }
@@ -206,19 +269,6 @@ pub enum AuthError {
     Io(#[from] std::io::Error),
 }
 
-#[cfg(unix)]
-fn restrict_file_permissions(path: &Path) -> Result<(), AuthError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn restrict_file_permissions(_path: &Path) -> Result<(), AuthError> {
-    Ok(())
-}
-
 fn xdg_config_dir() -> Option<PathBuf> {
     #[cfg(unix)]
     {
@@ -253,5 +303,76 @@ fn home_dir_from_passwd() -> Option<PathBuf> {
             .to_str()
             .ok()
             .map(PathBuf::from)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_store_round_trips_token_with_restricted_permissions() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let store = FileCredentialStore::new(directory.path().join("credentials.toml"));
+        let credential = CredentialRef {
+            profile: "work".to_owned(),
+            email: "neo@example.com".to_owned(),
+            instance: "https://example.atlassian.net".to_owned(),
+        };
+
+        store
+            .save_token(&credential, "test-token")
+            .expect("save token");
+
+        assert_eq!(
+            store.get_token(&credential).expect("load token").as_deref(),
+            Some("test-token")
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mode = fs::metadata(store.path())
+                .expect("credential metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+
+        store.delete_token(&credential).expect("delete token");
+        assert_eq!(store.get_token(&credential).expect("load token"), None);
+    }
+
+    #[tokio::test]
+    async fn discovers_cloud_id_and_product_endpoints() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/_edge/tenant_info"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"cloudId": "cloud-123"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let discovery = discover_tenant(&server.uri(), crate::HttpPolicy::default())
+            .await
+            .expect("discover tenant");
+
+        assert_eq!(discovery.cloud_id, "cloud-123");
+        assert_eq!(
+            discovery.jira_endpoint,
+            "https://api.atlassian.com/ex/jira/cloud-123"
+        );
+        assert_eq!(
+            discovery.confluence_endpoint,
+            "https://api.atlassian.com/ex/confluence/cloud-123"
+        );
+        server.verify().await;
     }
 }

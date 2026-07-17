@@ -75,12 +75,13 @@ impl JiraClient {
         search: &JiraIssueSearch,
     ) -> Result<JiraIssueSearchPage, ApiError> {
         let fields = search.issue_fields();
+        let max_results = self.raw_client.effective_item_limit(search.max_results);
         let mut collected: Vec<JiraIssue> = Vec::new();
         let mut next_page_token: Option<String> = search.next_page_token.clone();
         let mut server_is_last: Option<bool> = Some(true);
 
-        while (collected.len() as u32) < search.max_results {
-            let remaining = search.max_results - collected.len() as u32;
+        while (collected.len() as u32) < max_results && self.raw_client.take_page() {
+            let remaining = max_results - collected.len() as u32;
             let page_size = remaining.min(JIRA_JQL_SEARCH_PAGE_CAP);
 
             let mut builder = self
@@ -106,8 +107,8 @@ impl JiraClient {
             }
         }
 
-        if (collected.len() as u32) > search.max_results {
-            collected.truncate(search.max_results as usize);
+        if (collected.len() as u32) > max_results {
+            collected.truncate(max_results as usize);
         }
 
         let exhausted = matches!(server_is_last, Some(true)) || next_page_token.is_none();
@@ -305,11 +306,13 @@ impl JiraClient {
         &self,
         query: &JiraIssueFieldsQuery,
     ) -> Result<Vec<JiraIssueField>, ApiError> {
-        let page_size = 50_i32;
+        let max_results = self.raw_client.effective_item_limit(u32::MAX) as usize;
         let mut all_fields: Vec<JiraIssueField> = Vec::new();
         let mut start_at = 0_i32;
 
-        loop {
+        while all_fields.len() < max_results && self.raw_client.take_page() {
+            let remaining = max_results.saturating_sub(all_fields.len());
+            let page_size = remaining.min(50) as i32;
             let page = match self
                 .generated
                 .get_create_issue_meta_issue_type_id()
@@ -336,7 +339,7 @@ impl JiraClient {
                 break;
             }
         }
-
+        all_fields.truncate(max_results);
         Ok(all_fields)
     }
 

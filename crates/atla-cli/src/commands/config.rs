@@ -7,7 +7,12 @@ use crate::output;
 
 pub async fn run(command: ConfigCommand, global: &GlobalArgs) -> anyhow::Result<()> {
     let store = ConfigStore::default_store().context("failed to find config location")?;
-    let mut atla_config = store.load().context("failed to load config")?;
+    let mut atla_config = if global.read_only {
+        store.load_read_only()
+    } else {
+        store.load()
+    }
+    .context("failed to load config")?;
 
     match command.action {
         ConfigAction::Set { key, value } => {
@@ -55,6 +60,7 @@ pub async fn run(command: ConfigCommand, global: &GlobalArgs) -> anyhow::Result<
 
 fn print_config(config: &atla_core::AtlaConfig) {
     let default = config.default.profile.as_deref().unwrap_or("<none>");
+    println!("schema_version = {}", config.schema_version);
     println!("default.profile = {default}");
 
     for (name, profile) in &config.profiles {
@@ -63,6 +69,9 @@ fn print_config(config: &atla_core::AtlaConfig) {
         println!("instance = {}", profile.instance);
         println!("email = {}", profile.email);
         println!("credential_store = {}", profile.credential_store);
+        if let Some(cloud_id) = &profile.cloud_id {
+            println!("cloud_id = {cloud_id}");
+        }
 
         if let Some(default_project) = &profile.default_project {
             println!("default_project = {default_project}");
@@ -70,6 +79,13 @@ fn print_config(config: &atla_core::AtlaConfig) {
 
         if let Some(default_space) = &profile.default_space {
             println!("default_space = {default_space}");
+        }
+        println!("policy.mode = {}", profile.policy.mode);
+        if !profile.policy.allow.is_empty() {
+            println!("policy.allow = {}", profile.policy.allow.join(","));
+        }
+        if !profile.policy.deny.is_empty() {
+            println!("policy.deny = {}", profile.policy.deny.join(","));
         }
     }
 
@@ -84,6 +100,10 @@ fn print_config(config: &atla_core::AtlaConfig) {
 
 fn config_entries(config: &atla_core::AtlaConfig) -> Vec<(String, String)> {
     let mut entries = Vec::new();
+    entries.push((
+        "schema_version".to_owned(),
+        config.schema_version.to_string(),
+    ));
     entries.push((
         "default.profile".to_owned(),
         config
@@ -101,6 +121,9 @@ fn config_entries(config: &atla_core::AtlaConfig) -> Vec<(String, String)> {
             format!("{prefix}.credential_store"),
             profile.credential_store.to_string(),
         ));
+        if let Some(cloud_id) = &profile.cloud_id {
+            entries.push((format!("{prefix}.cloud_id"), cloud_id.clone()));
+        }
 
         if let Some(default_project) = &profile.default_project {
             entries.push((format!("{prefix}.default_project"), default_project.clone()));
@@ -108,6 +131,22 @@ fn config_entries(config: &atla_core::AtlaConfig) -> Vec<(String, String)> {
 
         if let Some(default_space) = &profile.default_space {
             entries.push((format!("{prefix}.default_space"), default_space.clone()));
+        }
+        entries.push((
+            format!("{prefix}.policy.mode"),
+            profile.policy.mode.to_string(),
+        ));
+        if !profile.policy.allow.is_empty() {
+            entries.push((
+                format!("{prefix}.policy.allow"),
+                profile.policy.allow.join(","),
+            ));
+        }
+        if !profile.policy.deny.is_empty() {
+            entries.push((
+                format!("{prefix}.policy.deny"),
+                profile.policy.deny.join(","),
+            ));
         }
     }
 

@@ -41,7 +41,7 @@ pub(super) async fn run_blog_comment(
             if global.dry_run {
                 println!(
                     "Would GET {}/wiki/api/v2/blogposts/{}/footer-comments?limit={} using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     search.content_id,
                     search.limit
                 );
@@ -116,7 +116,7 @@ pub(super) async fn run_blog_comment(
             if global.dry_run {
                 println!(
                     "Would POST {}/wiki/api/v2/footer-comments using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/')
+                    profile.confluence_api_base_url()
                 );
                 return Ok(());
             }
@@ -154,7 +154,7 @@ pub(super) async fn run_blog_comment(
             if global.dry_run {
                 println!(
                     "Would DELETE {}/wiki/api/v2/footer-comments/{} for blog post `{blog_id}` using profile `{profile_name}`",
-                    profile.instance.trim_end_matches('/'),
+                    profile.confluence_api_base_url(),
                     comment_id
                 );
                 return Ok(());

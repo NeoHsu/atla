@@ -59,7 +59,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/search/jql?maxResults={}&fields={}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     search.max_results,
                     issue_fields_for_url(requested_fields.as_deref())
                 );
@@ -133,6 +133,11 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
+            if global.dry_run
+                && let Some(path) = description_file.as_deref()
+            {
+                crate::output::register_plan_input(path)?;
+            }
             let mut parsed_fields = parse_fields(&fields)?;
             if let Some(labels) = labels {
                 let values = labels
@@ -152,12 +157,23 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             };
 
             if global.dry_run {
-                let url = format!(
-                    "{}/rest/api/3/issue",
-                    profile.instance.trim_end_matches('/')
-                );
-                println!("Would POST {url} using profile `{profile_name}`");
-                crate::output::print_dry_run_body(&issue.request_body())?;
+                let url = format!("{}/rest/api/3/issue", profile.jira_api_base_url());
+                let body = issue.request_body();
+                if global.output == Some(crate::cli::OutputFormat::Json) {
+                    crate::output::print_operation_plan(
+                        "jira.issue.create",
+                        profile_name,
+                        &profile.instance,
+                        "POST",
+                        url,
+                        Some(body),
+                        Vec::new(),
+                        Vec::new(),
+                    )?;
+                } else {
+                    println!("Would POST {url} using profile `{profile_name}`");
+                    crate::output::print_dry_run_body(&body)?;
+                }
                 return Ok(());
             }
 
@@ -195,7 +211,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/issue/{}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     issue.issue_id_or_key
                 );
                 println!("Would PUT {url} using profile `{profile_name}`");
@@ -263,7 +279,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 }
                 let url = format!(
                     "{}/rest/api/3/issue/{}?fields={}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key,
                     issue_fields_for_url(fetch_fields.as_deref())
                 );
@@ -284,8 +300,8 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             let output_format = global.output.unwrap_or(crate::cli::OutputFormat::Table);
 
             // Issue 2: for JSON + --with-github, fetch everything concurrently and
-            // emit a single combined JSON object instead of multiple separate payloads.
-            if with_github && output_format == crate::cli::OutputFormat::Json {
+            // Machine-oriented formats emit one combined schema instead of supplementary payloads.
+            if with_github && output_format != crate::cli::OutputFormat::Table {
                 let (issue, prs, commits) = tokio::try_join!(
                     client.get_issue(&key, fetch_fields),
                     client.list_github_pull_requests(&key),
@@ -297,7 +313,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                         client.instance_url()
                     )
                 })?;
-                return print_issue_with_github(&issue, &prs, &commits);
+                return print_issue_with_github(&issue, &prs, &commits, global);
             }
 
             let issue = client
@@ -367,7 +383,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/issue/{}?deleteSubtasks={delete_subtasks}",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key
                 );
                 println!("Would DELETE {url} using profile `{profile_name}`");
@@ -417,7 +433,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/issue/{}/assignee",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     assign.issue_id_or_key
                 );
                 if is_unassign {
@@ -448,7 +464,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
             if global.dry_run {
                 let url = format!(
                     "{}/rest/api/3/issue/{}/transitions",
-                    profile.instance.trim_end_matches('/'),
+                    profile.jira_api_base_url(),
                     key
                 );
                 if let Some(to) = &to {
@@ -533,13 +549,13 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 if global.dry_run {
                     let url = format!(
                         "{}/rest/api/3/issue/{}/comment",
-                        profile.instance.trim_end_matches('/'),
+                        profile.jira_api_base_url(),
                         key
                     );
                     for attachment in &attachments {
                         println!(
                             "Would POST {}/rest/api/3/issue/{}/attachments with file `{}` using profile `{profile_name}`",
-                            profile.instance.trim_end_matches('/'),
+                            profile.jira_api_base_url(),
                             key,
                             attachment.display()
                         );
@@ -595,7 +611,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 if global.dry_run {
                     let url = format!(
                         "{}/rest/api/3/issue/{}/comment?startAt=0&maxResults={max_results}",
-                        profile.instance.trim_end_matches('/'),
+                        profile.jira_api_base_url(),
                         key
                     );
                     println!("Would GET {url} using profile `{profile_name}`");
@@ -670,7 +686,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 if global.dry_run {
                     println!(
                         "Would PUT {}/rest/api/3/issue/{}/comment/{} using profile `{profile_name}`",
-                        profile.instance.trim_end_matches('/'),
+                        profile.jira_api_base_url(),
                         key,
                         comment_id
                     );
@@ -706,7 +722,7 @@ pub(super) async fn run_issue(command: IssueCommand, global: &GlobalArgs) -> any
                 if global.dry_run {
                     println!(
                         "Would DELETE {}/rest/api/3/issue/{}/comment/{} using profile `{profile_name}`",
-                        profile.instance.trim_end_matches('/'),
+                        profile.jira_api_base_url(),
                         key,
                         comment_id
                     );

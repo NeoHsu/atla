@@ -133,6 +133,31 @@ impl ConfluencePageCreate {
             title: Some(self.title.clone()),
         }
     }
+
+    /// JSON request body `create_page` sends; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("page create body is serializable")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfluencePageTitleUpdate {
+    pub title: String,
+    pub status: ConfluenceContentStatus,
+}
+
+impl ConfluencePageTitleUpdate {
+    pub(super) fn to_generated(&self) -> generated_types::UpdatePageTitleBody {
+        generated_types::UpdatePageTitleBody {
+            status: self.status.into_update_page_title_status(),
+            title: self.title.clone(),
+        }
+    }
+
+    /// JSON request body `update_page_title` sends; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("page title update body is serializable")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,6 +193,11 @@ impl ConfluencePageUpdate {
             },
         }
     }
+
+    /// JSON request body `update_page` sends; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("page update body is serializable")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +225,11 @@ impl ConfluenceBlogPostCreate {
             status: Some(self.status.into_create_blog_post_status()),
             title: Some(self.title.clone()),
         }
+    }
+
+    /// JSON request body `create_blog_post` sends; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("blog post create body is serializable")
     }
 }
 
@@ -228,6 +263,11 @@ impl ConfluenceBlogPostUpdate {
                 number: Some(self.version as i32),
             },
         }
+    }
+
+    /// JSON request body `update_blog_post` sends; used by --dry-run previews.
+    pub fn request_body(&self) -> serde_json::Value {
+        serde_json::to_value(self.to_generated()).expect("blog post update body is serializable")
     }
 }
 

@@ -2,12 +2,15 @@ pub mod auth;
 pub mod client;
 pub mod confluence;
 pub(crate) mod generated_api;
+pub mod http_policy;
 pub mod jira;
 pub mod markdown;
 pub mod profile;
+pub mod secure_file;
 
 pub use auth::{
     AuthState, CredentialRef, CredentialStorage, FileCredentialStore, KeyringCredentialStore,
+    TenantDiscovery, discover_tenant,
 };
 pub use client::{AtlassianClient, AtlassianInstance};
 pub use confluence::{
@@ -19,10 +22,11 @@ pub use confluence::{
     ConfluenceContentStatus, ConfluenceContentTreePage, ConfluenceContentTreeSearch,
     ConfluenceLabel, ConfluenceLabelPage, ConfluenceLabelSearch, ConfluencePage,
     ConfluencePageCopy, ConfluencePageCreate, ConfluencePagePage, ConfluencePageSearch,
-    ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchContent, ConfluenceSearchPage,
-    ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceCreate, ConfluenceSpacePage,
-    ConfluenceSpaceSearch, ConfluenceSpaceUpdate, ConfluenceVersion,
+    ConfluencePageTitleUpdate, ConfluencePageUpdate, ConfluenceSearch, ConfluenceSearchContent,
+    ConfluenceSearchPage, ConfluenceSearchResult, ConfluenceSpace, ConfluenceSpaceCreate,
+    ConfluenceSpacePage, ConfluenceSpaceSearch, ConfluenceSpaceUpdate, ConfluenceVersion,
 };
+pub use http_policy::HttpPolicy;
 pub use jira::{
     JiraAssigneeTarget, JiraAttachment, JiraAttachmentDownload, JiraBoard, JiraBoardPage,
     JiraBoardSearch, JiraClient, JiraComment, JiraCommentPage, JiraCreatedIssue,
@@ -34,4 +38,4 @@ pub use jira::{
     JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
     default_issue_fields,
 };
-pub use profile::{AtlaConfig, ConfigStore, Profile};
+pub use profile::{AtlaConfig, AtlassianProduct, ConfigStore, PolicyMode, Profile, ProfilePolicy};

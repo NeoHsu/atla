@@ -69,13 +69,13 @@ impl JiraClient {
         max_results: u32,
         start_at: u64,
     ) -> Result<JiraCommentPage, ApiError> {
-        let max_results = max_results.max(1);
+        let max_results = self.raw_client.effective_item_limit(max_results);
         let mut collected: Vec<JiraComment> = Vec::new();
         let initial_start_at = start_at;
         let mut start_at: u64 = start_at;
         let mut last_total: Option<u32> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (max_results as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;

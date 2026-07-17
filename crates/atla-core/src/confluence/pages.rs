@@ -9,12 +9,12 @@ impl ConfluenceClient {
         &self,
         search: &ConfluencePageSearch,
     ) -> Result<ConfluencePagePage, ApiError> {
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluencePage> = Vec::new();
         let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;
@@ -63,12 +63,12 @@ impl ConfluenceClient {
         search: &ConfluenceContentTreeSearch,
     ) -> Result<ConfluenceContentTreePage, ApiError> {
         let id = parse_i64_id(&search.page_id)?;
-        let limit = search.limit.max(1);
+        let limit = self.raw_client.effective_item_limit(search.limit);
         let mut collected: Vec<ConfluenceContentNode> = Vec::new();
         let mut cursor: Option<String> = search.cursor.clone();
         let mut next_link: Option<String> = None;
 
-        loop {
+        while self.raw_client.take_page() {
             let remaining = (limit as u64).saturating_sub(collected.len() as u64);
             if remaining == 0 {
                 break;
@@ -220,10 +220,13 @@ impl ConfluenceClient {
             .generated
             .update_page_title()
             .id(parse_i64_id(id)?)
-            .body(atla_confluence_api::types::UpdatePageTitleBody {
-                status: status.into_update_page_title_status(),
-                title: title.to_owned(),
-            })
+            .body(
+                ConfluencePageTitleUpdate {
+                    status,
+                    title: title.to_owned(),
+                }
+                .to_generated(),
+            )
             .send()
             .await
             .or_api_error()
