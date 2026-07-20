@@ -25,7 +25,8 @@ Generated API code is built into `OUT_DIR`; do not commit it.
 ## Pull requests
 
 Keep changes focused, explain user-visible behavior, and add tests for success and failure paths.
-Before opening a PR:
+Fill every applicable section of `.github/pull_request_template.md`; explain why any contract or
+security checklist item is not applicable. Before opening a PR:
 
 1. run fmt, Clippy, workspace tests, RustSec audit, and `cargo deny check`;
 2. run `cargo +1.91 check --workspace` for changes affecting dependencies/language features;
