@@ -12,9 +12,10 @@ description: Versioning, cargo-dist artifacts, SBOM, provenance, and supply-chai
 3. Run cargo-dist plan/local/global artifact smoke tests.
 4. Run `python3 scripts/verify-release-artifacts.py`; it checks archive contents,
    sidecar/manifest hashes, CycloneDX 1.5, and SBOM component hashes.
-5. For broad Confluence sandbox testing, use
-   `scripts/atla-live-smoke.py`; its `finish` command must report complete,
-   with every command leaf classified and no active or trashed temporary resources.
+5. For bounded Jira and Confluence sandbox testing, follow
+   [Live Sandbox Smoke Testing](./live-smoke.md). The ledger's `finish` command
+   must report complete, with every selected remote operation classified and no
+   active or trashed temporary resources.
 6. Confirm every `uses:` reference in `.github/workflows/release.yml` is a full commit SHA.
 7. Confirm release-job permissions are scoped (`contents: write` only on `host`).
 

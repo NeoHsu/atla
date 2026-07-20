@@ -17,6 +17,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documentation, and release-contract review explicit.
 - Added an opt-in cross-worktree Cargo cache for fast CLI/core checks, a reproducible fresh-build
   benchmark, and generated operation/schema summaries for spec-refresh PRs.
+- Expanded the maintainer live-smoke ledger to every remote Jira, Confluence, and auth-discovery
+  operation with selectable groups, mutation/resource budgets, Jira cleanup, residue tracking, and
+  API-drift versus CLI-regression failure classification.
 
 ### Changed
 

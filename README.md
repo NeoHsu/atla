@@ -100,6 +100,7 @@ atla confluence search "type=page AND space=DEV" --output json
 | [Config Migration](docs/migration-v1.md) | Schema v2 migration, backups, and rollback |
 | [Compatibility](docs/compatibility.md) | Supported platforms and v1 stability policy |
 | [Release Procedure](docs/releasing.md) | Artifacts, SBOM, provenance, and workflow hardening |
+| [Live Sandbox Smoke Testing](docs/live-smoke.md) | Bounded Jira/Confluence contract coverage and cleanup ledger |
 | [Contributing](CONTRIBUTING.md) | Development checks, CLI contracts, and PR process |
 | [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
 | [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |

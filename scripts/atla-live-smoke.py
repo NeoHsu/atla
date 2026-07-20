@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic coverage and resource ledger for live atla Confluence smoke tests.
+"""Deterministic coverage and resource ledger for live atla sandbox smoke tests.
 
-This tool never sends network requests. It makes broad live testing auditable by validating
-preflight evidence, tracking every implemented Confluence command leaf, protecting the designated
-target page, and refusing to finish while operations or temporary resources remain unresolved.
+This tool never sends network requests. It makes broad Jira and Confluence live testing auditable
+by validating preflight evidence, grouping remote operations, protecting designated targets,
+bounding mutations/resources, and refusing to finish while coverage or cleanup is unresolved.
 """
 
 from __future__ import annotations
@@ -19,54 +19,136 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
-RESOURCE_TYPES = ("page", "blog", "attachment", "comment", "label", "space")
-RESOURCE_STATES = ("active", "trashed", "deleted", "purged")
+SCHEMA_VERSION = 2
+RESOURCE_TYPES = (
+    "page",
+    "blog",
+    "attachment",
+    "comment",
+    "label",
+    "space",
+    "jira-issue",
+    "jira-attachment",
+    "jira-comment",
+    "jira-link",
+    "jira-worklog",
+    "jira-sprint",
+)
+RESOURCE_STATES = ("active", "trashed", "deleted", "purged", "residue")
 
-# Keep this list aligned with crates/atla-cli/src/operation.rs. A missing entry is visible at
-# `finish`, so a smoke run cannot silently call itself complete after testing only a subset.
-OPERATIONS: dict[str, str] = {
-    "confluence.space.list": "read",
-    "confluence.space.view": "read",
-    "confluence.space.create": "write",
-    "confluence.space.update": "write",
-    "confluence.space.delete": "destructive",
-    "confluence.page.create": "write",
-    "confluence.page.list": "read",
-    "confluence.page.view": "read",
-    "confluence.page.children": "read",
-    "confluence.page.copy": "write",
-    "confluence.page.update": "write",
-    "confluence.page.delete": "destructive",
-    "confluence.page.move": "write",
-    "confluence.page.label.list": "read",
-    "confluence.page.label.add": "write",
-    "confluence.page.label.remove": "destructive",
-    "confluence.page.comment.list": "read",
-    "confluence.page.comment.add": "write",
-    "confluence.page.comment.delete": "destructive",
-    "confluence.blog.create": "write",
-    "confluence.blog.list": "read",
-    "confluence.blog.view": "read",
-    "confluence.blog.update": "write",
-    "confluence.blog.delete": "destructive",
-    "confluence.blog.label.list": "read",
-    "confluence.blog.label.add": "write",
-    "confluence.blog.label.remove": "destructive",
-    "confluence.blog.comment.list": "read",
-    "confluence.blog.comment.add": "write",
-    "confluence.blog.comment.delete": "destructive",
-    "confluence.search": "read",
-    "confluence.attachment.list": "read",
-    "confluence.attachment.view": "read",
-    "confluence.attachment.upload": "write",
-    "confluence.attachment.download": "read",
-    "confluence.attachment.delete": "destructive",
+# Keep every remote operation aligned with crates/atla-cli/src/operation.rs. Tests compare this
+# registry to the Rust catalog so a new command cannot silently escape live-smoke classification.
+GROUP_OPERATIONS: dict[str, dict[str, str]] = {
+    "auth-discovery": {
+        "auth.discover": "read",
+    },
+    "jira-issue-lifecycle": {
+        "jira.board.list": "read",
+        "jira.board.view": "read",
+        "jira.issue.assign": "write",
+        "jira.issue.comment.add": "write",
+        "jira.issue.comment.delete": "destructive",
+        "jira.issue.comment.list": "read",
+        "jira.issue.comment.update": "write",
+        "jira.issue.create": "write",
+        "jira.issue.delete": "destructive",
+        "jira.issue.fields": "read",
+        "jira.issue.link.add": "write",
+        "jira.issue.link.github-commits": "read",
+        "jira.issue.link.github-links": "read",
+        "jira.issue.link.list": "read",
+        "jira.issue.link.remove": "destructive",
+        "jira.issue.transition": "write",
+        "jira.issue.update": "write",
+        "jira.issue.view": "read",
+        "jira.issue.worklog.add": "write",
+        "jira.issue.worklog.list": "read",
+        "jira.project.issue-types": "read",
+        "jira.project.list": "read",
+        "jira.project.view": "read",
+        "jira.sprint.active": "read",
+        "jira.sprint.add": "write",
+        "jira.sprint.close": "write",
+        "jira.sprint.create": "write",
+        "jira.sprint.issues": "read",
+        "jira.sprint.list": "read",
+        "jira.sprint.remove": "write",
+        "jira.sprint.start": "write",
+        "jira.sprint.view": "read",
+    },
+    "jira-attachment-lifecycle": {
+        "jira.issue.attachment.delete": "destructive",
+        "jira.issue.attachment.download": "read",
+        "jira.issue.attachment.list": "read",
+        "jira.issue.attachment.upload": "write",
+    },
+    "confluence-page-lifecycle": {
+        "confluence.space.list": "read",
+        "confluence.space.view": "read",
+        "confluence.space.create": "write",
+        "confluence.space.update": "write",
+        "confluence.space.delete": "destructive",
+        "confluence.page.create": "write",
+        "confluence.page.list": "read",
+        "confluence.page.view": "read",
+        "confluence.page.children": "read",
+        "confluence.page.copy": "write",
+        "confluence.page.update": "write",
+        "confluence.page.delete": "destructive",
+        "confluence.page.move": "write",
+        "confluence.page.label.list": "read",
+        "confluence.page.label.add": "write",
+        "confluence.page.label.remove": "destructive",
+        "confluence.page.comment.list": "read",
+        "confluence.page.comment.add": "write",
+        "confluence.page.comment.delete": "destructive",
+        "confluence.blog.create": "write",
+        "confluence.blog.list": "read",
+        "confluence.blog.view": "read",
+        "confluence.blog.update": "write",
+        "confluence.blog.delete": "destructive",
+        "confluence.blog.label.list": "read",
+        "confluence.blog.label.add": "write",
+        "confluence.blog.label.remove": "destructive",
+        "confluence.blog.comment.list": "read",
+        "confluence.blog.comment.add": "write",
+        "confluence.blog.comment.delete": "destructive",
+    },
+    "confluence-attachment-lifecycle": {
+        "confluence.attachment.list": "read",
+        "confluence.attachment.view": "read",
+        "confluence.attachment.upload": "write",
+        "confluence.attachment.download": "read",
+        "confluence.attachment.delete": "destructive",
+    },
+    "cql-jql-search": {
+        "jira.issue.list": "read",
+        "jira.search": "read",
+        "confluence.search": "read",
+    },
+}
+OPERATIONS = {
+    operation: risk
+    for operations in GROUP_OPERATIONS.values()
+    for operation, risk in operations.items()
+}
+OPERATION_GROUPS = {
+    operation: group
+    for group, operations in GROUP_OPERATIONS.items()
+    for operation in operations
 }
 SPACE_MUTATIONS = {
     "confluence.space.create",
     "confluence.space.update",
     "confluence.space.delete",
+}
+NON_REVERSIBLE_MUTATIONS = {
+    "jira.issue.worklog.add",
+    "jira.sprint.add",
+    "jira.sprint.close",
+    "jira.sprint.create",
+    "jira.sprint.remove",
+    "jira.sprint.start",
 }
 CREATED_RESOURCE_TYPES = {
     "confluence.space.create": "space",
@@ -78,6 +160,12 @@ CREATED_RESOURCE_TYPES = {
     "confluence.blog.label.add": "label",
     "confluence.blog.comment.add": "comment",
     "confluence.attachment.upload": "attachment",
+    "jira.issue.create": "jira-issue",
+    "jira.issue.attachment.upload": "jira-attachment",
+    "jira.issue.comment.add": "jira-comment",
+    "jira.issue.link.add": "jira-link",
+    "jira.issue.worklog.add": "jira-worklog",
+    "jira.sprint.create": "jira-sprint",
 }
 DESTRUCTIVE_RESOURCE_TYPES = {
     "confluence.space.delete": "space",
@@ -88,6 +176,32 @@ DESTRUCTIVE_RESOURCE_TYPES = {
     "confluence.blog.label.remove": "label",
     "confluence.blog.comment.delete": "comment",
     "confluence.attachment.delete": "attachment",
+    "jira.issue.delete": "jira-issue",
+    "jira.issue.attachment.delete": "jira-attachment",
+    "jira.issue.comment.delete": "jira-comment",
+    "jira.issue.link.remove": "jira-link",
+}
+RESOURCE_PARENT_TYPES = {
+    "attachment": {"page", "blog"},
+    "comment": {"page", "blog"},
+    "label": {"page", "blog"},
+    "jira-attachment": {"jira-issue"},
+    "jira-comment": {"jira-issue"},
+    "jira-worklog": {"jira-issue"},
+}
+MUTATED_RESOURCE_TYPES = {
+    "confluence.space.update": "space",
+    "confluence.page.update": "page",
+    "confluence.page.move": "page",
+    "confluence.blog.update": "blog",
+    "jira.issue.assign": "jira-issue",
+    "jira.issue.comment.update": "jira-comment",
+    "jira.issue.transition": "jira-issue",
+    "jira.issue.update": "jira-issue",
+    "jira.sprint.add": "jira-sprint",
+    "jira.sprint.close": "jira-sprint",
+    "jira.sprint.remove": "jira-sprint",
+    "jira.sprint.start": "jira-sprint",
 }
 
 
@@ -157,7 +271,7 @@ def parse_exclusion(raw: str) -> tuple[str, str]:
     if not separator or not reason.strip():
         raise ValueError("--exclude must use OPERATION=REASON")
     if operation not in OPERATIONS:
-        raise ValueError(f"unknown Confluence operation `{operation}`")
+        raise ValueError(f"unknown remote operation `{operation}`")
     return operation, reason.strip()
 
 
@@ -196,10 +310,43 @@ def command_init(args: argparse.Namespace) -> int:
             f"ledger already exists: {state_path}; resume it instead of starting over"
         )
 
+    if args.max_resources < 1 or args.max_mutations < 1:
+        raise ValueError("--max-resources and --max-mutations must be positive")
+    if args.allow_space_mutations and not args.allow_mutations:
+        raise ValueError("--allow-space-mutations requires --allow-mutations")
+    if args.allow_space_mutations and not args.temporary_space_key:
+        raise ValueError("--allow-space-mutations requires --temporary-space-key")
+    if args.allow_residue and not args.allow_mutations:
+        raise ValueError("--allow-residue requires --allow-mutations")
+    if args.allow_purge and not args.allow_mutations:
+        raise ValueError("--allow-purge requires --allow-mutations")
+
+    selected_groups = tuple(dict.fromkeys(args.group or GROUP_OPERATIONS))
+    needs_confluence_target = bool(
+        {"confluence-page-lifecycle", "confluence-attachment-lifecycle"}
+        & set(selected_groups)
+    )
+    needs_jira_target = bool(
+        {"jira-issue-lifecycle", "jira-attachment-lifecycle"}
+        & set(selected_groups)
+    )
+    if needs_confluence_target and not all(
+        (args.confluence_baseline, args.target_page, args.space_key)
+    ):
+        raise ValueError(
+            "Confluence lifecycle groups require --confluence-baseline, "
+            "--target-page, and --space-key"
+        )
+    if needs_jira_target and not all(
+        (args.jira_baseline, args.target_issue, args.project_key)
+    ):
+        raise ValueError(
+            "Jira lifecycle groups require --jira-baseline, --target-issue, "
+            "and --project-key"
+        )
+
     auth_path = Path(args.auth_status)
-    baseline_path = Path(args.baseline)
     auth = read_json(auth_path)
-    baseline = read_json(baseline_path)
     expected_site = normalize_site(args.site)
     actual_site = normalize_site(str(auth.get("instance", "")))
     if actual_site != expected_site:
@@ -210,35 +357,77 @@ def command_init(args: argparse.Namespace) -> int:
         raise ValueError(
             f"auth evidence uses profile `{auth.get('profile')}`, not requested profile `{args.profile}`"
         )
-    if str(baseline.get("id")) != args.target_page:
-        raise ValueError(
-            f"baseline page id `{baseline.get('id')}` does not match protected target `{args.target_page}`"
-        )
     if args.allow_mutations and auth.get("policy_mode") != "read-write":
         raise ValueError(
             "mutation ledger requires auth evidence with policy_mode `read-write`"
         )
-    if args.allow_space_mutations and not args.allow_mutations:
-        raise ValueError("--allow-space-mutations requires --allow-mutations")
-    if args.allow_space_mutations and not args.temporary_space_key:
-        raise ValueError("--allow-space-mutations requires --temporary-space-key")
+
+    preflight: dict[str, Any] = {
+        "authStatus": {
+            "path": str(auth_path.resolve()),
+            "sha256": digest_file(auth_path),
+            "policyMode": auth.get("policy_mode"),
+            "apiTarget": auth.get("api_target"),
+        }
+    }
+    if needs_confluence_target:
+        baseline_path = Path(args.confluence_baseline)
+        baseline = read_json(baseline_path)
+        if str(baseline.get("id")) != args.target_page:
+            raise ValueError(
+                f"baseline page id `{baseline.get('id')}` does not match protected "
+                f"target `{args.target_page}`"
+            )
+        baseline_version = baseline.get("version")
+        if isinstance(baseline_version, dict):
+            baseline_version = baseline_version.get("number")
+        preflight["confluenceBaseline"] = {
+            "path": str(baseline_path.resolve()),
+            "sha256": digest_file(baseline_path),
+            "version": baseline_version,
+        }
+    if needs_jira_target:
+        baseline_path = Path(args.jira_baseline)
+        baseline = read_json(baseline_path)
+        if str(baseline.get("key")) != args.target_issue:
+            raise ValueError(
+                f"baseline issue key `{baseline.get('key')}` does not match protected "
+                f"target `{args.target_issue}`"
+            )
+        preflight["jiraBaseline"] = {
+            "path": str(baseline_path.resolve()),
+            "sha256": digest_file(baseline_path),
+            "id": baseline.get("id"),
+        }
 
     coverage = {
-        operation: {"risk": risk, "status": "pending", "reason": None, "evidence": None}
+        operation: {
+            "group": OPERATION_GROUPS[operation],
+            "risk": risk,
+            "status": "pending",
+            "reason": None,
+            "evidence": None,
+            "failureClass": None,
+        }
         for operation, risk in OPERATIONS.items()
     }
     exclusions = dict(parse_exclusion(raw) for raw in args.exclude)
+    for operation, group in OPERATION_GROUPS.items():
+        if group not in selected_groups:
+            exclusions.setdefault(operation, f"smoke group `{group}` not selected")
     if not args.allow_space_mutations:
         for operation in SPACE_MUTATIONS:
             exclusions.setdefault(
                 operation, "space mutations not authorized for this run"
             )
+    if not args.allow_residue:
+        for operation in NON_REVERSIBLE_MUTATIONS:
+            exclusions.setdefault(
+                operation, "non-reversible sandbox mutation requires --allow-residue"
+            )
     for operation, reason in exclusions.items():
         coverage[operation].update(status="skip", reason=reason)
 
-    baseline_version = baseline.get("version")
-    if isinstance(baseline_version, dict):
-        baseline_version = baseline_version.get("number")
     state = {
         "schemaVersion": SCHEMA_VERSION,
         "runId": args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
@@ -247,26 +436,21 @@ def command_init(args: argparse.Namespace) -> int:
         "status": "running",
         "site": expected_site,
         "profile": args.profile,
+        "selectedGroups": list(selected_groups),
+        "projectKey": args.project_key,
         "spaceKey": args.space_key,
         "spaceId": args.space_id,
         "temporarySpaceKey": args.temporary_space_key,
         "protectedTargetPageId": args.target_page,
+        "protectedTargetIssueKey": args.target_issue,
         "allowMutations": args.allow_mutations,
         "allowSpaceMutations": args.allow_space_mutations,
         "allowPurge": args.allow_purge,
-        "preflight": {
-            "authStatus": {
-                "path": str(auth_path.resolve()),
-                "sha256": digest_file(auth_path),
-                "policyMode": auth.get("policy_mode"),
-                "apiTarget": auth.get("api_target"),
-            },
-            "baseline": {
-                "path": str(baseline_path.resolve()),
-                "sha256": digest_file(baseline_path),
-                "version": baseline_version,
-            },
-        },
+        "allowResidue": args.allow_residue,
+        "maxMutationRecords": args.max_mutations,
+        "mutationRecords": 0,
+        "maxResources": args.max_resources,
+        "preflight": preflight,
         "coverage": coverage,
         "resources": [],
         "history": [{"at": utc_now(), "action": "init"}],
@@ -277,6 +461,7 @@ def command_init(args: argparse.Namespace) -> int:
             {
                 "state": str(state_path),
                 "runId": state["runId"],
+                "selectedGroups": state["selectedGroups"],
                 "counts": operation_counts(state),
             }
         )
@@ -319,10 +504,29 @@ def add_resource(
 ) -> dict[str, Any]:
     if not state["allowMutations"]:
         raise ValueError("cannot add temporary resources to a read-only ledger")
+    if len(state["resources"]) >= state["maxResources"]:
+        raise ValueError(
+            f"resource budget exhausted ({state['maxResources']}); clean up before adding more"
+        )
     if resource_type == "page" and resource_id == state["protectedTargetPageId"]:
         raise ValueError(
             "refusing to track the protected target page as a temporary resource"
         )
+    if (
+        resource_type == "jira-issue"
+        and resource_id == state["protectedTargetIssueKey"]
+    ):
+        raise ValueError(
+            "refusing to track the protected target issue as a temporary resource"
+        )
+    allowed_parent_types = RESOURCE_PARENT_TYPES.get(resource_type)
+    if allowed_parent_types:
+        if parent_type not in allowed_parent_types or not parent_id:
+            expected = ", ".join(sorted(allowed_parent_types))
+            raise ValueError(
+                f"resource `{resource_type}` requires tracked parent type {expected} and --parent-id"
+            )
+        find_resource(state, parent_type, parent_id)
     try:
         find_resource(state, resource_type, resource_id)
     except ValueError:
@@ -356,24 +560,42 @@ def command_record(args: argparse.Namespace) -> int:
     path = Path(args.state)
     state = load_state(path)
     if args.operation not in OPERATIONS:
-        raise ValueError(f"unknown Confluence operation `{args.operation}`")
+        raise ValueError(f"unknown remote operation `{args.operation}`")
     entry = state["coverage"][args.operation]
-    if (
-        args.result == "pass"
-        and entry["risk"] != "read"
-        and not state["allowMutations"]
-    ):
+    if entry["group"] not in state["selectedGroups"] and args.result != "skip":
+        raise ValueError(
+            f"operation `{args.operation}` belongs to unselected group `{entry['group']}`"
+        )
+    mutating_attempt = args.result in {"pass", "fail"} and entry["risk"] != "read"
+    mutating_pass = args.result == "pass" and entry["risk"] != "read"
+    if mutating_pass and not state["allowMutations"]:
         raise ValueError(
             f"cannot record mutation `{args.operation}` in a read-only ledger"
         )
+    if mutating_pass and state["mutationRecords"] >= state["maxMutationRecords"]:
+        raise ValueError(
+            f"mutation budget exhausted ({state['maxMutationRecords']}); cleanup or finish this run"
+        )
     if (
         args.operation in SPACE_MUTATIONS
-        and args.result == "pass"
+        and mutating_pass
         and not state["allowSpaceMutations"]
     ):
         raise ValueError(
             f"space mutation `{args.operation}` was not authorized for this ledger"
         )
+    if (
+        args.operation in NON_REVERSIBLE_MUTATIONS
+        and mutating_pass
+        and not state["allowResidue"]
+    ):
+        raise ValueError(
+            f"non-reversible mutation `{args.operation}` requires --allow-residue"
+        )
+    if args.result == "fail" and not args.failure_class:
+        raise ValueError("fail records require --failure-class")
+    if args.result != "fail" and args.failure_class:
+        raise ValueError("--failure-class is valid only with --result fail")
     if args.result == "skip":
         if not args.reason:
             raise ValueError("skip records require --reason")
@@ -386,6 +608,7 @@ def command_record(args: argparse.Namespace) -> int:
     resources = [parse_resource_spec(raw) for raw in args.resource]
     created_type = CREATED_RESOURCE_TYPES.get(args.operation)
     destructive_type = DESTRUCTIVE_RESOURCE_TYPES.get(args.operation)
+    mutated_type = MUTATED_RESOURCE_TYPES.get(args.operation)
     added: list[dict[str, Any]] = []
     if args.result == "pass" and created_type:
         if evidence is None:
@@ -422,20 +645,38 @@ def command_record(args: argparse.Namespace) -> int:
                     f"`{args.operation}` deletes `{destructive_type}`, not `{resource_type}` resources"
                 )
             find_resource(state, resource_type, resource_id)
+    elif args.result == "pass" and mutated_type:
+        if not resources:
+            raise ValueError(
+                f"passing `{args.operation}` must reference a tracked `--resource {mutated_type}:ID`"
+            )
+        for resource_type, resource_id in resources:
+            if resource_type != mutated_type:
+                raise ValueError(
+                    f"`{args.operation}` mutates `{mutated_type}`, not `{resource_type}` resources"
+                )
+            find_resource(state, resource_type, resource_id)
     elif resources:
         raise ValueError(
-            "--resource is valid only for passing create/add/upload or destructive operations"
+            "--resource is valid only for passing create, mutation, or destructive operations"
         )
 
     entry.update(
-        status=args.result, reason=args.reason, evidence=evidence, recordedAt=utc_now()
+        status=args.result,
+        reason=args.reason,
+        evidence=evidence,
+        failureClass=args.failure_class,
+        recordedAt=utc_now(),
     )
+    if mutating_attempt:
+        state["mutationRecords"] += 1
     state["history"].append(
         {
             "at": utc_now(),
             "action": "record",
             "operation": args.operation,
             "result": args.result,
+            "failureClass": args.failure_class,
         }
     )
     save_state(path, state)
@@ -444,6 +685,8 @@ def command_record(args: argparse.Namespace) -> int:
             {
                 "operation": args.operation,
                 "status": args.result,
+                "failureClass": args.failure_class,
+                "mutationRecords": state["mutationRecords"],
                 "resourcesAdded": added,
             }
         )
@@ -475,15 +718,24 @@ def command_resource_set(args: argparse.Namespace) -> int:
     item = find_resource(state, args.resource_type, args.resource_id)
     current = item["state"]
     allowed = {
-        "active": {"trashed", "deleted"},
+        "active": {"trashed", "deleted", "residue"},
         "trashed": {"purged"},
         "deleted": set(),
         "purged": set(),
+        "residue": set(),
     }
     if args.new_state not in allowed[current]:
         raise ValueError(f"invalid resource transition {current} -> {args.new_state}")
     if args.new_state == "purged" and not state["allowPurge"]:
         raise ValueError("ledger was not initialized with --allow-purge")
+    if args.new_state == "residue":
+        if not state["allowResidue"]:
+            raise ValueError("ledger was not initialized with --allow-residue")
+        if not args.reason:
+            raise ValueError("residue transitions require --reason")
+        item["residueReason"] = args.reason
+    elif args.reason:
+        raise ValueError("--reason is valid only for residue transitions")
     item["state"] = args.new_state
     item["updatedAt"] = utc_now()
     state["history"].append(
@@ -493,6 +745,7 @@ def command_resource_set(args: argparse.Namespace) -> int:
             "resource": f"{args.resource_type}:{args.resource_id}",
             "from": current,
             "to": args.new_state,
+            "reason": args.reason,
         }
     )
     save_state(path, state)
@@ -505,29 +758,43 @@ def cleanup_command(state: dict[str, Any], item: dict[str, Any]) -> str | None:
     resource_type = item["type"]
     resource_id = item["id"]
     status = item["state"]
-    base = ["atla", "--profile", profile, "--no-input", "confluence"]
+    base = ["atla", "--profile", profile, "--no-input"]
+    confluence = [*base, "confluence"]
+    jira_issue = [*base, "jira", "issue"]
     if resource_type == "page":
-        command = [*base, "page", "delete", resource_id]
+        command = [*confluence, "page", "delete", resource_id]
     elif resource_type == "blog":
-        command = [*base, "blog", "delete", resource_id]
+        command = [*confluence, "blog", "delete", resource_id]
     elif resource_type == "attachment":
-        command = [*base, "attachment", "delete", resource_id]
+        command = [*confluence, "attachment", "delete", resource_id]
     elif resource_type == "space":
         if status == "trashed":
             return None
-        command = [*base, "space", "delete", resource_id]
+        command = [*confluence, "space", "delete", resource_id]
     elif resource_type in {"comment", "label"}:
         parent_type = item.get("parentType")
         parent_id = item.get("parentId")
         if parent_type not in {"page", "blog"} or not parent_id:
             return None
         command = [
-            *base,
+            *confluence,
             parent_type,
             resource_type,
             "delete" if resource_type == "comment" else "remove",
+            parent_id,
+            resource_id,
         ]
-        command.extend([parent_id, resource_id])
+    elif resource_type == "jira-issue":
+        command = [*jira_issue, "delete", resource_id]
+    elif resource_type == "jira-attachment":
+        command = [*jira_issue, "attachment", "delete", resource_id]
+    elif resource_type == "jira-comment":
+        parent_id = item.get("parentId")
+        if item.get("parentType") != "jira-issue" or not parent_id:
+            return None
+        command = [*jira_issue, "comment", "delete", parent_id, resource_id]
+    elif resource_type == "jira-link":
+        command = [*jira_issue, "link", "remove", resource_id]
     else:
         return None
     if status == "trashed":
@@ -546,8 +813,11 @@ def command_cleanup_commands(args: argparse.Namespace) -> int:
     unresolved = [
         item for item in state["resources"] if item["state"] in {"active", "trashed"}
     ]
+    residue = [item for item in state["resources"] if item["state"] == "residue"]
     if not unresolved:
         print("# no unresolved temporary resources")
+        if residue:
+            print(f"# {len(residue)} documented residue resource(s) remain in the sandbox")
         return 0
     for item in reversed(unresolved):
         command = cleanup_command(state, item)
@@ -557,22 +827,27 @@ def command_cleanup_commands(args: argparse.Namespace) -> int:
         elif item["state"] == "trashed" and not state["allowPurge"]:
             print(f"# {identifier}: purge not authorized in this ledger")
         else:
-            print(
-                f"# {identifier}: manual cleanup required; parent metadata is incomplete"
-            )
+            print(f"# {identifier}: no automatic cleanup command; resolve explicitly")
     return 0
 
 
 def summary(state: dict[str, Any]) -> dict[str, Any]:
     active, trashed = unresolved_resources(state)
+    residue = [item for item in state["resources"] if item["state"] == "residue"]
     return {
         "runId": state["runId"],
         "status": state["status"],
         "site": state["site"],
         "profile": state["profile"],
+        "selectedGroups": state["selectedGroups"],
         "counts": operation_counts(state),
+        "mutationRecords": state["mutationRecords"],
+        "maxMutationRecords": state["maxMutationRecords"],
+        "resources": len(state["resources"]),
+        "maxResources": state["maxResources"],
         "activeResources": len(active),
         "trashedResources": len(trashed),
+        "residueResources": len(residue),
     }
 
 
@@ -584,12 +859,20 @@ def command_status(args: argparse.Namespace) -> int:
     else:
         print(f"run: {result['runId']} ({result['status']})")
         print(f"target: {result['profile']} @ {result['site']}")
+        print(f"groups: {', '.join(result['selectedGroups'])}")
         print(
             "coverage: "
             + ", ".join(f"{key}={value}" for key, value in result["counts"].items())
         )
         print(
-            f"resources: active={result['activeResources']}, trashed={result['trashedResources']}"
+            f"mutations: {result['mutationRecords']}/{result['maxMutationRecords']}"
+        )
+        print(
+            "resources: "
+            f"{result['resources']}/{result['maxResources']} total, "
+            f"active={result['activeResources']}, "
+            f"trashed={result['trashedResources']}, "
+            f"residue={result['residueResources']}"
         )
     return 0
 
@@ -632,7 +915,14 @@ def command_list_coverage(args: argparse.Namespace) -> int:
     del args
     print(
         json.dumps(
-            [{"operation": key, "risk": value} for key, value in OPERATIONS.items()],
+            [
+                {
+                    "operation": operation,
+                    "risk": risk,
+                    "group": OPERATION_GROUPS[operation],
+                }
+                for operation, risk in OPERATIONS.items()
+            ],
             indent=2,
         )
     )
@@ -651,18 +941,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON from `atla --output json auth status`",
     )
     init.add_argument(
-        "--baseline", required=True, help="JSON from a read-only target page view"
+        "--baseline",
+        "--confluence-baseline",
+        dest="confluence_baseline",
+        help="JSON from a read-only target page view",
     )
+    init.add_argument("--jira-baseline", help="JSON from a read-only target issue view")
     init.add_argument("--site", required=True)
     init.add_argument("--profile", required=True)
-    init.add_argument("--target-page", required=True)
-    init.add_argument("--space-key", required=True)
+    init.add_argument("--target-page")
+    init.add_argument("--target-issue")
+    init.add_argument("--project-key")
+    init.add_argument("--space-key")
     init.add_argument("--space-id")
     init.add_argument("--run-id")
+    init.add_argument(
+        "--group", action="append", choices=tuple(GROUP_OPERATIONS), default=[]
+    )
+    init.add_argument("--max-resources", type=int, default=50)
+    init.add_argument("--max-mutations", type=int, default=50)
     init.add_argument("--allow-mutations", action="store_true")
     init.add_argument("--allow-space-mutations", action="store_true")
     init.add_argument("--temporary-space-key")
     init.add_argument("--allow-purge", action="store_true")
+    init.add_argument("--allow-residue", action="store_true")
     init.add_argument(
         "--exclude", action="append", default=[], metavar="OPERATION=REASON"
     )
@@ -675,13 +977,20 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--evidence", default="")
     record.add_argument("--reason")
     record.add_argument(
+        "--failure-class",
+        choices=("api-drift", "cli-regression", "environment"),
+    )
+    record.add_argument(
         "--resource",
         action="append",
         default=[],
         metavar="TYPE:ID",
-        help="created or deleted resource; repeat for multi-resource operations",
+        help="created, mutated, or deleted resource; repeat when needed",
     )
-    record.add_argument("--parent-type", choices=("page", "blog"))
+    parent_types = sorted(
+        {parent for choices in RESOURCE_PARENT_TYPES.values() for parent in choices}
+    )
+    record.add_argument("--parent-type", choices=parent_types)
     record.add_argument("--parent-id")
     record.add_argument("--title")
     record.set_defaults(handler=command_record)
@@ -694,7 +1003,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--type", dest="resource_type", required=True, choices=RESOURCE_TYPES
     )
     resource_add.add_argument("--id", dest="resource_id", required=True)
-    resource_add.add_argument("--parent-type", choices=("page", "blog"))
+    resource_add.add_argument("--parent-type", choices=parent_types)
     resource_add.add_argument("--parent-id")
     resource_add.add_argument("--title")
     resource_add.add_argument(
@@ -715,6 +1024,7 @@ def build_parser() -> argparse.ArgumentParser:
     resource_set.add_argument(
         "--to", dest="new_state", required=True, choices=RESOURCE_STATES[1:]
     )
+    resource_set.add_argument("--reason")
     resource_set.set_defaults(handler=command_resource_set)
 
     cleanup = subparsers.add_parser(
@@ -735,7 +1045,7 @@ def build_parser() -> argparse.ArgumentParser:
     finish.set_defaults(handler=command_finish)
 
     coverage = subparsers.add_parser(
-        "list-coverage", help="print the complete command-leaf registry"
+        "list-coverage", help="print the complete remote-operation registry"
     )
     coverage.set_defaults(handler=command_list_coverage)
     return parser
