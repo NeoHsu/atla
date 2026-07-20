@@ -9,7 +9,7 @@ product features here, not niceties.
 | Crate | Role |
 | --- | --- |
 | `crates/atla-cli` (package name **`atla`**) | clap definitions (`cli/`), command handlers (`commands/`), output rendering, pagination tokens |
-| `crates/atla-core` | domain clients + hand-written models (`jira/`, `confluence/`), auth/profiles, markdown⇄ADF (`markdown.rs`) |
+| `crates/atla-core` | domain clients + hand-written models (`jira/`, `confluence/`), auth/profiles, markdown⇄ADF (`markdown/`) |
 | `crates/atla-jira-api`, `atla-confluence-api`, `atla-confluence-v1-api` | progenitor codegen from `specs/*.json` at build time (`build.rs`); generated code is NOT committed |
 
 ## Build / test

@@ -20,6 +20,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Split the clap command model into domain modules under `crates/atla-cli/src/cli/` without
   changing the generated CLI surface.
+- Split Markdown-to-ADF parsing from ADF-to-Markdown rendering and added bidirectional golden
+  fixtures for the conversion contract.
 
 ### Fixed
 

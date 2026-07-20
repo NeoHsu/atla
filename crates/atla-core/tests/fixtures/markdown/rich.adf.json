@@ -1,0 +1,133 @@
+{
+  "type": "doc",
+  "version": 1,
+  "content": [
+    {
+      "type": "heading",
+      "attrs": { "level": 2 },
+      "content": [{ "type": "text", "text": "Release runbook" }]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        { "type": "text", "text": "Deploy ", "marks": [{ "type": "strong" }] },
+        {
+          "type": "text",
+          "text": "carefully",
+          "marks": [{ "type": "strong" }, { "type": "em" }]
+        },
+        { "type": "text", "text": " with " },
+        {
+          "type": "text",
+          "text": "docs",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": { "href": "https://example.com/runbook" }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "panel",
+      "attrs": { "panelType": "warning" },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [{ "type": "text", "text": "Check production first" }]
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [{ "type": "text", "text": "Build" }]
+            },
+            {
+              "type": "orderedList",
+              "attrs": { "order": 3 },
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [{ "type": "text", "text": "Package" }]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "attrs": { "isNumberColumnEnabled": true, "layout": "default" },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [{ "type": "text", "text": "Key" }]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [{ "type": "text", "text": "Value" }]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [{ "type": "text", "text": "Status" }]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [{ "type": "text", "text": "Ready" }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": { "language": "rust" },
+      "content": [{ "type": "text", "text": "cargo test --workspace" }]
+    },
+    {
+      "type": "paragraph",
+      "content": [{ "type": "mention", "attrs": { "text": "Neo" } }]
+    }
+  ]
+}
