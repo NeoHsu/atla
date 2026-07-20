@@ -15,6 +15,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   duplicate-version visibility across every release target.
 - Added a repository PR template that makes CLI, JSON, error, pagination, plan, mutation, security,
   documentation, and release-contract review explicit.
+- Added an opt-in cross-worktree Cargo cache for fast CLI/core checks, a reproducible fresh-build
+  benchmark, and generated operation/schema summaries for spec-refresh PRs.
 
 ### Changed
 

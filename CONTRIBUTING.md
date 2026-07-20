@@ -20,7 +20,9 @@ cargo deny check
 licenses, advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades
 can remove them incrementally; do not suppress one without a documented reason.
 
-Generated API code is built into `OUT_DIR`; do not commit it.
+Generated API code is built into `OUT_DIR`; do not commit it. For ordinary
+CLI/core iteration, `scripts/check-fast.sh` reuses an opt-in Cargo target cache
+across worktrees; full PR validation still uses the workspace commands above.
 
 ## Pull requests
 
@@ -73,8 +75,11 @@ cargo check --workspace
 cargo test --workspace
 ```
 
-Review `specs/PATCHES.md`, operation pruning, manifest hashes/timestamp, and generated-model
-conversion tests. The scheduled workflow opens a PR; it never pushes directly to main.
+Review `specs/PATCHES.md`, operation pruning, manifest hashes/timestamp, and
+generated-model conversion tests. The scheduled workflow opens a PR with a
+generated partial-spec/operation summary; it never pushes directly to main.
+Generate the same summary locally with
+`python3 scripts/spec-diff-summary.py --base HEAD` after a refresh.
 
 ## Security reports and releases
 

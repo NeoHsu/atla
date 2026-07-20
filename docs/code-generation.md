@@ -107,7 +107,51 @@ serde.workspace = true
 serde_json.workspace = true
 ```
 
-Some crates require additional dependencies (`chrono`, `uuid`, `serde_repr`, etc.) depending on the spec's schema types.
+Some crates require additional dependencies (`chrono`, `uuid`, `serde_repr`,
+etc.) depending on the spec's schema types.
+
+---
+
+## Local build cache and fast checks
+
+Cargo already fingerprints each partial spec through `cargo:rerun-if-changed`,
+so generated clients are reused until a spec or generator input changes. To
+reuse that build output across worktrees and fresh checkouts, use the opt-in
+shared target cache:
+
+```bash
+scripts/check-fast.sh
+```
+
+This runs `cargo check -p atla` and defaults `CARGO_TARGET_DIR` to
+`$XDG_CACHE_HOME/atla/cargo-target` (or `~/.cache/atla/cargo-target`). Set
+`ATLA_BUILD_CACHE_DIR` to choose another cache root, or set
+`CARGO_TARGET_DIR` directly. Extra Cargo arguments are forwarded, for example
+`scripts/check-fast.sh --all-targets`.
+
+The cache never replaces release validation: run the full workspace fmt,
+Clippy, and test commands before opening a PR. Delete the cache directory if
+disk use or a suspected stale local artifact needs to be ruled out.
+
+### Reference measurement
+
+A local reference measurement on 2026-07-20 used `cargo check -p atla`, Rust
+1.97.0, macOS arm64, and an Apple M2 Max:
+
+| Target state | Wall time |
+| --- | ---: |
+| Empty isolated target directory | 35.66 s |
+| Same target, no source changes | 0.60 s |
+
+These numbers are a baseline, not a performance guarantee. Reproduce the
+clean and warm checks with:
+
+```bash
+target_dir="$(mktemp -d)"
+CARGO_TARGET_DIR="$target_dir" /usr/bin/time -p cargo check -p atla
+CARGO_TARGET_DIR="$target_dir" /usr/bin/time -p cargo check -p atla
+rm -rf "$target_dir"
+```
 
 ---
 
@@ -163,8 +207,9 @@ its snake_case operation name to `usedOperations` and refresh the specs.
 `.github/workflows/spec-refresh.yml` runs weekly and on manual dispatch. It
 executes the update script, verifies fmt/check/workspace tests, and opens a
 review PR containing only `specs/**` changes; it never pushes directly to
-`main`. Review every invariant in `specs/PATCHES.md` and all operation diffs
-before merging.
+`main`. `scripts/spec-diff-summary.py` adds per-spec line/size/hash totals plus
+operation-ID and schema-count deltas to the PR body and workflow summary. Review
+every invariant in `specs/PATCHES.md` and all operation diffs before merging.
 
 ### Refresh workflow
 

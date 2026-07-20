@@ -32,6 +32,12 @@ jobs:
           cargo fmt --all -- --check
           cargo check --workspace
           cargo test --workspace
+      - name: Summarize partial-spec changes
+        run: |
+          python3 scripts/spec-diff-summary.py \
+            --base HEAD \
+            --output "${RUNNER_TEMP}/spec-refresh-pr.md"
+          cat "${RUNNER_TEMP}/spec-refresh-pr.md" >> "${GITHUB_STEP_SUMMARY}"
       - name: Open a reviewable update PR
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
@@ -40,15 +46,7 @@ jobs:
           delete-branch: true
           commit-message: "chore(specs): refresh Atlassian partial specs"
           title: "chore(specs): refresh Atlassian partial specs"
-          body: |
-            Automated weekly spec refresh.
-
-            Validation completed:
-            - `cargo fmt --all -- --check`
-            - `cargo check --workspace`
-            - `cargo test --workspace`
-
-            Review `specs/PATCHES.md`, operation changes, generated-client diffs, and manifest hashes before merging.
+          body-path: ${{ runner.temp }}/spec-refresh-pr.md
           labels: dependencies
           add-paths: |
             specs/**
