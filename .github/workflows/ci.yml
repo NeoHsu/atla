@@ -21,6 +21,11 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@42dc69e1aa15d09112580998cf2ef0119e2e91ae # v2
+      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+        with:
+          tool: cargo-deny@0.20.2
+      - name: Check dependency licenses and sources
+        run: cargo deny check
       - name: Test repository safety tools
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Audit Rust dependencies

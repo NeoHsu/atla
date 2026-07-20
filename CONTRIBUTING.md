@@ -13,7 +13,12 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets \
   --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
 cargo audit
+cargo deny check
 ```
+
+`deny.toml` rejects unknown registries, Git dependencies, wildcard dependency versions, unknown
+licenses, advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades
+can remove them incrementally; do not suppress one without a documented reason.
 
 Generated API code is built into `OUT_DIR`; do not commit it.
 
@@ -22,7 +27,7 @@ Generated API code is built into `OUT_DIR`; do not commit it.
 Keep changes focused, explain user-visible behavior, and add tests for success and failure paths.
 Before opening a PR:
 
-1. run fmt, Clippy, workspace tests, and RustSec audit;
+1. run fmt, Clippy, workspace tests, RustSec audit, and `cargo deny check`;
 2. run `cargo +1.91 check --workspace` for changes affecting dependencies/language features;
 3. update `CHANGELOG.md` under Unreleased;
 4. update every affected document and the agent skill;

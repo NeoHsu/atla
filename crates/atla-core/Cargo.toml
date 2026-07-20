@@ -7,9 +7,9 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-atla-confluence-api = { path = "../atla-confluence-api" }
-atla-confluence-v1-api = { path = "../atla-confluence-v1-api" }
-atla-jira-api = { path = "../atla-jira-api" }
+atla-confluence-api = { path = "../atla-confluence-api", version = "0.1.0" }
+atla-confluence-v1-api = { path = "../atla-confluence-v1-api", version = "0.1.0" }
+atla-jira-api = { path = "../atla-jira-api", version = "0.1.0" }
 base64.workspace = true
 chrono.workspace = true
 comrak = { version = "0.53", default-features = false }

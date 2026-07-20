@@ -11,6 +11,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Added an exhaustive operation catalog check that keeps every CLI leaf, safety classification,
   destructive confirmation flag, HTTP method, and pagination marker synchronized.
+- Added `cargo-deny` CI policy for dependency licenses, sources, advisories, wildcard versions, and
+  duplicate-version visibility across every release target.
 
 ### Fixed
 
