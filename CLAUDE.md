@@ -8,7 +8,7 @@ product features here, not niceties.
 
 | Crate | Role |
 | --- | --- |
-| `crates/atla-cli` (package name **`atla`**) | clap definitions (`cli.rs`), command handlers (`commands/`), output rendering, pagination tokens |
+| `crates/atla-cli` (package name **`atla`**) | clap definitions (`cli/`), command handlers (`commands/`), output rendering, pagination tokens |
 | `crates/atla-core` | domain clients + hand-written models (`jira/`, `confluence/`), auth/profiles, markdown⇄ADF (`markdown.rs`) |
 | `crates/atla-jira-api`, `atla-confluence-api`, `atla-confluence-v1-api` | progenitor codegen from `specs/*.json` at build time (`build.rs`); generated code is NOT committed |
 
@@ -26,10 +26,10 @@ package is `atla`, not `atla-cli`: `cargo test -p atla`.
 
 ## Changing the CLI surface (checklist)
 
-Any change to commands/flags in `crates/atla-cli/src/cli.rs` MUST be propagated, in this
+Any change to commands/flags under `crates/atla-cli/src/cli/` MUST be propagated, in this
 order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 
-1. Implement the change (`cli.rs` + `commands/`).
+1. Implement the change (`cli/` + `commands/`).
 2. Regenerate the surface snapshot: `UPDATE_CLI_SURFACE=1 cargo test -p atla cli_surface`
    (updates `docs/cli-surface.txt`; the test fails until you do this).
 3. Update every doc that mentions the command — all `atla` examples in these files are

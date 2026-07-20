@@ -16,6 +16,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added a repository PR template that makes CLI, JSON, error, pagination, plan, mutation, security,
   documentation, and release-contract review explicit.
 
+### Changed
+
+- Split the clap command model into domain modules under `crates/atla-cli/src/cli/` without
+  changing the generated CLI surface.
+
 ### Fixed
 
 - Normalized upstream Confluence OpenAPI regressions so scheduled spec refreshes remain buildable,

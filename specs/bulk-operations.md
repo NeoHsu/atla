@@ -58,17 +58,20 @@ atla jira issue transition [KEY] [--jql <JQL>] --to <transition> [--no-notify] [
 | `--no-notify` | Suppress bulk-change email notification |
 
 **Example – single issue (unchanged):**
+
 ```bash
 atla jira issue transition PROJ-123 --to Done
 ```
 
 **Example – bulk via JQL:**
+
 ```bash
 atla jira issue transition --jql "project=PROJ AND sprint in openSprints() AND status='To Do'" \
   --to "In Progress"
 ```
 
 **Example – dry-run:**
+
 ```bash
 atla jira issue transition --jql "project=PROJ AND status=Open" --to Done --dry-run
 # Would search JQL then POST /rest/api/3/bulk/issues/transition for N issues
@@ -90,6 +93,7 @@ atla jira issue delete [KEY] [--jql <JQL>] --yes [--no-notify] [--dry-run]
 | `--no-notify` | Suppress bulk-change email notification |
 
 **Example:**
+
 ```bash
 atla jira issue delete --jql "project=OLD AND created < -365d" --yes
 ```
@@ -132,6 +136,7 @@ existing single-issue flags. The optional `fields` object accepts raw Jira field
 and is merged in last (same semantics as `--field KEY=VALUE` today).
 
 **Example:**
+
 ```bash
 atla jira issue create --from-file tasks.json
 ```
@@ -378,7 +383,7 @@ do **not** pass `to_generated()` directly as the request body.
 
 ---
 
-### Layer 3 — CLI argument definitions (`atla-cli/src/cli.rs`)
+### Layer 3 — CLI argument definitions (`atla-cli/src/cli/`)
 
 #### `IssueAction::Transition`
 
@@ -546,6 +551,7 @@ pub fn print_bulk_create_result(result: &BulkCreateResult, global: &GlobalArgs) 
 ```
 
 `print_bulk_result` renders:
+
 - **table**: summary line + failure list
 - **json**: `BulkTaskResult` serialised (snake_case keys)
 - **keys**: one line per successfully processed key (looked up from `processedAccessibleIssues` IDs — requires a reverse ID→key mapping built during the key search step)

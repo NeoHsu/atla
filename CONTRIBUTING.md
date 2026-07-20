@@ -36,7 +36,7 @@ security checklist item is not applicable. Before opening a PR:
 
 ## CLI surface changes
 
-Any command/flag change in `crates/atla-cli/src/cli.rs` must follow this order:
+Any command/flag change under `crates/atla-cli/src/cli/` must follow this order:
 
 1. implement handler and central operation metadata;
 2. regenerate `docs/cli-surface.txt`:
