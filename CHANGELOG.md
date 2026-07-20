@@ -7,6 +7,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added an exhaustive operation catalog check that keeps every CLI leaf, safety classification,
+  destructive confirmation flag, HTTP method, and pagination marker synchronized.
+
 ### Fixed
 
 - Normalized upstream Confluence OpenAPI regressions so scheduled spec refreshes remain buildable,
