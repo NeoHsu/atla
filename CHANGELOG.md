@@ -12,7 +12,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Normalized upstream Confluence OpenAPI regressions so scheduled spec refreshes remain buildable,
   while keeping unsupported generated multipart upload operations excluded.
 
-## [0.9.0] - 2026-07-17
+## [0.6.0] - 2026-07-17
 
 ### Added
 
@@ -93,8 +93,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Accepted numeric Jira attachment identifiers.
 
-[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/NeoHsu/atla/compare/v0.5.1...v0.9.0
+[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/NeoHsu/atla/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/NeoHsu/atla/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/NeoHsu/atla/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/NeoHsu/atla/compare/v0.2.3...v0.3.0
