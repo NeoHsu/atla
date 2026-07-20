@@ -104,7 +104,14 @@ printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
 atla auth status
 ```
 
-This confirms your active profile, instance, and credential storage method.
+This confirms your active profile, instance, and credential storage method. For a redacted check
+across config, credentials, routing, and policy, run:
+
+```bash
+atla doctor --output json
+```
+
+Add `--network` only when you also want to call the unauthenticated tenant-info endpoint.
 
 ### 3. Set a default Jira project
 

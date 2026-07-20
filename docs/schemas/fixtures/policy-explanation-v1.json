@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "operation": {
+    "id": "jira.issue.create",
+    "method": "POST",
+    "risk": "write",
+    "mutating": true,
+    "paginated": false,
+    "dryRun": true,
+    "retrySafe": false
+  },
+  "profile": "sandbox",
+  "profileFound": true,
+  "policyMode": "read-only",
+  "profileDecision": "allow-rule",
+  "matchedPattern": "jira.issue.create",
+  "globalReadOnly": false,
+  "globalReadOnlyBlocked": false,
+  "allowed": true,
+  "reason": "allowed by allow rule `jira.issue.create`"
+}

@@ -60,9 +60,22 @@ there are no implicit prefixes or regular expressions. For example, `*.delete` m
 `jira.issue.delete` and `confluence.page.delete`, while `jira.issue.*` matches only IDs under
 that prefix.
 
-Profile policy governs product operations. Local auth/config management remains available so a
-user can recover from an overly restrictive profile. Global `--read-only` still blocks local
-writes. Dry-run previews are permitted without weakening execution policy.
+Profile policy governs product operations. Local auth/config management and read-only discovery
+commands remain available so a user can recover from an overly restrictive profile. Global
+`--read-only` still blocks local writes. Dry-run previews are permitted without weakening execution
+policy.
+
+Inspect the stable operation catalog and explain a concrete decision without credentials or
+network access:
+
+```bash
+atla operation list --output json
+atla --profile agent explain-policy jira.issue.create --output json
+atla --profile agent --read-only explain-policy jira.issue.create --output json
+```
+
+The explanation reports the matching deny or allow pattern, the profile mode fallback, and whether
+global `--read-only` independently blocks the operation. Deny remains higher priority than allow.
 
 ## Context budgets
 

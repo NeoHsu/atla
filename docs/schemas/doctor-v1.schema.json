@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/doctor-v1.schema.json",
+  "title": "atla doctor report v1",
+  "type": "object",
+  "required": ["schemaVersion", "healthy", "checks"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "healthy": { "type": "boolean" },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status", "detail"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "enum": ["ok", "warning", "error", "skipped"] },
+          "detail": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

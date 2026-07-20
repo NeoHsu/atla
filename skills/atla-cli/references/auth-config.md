@@ -50,6 +50,22 @@ atla auth status
 
 Shows: active profile, instance, email, credential storage, API target/cloud ID, policy mode, and token availability.
 
+### Diagnostics and local discovery
+
+```bash
+atla doctor --output json
+atla doctor --network --timeout 10 --output json
+atla --profile agent explain-policy jira.issue.create --output json
+atla operation list --output json
+atla schema list --output json
+atla schema print error-v1 --output json
+```
+
+`doctor` checks config/profile/token-source/API-target/policy locally. `--network` additionally calls
+the unauthenticated tenant-info endpoint to verify site reachability and discover the cloud ID; it
+never prints token contents. `explain-policy` shows deny → allow → mode evaluation plus global
+`--read-only`. The operation and schema commands do not need credentials or network access.
+
 ### Logout
 
 ```bash
@@ -218,4 +234,6 @@ recent-pages = "confluence page list --space DEV --limit 10"
 | `No token available` | Profile exists but no credential stored | Re-run `atla auth login` |
 | `Failed to access system keyring` | Headless/no keyring daemon | Use `--storage file` or `ATLA_TOKEN` |
 | Wrong instance hit | Wrong profile active | `atla auth status` then `atla auth switch <name>` |
+| Policy unexpectedly blocks an operation | Deny/allow/mode or global read-only | Run `atla explain-policy jira.issue.create --output json` with the intended profile |
+| Config, keyring, or site diagnosis unclear | Multiple possible setup failures | Run `atla doctor --output json`, then opt into `--network` if needed |
 | 401 Unauthorized | Token expired or revoked | Generate a replacement token at id.atlassian.com, then re-login |

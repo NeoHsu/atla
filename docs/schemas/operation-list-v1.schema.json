@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/operation-list-v1.schema.json",
+  "title": "atla operation list v1",
+  "allOf": [
+    { "$ref": "list-v1.schema.json" }
+  ],
+  "type": "object",
+  "required": ["schemaVersion", "operations", "pagination"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "method",
+          "risk",
+          "mutating",
+          "paginated",
+          "dryRun",
+          "retrySafe"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "method": { "type": ["string", "null"] },
+          "risk": { "enum": ["read", "write", "destructive"] },
+          "mutating": { "type": "boolean" },
+          "paginated": { "type": "boolean" },
+          "dryRun": { "type": "boolean" },
+          "retrySafe": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

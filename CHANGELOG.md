@@ -20,6 +20,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Expanded the maintainer live-smoke ledger to every remote Jira, Confluence, and auth-discovery
   operation with selectable groups, mutation/resource budgets, Jira cleanup, residue tracking, and
   API-drift versus CLI-regression failure classification.
+- Added read-only `doctor`, `explain-policy`, `operation list`, and `schema list/print` discovery
+  commands, including versioned JSON contracts and automatic schema-fixture coverage.
 
 ### Changed
 

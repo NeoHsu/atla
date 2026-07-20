@@ -88,7 +88,11 @@ atla <command path> --help
 ```
 
 The runtime parser is authoritative. Repository examples are parse-checked, but parser checks do
-not prove tenant permissions, API semantics, or cleanup success.
+not prove tenant permissions, API semantics, or cleanup success. For local discovery, use:
+
+- `atla operation list --output json` for stable operation IDs and safety metadata;
+- `atla schema list --output json` for bundled contracts;
+- `atla explain-policy jira.issue.create --output json` for a profile decision.
 
 ## Global execution controls
 
@@ -125,6 +129,10 @@ prefer bounded runs.
 
 - `auth login/discover/logout/status/switch`
 - `config set/get/list`
+- `doctor [--network]`
+- `explain-policy <OPERATION_ID>`
+- `operation list`
+- `schema list/print`
 - `completion bash/elvish/fish/powershell/zsh`
 - `plan jira ...` / `plan confluence ...`
 - `apply <PLAN> --yes`
@@ -205,6 +213,8 @@ URL.
   `--no-input` for agents.
 - Treat `--page-token` and plan hashes as opaque. A plan digest detects modification but is not a
   signature; never apply an untrusted plan.
+- `doctor` is local-only unless `--network` is explicit. It reports token availability/source but
+  never prints the token. `schema print` supports default/JSON output, not table/csv/keys.
 
 ## Load the relevant reference
 

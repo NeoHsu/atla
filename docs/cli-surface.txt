@@ -103,6 +103,13 @@ atla confluence attachment view <ATTACHMENT_ID>
 atla confluence attachment upload <PAGE_ID> <FILE> --comment --minor-edit
 atla confluence attachment download <ATTACHMENT_ID> --save-to/-f
 atla confluence attachment delete <ATTACHMENT_ID> --purge --yes
+atla doctor --network
+atla explain-policy <OPERATION_ID>
+atla operation
+atla operation list
+atla schema
+atla schema list
+atla schema print <NAME>
 atla plan --expires-in --out
 atla plan jira
 atla plan jira issue

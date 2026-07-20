@@ -192,6 +192,8 @@ pub const OPERATION_CATALOG: &[OperationMetadata] = &[
     operation!("confluence.space.list", Some("GET"), Read, true, true),
     operation!("confluence.space.update", Some("PUT"), Write, false, true),
     operation!("confluence.space.view", Some("GET"), Read, false, true),
+    operation!("doctor", Some("GET"), Read, false, false),
+    operation!("explain-policy", Some("LOCAL"), Read, false, false),
     operation!("jira.board.list", Some("GET"), Read, true, true),
     operation!("jira.board.view", Some("GET"), Read, false, true),
     operation!("jira.issue.assign", Some("PUT"), Write, false, true),
@@ -278,7 +280,10 @@ pub const OPERATION_CATALOG: &[OperationMetadata] = &[
     operation!("jira.sprint.remove", Some("POST"), Write, false, true),
     operation!("jira.sprint.start", Some("PUT"), Write, false, true),
     operation!("jira.sprint.view", Some("GET"), Read, false, true),
+    operation!("operation.list", Some("LOCAL"), Read, false, false),
     operation!("plan.apply", Some("LOCAL"), Destructive, false, true),
+    operation!("schema.list", Some("LOCAL"), Read, false, false),
+    operation!("schema.print", Some("LOCAL"), Read, false, false),
 ];
 
 pub fn catalog() -> &'static [OperationMetadata] {
@@ -364,6 +369,10 @@ pub fn apply_context_budgets(command: &mut Command, bounded: bool) {
         },
         Command::Auth(_)
         | Command::Config(_)
+        | Command::Doctor(_)
+        | Command::ExplainPolicy(_)
+        | Command::Operation(_)
+        | Command::Schema(_)
         | Command::Plan { .. }
         | Command::Apply { .. }
         | Command::Completion { .. } => {}
@@ -440,6 +449,15 @@ pub fn metadata(command: &Command) -> OperationMetadata {
         },
         Command::Jira(command) => jira_metadata(&command.resource),
         Command::Confluence(command) => confluence_metadata(&command.resource),
+        Command::Doctor(_) => registered("doctor"),
+        Command::ExplainPolicy(_) => registered("explain-policy"),
+        Command::Operation(command) => match &command.action {
+            OperationAction::List => registered("operation.list"),
+        },
+        Command::Schema(command) => match &command.action {
+            SchemaAction::List => registered("schema.list"),
+            SchemaAction::Print { .. } => registered("schema.print"),
+        },
         Command::Plan { command, .. } => match command {
             PlannableCommand::Jira(PlanJiraCommand {
                 resource:

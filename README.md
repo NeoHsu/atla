@@ -76,6 +76,8 @@ cargo install --git https://github.com/NeoHsu/atla atla
 ```bash
 printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
   --email you@example.com --token-stdin
+atla doctor --output json
+atla operation list --output json
 atla jira search "assignee = currentUser() order by updated desc" --limit 10
 atla jira issue transition PROJ-123 --to Done --dry-run
 atla plan jira issue create --project PROJ --type Task --summary 'Agent task' --out issue-plan.json
@@ -137,6 +139,7 @@ back to the repo checkout.
 | --- | --- | --- |
 | Core | Auth | `login`, `logout`, `status`, `switch` |
 | Core | Config | `set`, `get`, `list` |
+| Core | Discovery | `doctor`, `explain-policy`, `operation list`, `schema list`, `schema print` |
 | Jira | Projects | `list`, `view`, `issue-types` |
 | Jira | Search | JQL search with table, JSON, CSV, and key output |
 | Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` |

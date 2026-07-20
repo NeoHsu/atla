@@ -74,7 +74,19 @@ fn shell_lex(line: &str) -> Option<Vec<String>> {
 }
 
 const GLOBAL_VALUE_FLAGS: &[&str] = &["--output", "-o", "--profile"];
-const TOP_COMMANDS: &[&str] = &["auth", "config", "jira", "confluence", "completion"];
+const TOP_COMMANDS: &[&str] = &[
+    "auth",
+    "config",
+    "jira",
+    "confluence",
+    "doctor",
+    "explain-policy",
+    "operation",
+    "schema",
+    "plan",
+    "apply",
+    "completion",
+];
 
 /// Normalize a candidate example into argv for clap, or `None` if the line is
 /// not a self-contained runnable `atla` invocation.
@@ -155,6 +167,7 @@ fn is_acceptable_error(err: &clap::Error) -> bool {
     use clap::error::ErrorKind;
     match err.kind() {
         ErrorKind::MissingRequiredArgument
+        | ErrorKind::MissingSubcommand
         | ErrorKind::DisplayHelp
         | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => true,
         ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
@@ -360,14 +373,33 @@ fn validate_schema_fixture(schema: &serde_json::Value, value: &serde_json::Value
 #[test]
 fn json_contract_fixtures_match_published_schemas() {
     let root = repo_root().join("docs/schemas");
-    for name in [
-        "error-v1",
-        "list-v1",
-        "jira-issue-list-v1",
-        "confluence-page-list-v1",
-        "operation-plan-v1",
-        "mutation-receipt-v1",
-    ] {
+    let mut names = std::fs::read_dir(&root)
+        .expect("read JSON schema directory")
+        .flatten()
+        .filter_map(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.strip_suffix(".schema.json"))
+                .map(str::to_owned)
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    assert!(!names.is_empty(), "no published JSON schemas found");
+    let mut fixture_names = std::fs::read_dir(root.join("fixtures"))
+        .expect("read JSON fixture directory")
+        .flatten()
+        .filter_map(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.strip_suffix(".json"))
+                .map(str::to_owned)
+        })
+        .collect::<Vec<_>>();
+    fixture_names.sort();
+    assert_eq!(names, fixture_names, "schema/fixture registry drift");
+    for name in names {
         let schema: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(root.join(format!("{name}.schema.json")))
                 .expect("read JSON schema"),
@@ -387,13 +419,13 @@ fn json_contract_fixtures_match_published_schemas() {
                             .expect("read referenced JSON schema"),
                     )
                     .expect("parse referenced JSON schema");
-                    validate_schema_fixture(&referenced_schema, &fixture, name);
+                    validate_schema_fixture(&referenced_schema, &fixture, &name);
                 } else {
-                    validate_schema_fixture(referenced, &fixture, name);
+                    validate_schema_fixture(referenced, &fixture, &name);
                 }
             }
         }
-        validate_schema_fixture(&schema, &fixture, name);
+        validate_schema_fixture(&schema, &fixture, &name);
     }
 }
 

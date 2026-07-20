@@ -137,6 +137,10 @@ async fn main() {
         Command::Config(command) => commands::config::run(command, &cli.global).await,
         Command::Jira(command) => commands::jira::run(command, &cli.global).await,
         Command::Confluence(command) => commands::confluence::run(command, &cli.global).await,
+        Command::Doctor(args) => commands::discovery::doctor(args, &cli.global).await,
+        Command::ExplainPolicy(args) => commands::discovery::explain_policy(args, &cli.global),
+        Command::Operation(command) => commands::discovery::operation(command, &cli.global),
+        Command::Schema(command) => commands::discovery::schema(command, &cli.global),
         Command::Plan { command, .. } => match command.into_command() {
             Command::Jira(command) => commands::jira::run(command, &cli.global).await,
             Command::Confluence(command) => commands::confluence::run(command, &cli.global).await,

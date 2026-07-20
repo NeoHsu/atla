@@ -369,6 +369,20 @@ impl std::fmt::Display for PolicyMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolicyDecisionSource {
+    Deny,
+    Allow,
+    Mode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfilePolicyDecision {
+    pub allowed: bool,
+    pub source: PolicyDecisionSource,
+    pub matched_pattern: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProfilePolicy {
     #[serde(default)]
@@ -384,22 +398,38 @@ impl ProfilePolicy {
         self.mode == PolicyMode::ReadWrite && self.allow.is_empty() && self.deny.is_empty()
     }
 
-    pub fn allows(&self, operation_id: &str, mutates: bool) -> bool {
-        if self
+    pub fn decision(&self, operation_id: &str, mutates: bool) -> ProfilePolicyDecision {
+        if let Some(pattern) = self
             .deny
             .iter()
-            .any(|pattern| wildcard_matches(pattern, operation_id))
+            .find(|pattern| wildcard_matches(pattern, operation_id))
         {
-            return false;
+            return ProfilePolicyDecision {
+                allowed: false,
+                source: PolicyDecisionSource::Deny,
+                matched_pattern: Some(pattern.clone()),
+            };
         }
-        if self
+        if let Some(pattern) = self
             .allow
             .iter()
-            .any(|pattern| wildcard_matches(pattern, operation_id))
+            .find(|pattern| wildcard_matches(pattern, operation_id))
         {
-            return true;
+            return ProfilePolicyDecision {
+                allowed: true,
+                source: PolicyDecisionSource::Allow,
+                matched_pattern: Some(pattern.clone()),
+            };
         }
-        self.mode == PolicyMode::ReadWrite || !mutates
+        ProfilePolicyDecision {
+            allowed: self.mode == PolicyMode::ReadWrite || !mutates,
+            source: PolicyDecisionSource::Mode,
+            matched_pattern: None,
+        }
+    }
+
+    pub fn allows(&self, operation_id: &str, mutates: bool) -> bool {
+        self.decision(operation_id, mutates).allowed
     }
 }
 
@@ -857,9 +887,25 @@ email = "neo@example.com"
         assert!(policy.allows("jira.issue.comment.add", true));
         assert!(!policy.allows("jira.issue.create", true));
         assert!(!policy.allows("jira.issue.delete", true));
+        assert_eq!(
+            policy.decision("jira.issue.create", true),
+            ProfilePolicyDecision {
+                allowed: false,
+                source: PolicyDecisionSource::Mode,
+                matched_pattern: None,
+            }
+        );
 
         policy.allow.push("jira.issue.delete".to_owned());
         assert!(!policy.allows("jira.issue.delete", true));
+        assert_eq!(
+            policy.decision("jira.issue.delete", true),
+            ProfilePolicyDecision {
+                allowed: false,
+                source: PolicyDecisionSource::Deny,
+                matched_pattern: Some("*.delete".to_owned()),
+            }
+        );
     }
 
     #[test]

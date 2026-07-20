@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "healthy": true,
+  "checks": [
+    {
+      "name": "config-load",
+      "status": "ok",
+      "detail": "schema version 2"
+    }
+  ]
+}

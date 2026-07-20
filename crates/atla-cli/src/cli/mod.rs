@@ -102,6 +102,14 @@ pub enum Command {
     Jira(JiraCommand),
     /// Confluence spaces, pages, blogs, search, and attachments
     Confluence(ConfluenceCommand),
+    /// Diagnose local configuration, credentials, policy, and optional site reachability
+    Doctor(DoctorArgs),
+    /// Explain why an operation is allowed or blocked by current policy
+    ExplainPolicy(ExplainPolicyArgs),
+    /// Discover stable operation IDs and safety metadata
+    Operation(OperationCommand),
+    /// Discover and print bundled public JSON schemas
+    Schema(SchemaCommand),
     /// Build a validated, expiring mutation plan without network access
     Plan {
         /// Write the plan to this file
@@ -132,12 +140,14 @@ pub enum Command {
 mod auth;
 mod config;
 mod confluence;
+mod discovery;
 mod jira;
 mod plan;
 
 pub use auth::*;
 pub use config::*;
 pub use confluence::*;
+pub use discovery::*;
 pub use jira::*;
 pub use plan::*;
 

@@ -51,6 +51,12 @@ back to the repo checkout.
 - `atla config set <key> <value>` — set a config key.
 - `atla config get <key>` — read a config key.
 - `atla config list` — print all config entries.
+- `atla doctor` — inspect config, profile, credential source, API target, and policy locally; add
+  `--network` to test tenant reachability/cloud-ID discovery.
+- `atla explain-policy <operation-id>` — explain deny → allow → mode evaluation plus global
+  `--read-only` for one stable operation ID.
+- `atla operation list` — list stable IDs, methods, risk, pagination, dry-run, and retry metadata.
+- `atla schema list` / `atla schema print <name>` — discover or print bundled JSON contracts.
 - `atla plan jira|confluence ... --out <FILE>` — write an expiring, hashed mutation plan.
 - `atla apply <FILE> --yes` — validate and execute an allowlisted saved plan.
 - `atla completion <shell>` — generate shell completions.
@@ -234,6 +240,24 @@ Affected commands (`--limit`, `--all`, and `--page-token` supported on each):
 `confluence page children`, `confluence blog list`, `confluence page comment list`,
 `confluence blog comment list`, `confluence page label list`,
 `confluence blog label list`, `confluence attachment list`, `confluence search`.
+
+### Local discovery and diagnostics
+
+These commands are read-only and bypass profile allow/deny policy so users can diagnose a locked
+configuration. Only `doctor --network` sends a request; it calls the unauthenticated tenant-info
+endpoint and never prints a token.
+
+| Command | Args | Flags | Description | Example |
+| --- | --- | --- | --- | --- |
+| `doctor` | none | `--network` | Report config path/load, profile, token source, site, API target, policy, and optional tenant discovery. | `atla doctor --output json` |
+| `explain-policy` | `<OPERATION_ID>` | none | Show the matching deny/allow rule or mode and global read-only result. | `atla --profile agent explain-policy jira.issue.create --output json` |
+| `operation list` | none | none | List the complete stable operation registry and safety metadata. | `atla operation list --output json` |
+| `schema list` | none | none | List every bundled public JSON schema. | `atla schema list --output json` |
+| `schema print` | `<NAME>` | JSON/default output only | Print the exact bundled schema without adding result-envelope fields. | `atla schema print error-v1 --output json` |
+
+`doctor` reports check-level `ok`, `warning`, `error`, or `skipped` status and an aggregate
+`healthy` boolean. It does not fail merely because a check is unhealthy. `schema print` accepts
+both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 
 ## 4. Jira Commands
 

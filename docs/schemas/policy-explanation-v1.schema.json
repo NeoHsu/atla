@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NeoHsu/atla/docs/schemas/policy-explanation-v1.schema.json",
+  "title": "atla policy explanation v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "operation",
+    "profile",
+    "profileFound",
+    "policyMode",
+    "profileDecision",
+    "matchedPattern",
+    "globalReadOnly",
+    "globalReadOnlyBlocked",
+    "allowed",
+    "reason"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "operation": {
+      "type": "object",
+      "required": [
+        "id",
+        "method",
+        "risk",
+        "mutating",
+        "paginated",
+        "dryRun",
+        "retrySafe"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "method": { "type": ["string", "null"] },
+        "risk": { "enum": ["read", "write", "destructive"] },
+        "mutating": { "type": "boolean" },
+        "paginated": { "type": "boolean" },
+        "dryRun": { "type": "boolean" },
+        "retrySafe": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "profile": { "type": ["string", "null"] },
+    "profileFound": { "type": "boolean" },
+    "policyMode": { "type": ["string", "null"] },
+    "profileDecision": {
+      "enum": ["deny-rule", "allow-rule", "mode", "no-profile", "not-applicable"]
+    },
+    "matchedPattern": { "type": ["string", "null"] },
+    "globalReadOnly": { "type": "boolean" },
+    "globalReadOnlyBlocked": { "type": "boolean" },
+    "allowed": { "type": "boolean" },
+    "reason": { "type": "string" }
+  },
+  "additionalProperties": true
+}

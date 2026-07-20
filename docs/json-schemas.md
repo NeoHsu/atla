@@ -18,9 +18,24 @@ Published schemas:
 - [`schemas/confluence-page-list-v1.schema.json`](schemas/confluence-page-list-v1.schema.json)
 - [`schemas/operation-plan-v1.schema.json`](schemas/operation-plan-v1.schema.json)
 - [`schemas/mutation-receipt-v1.schema.json`](schemas/mutation-receipt-v1.schema.json)
+- [`schemas/doctor-v1.schema.json`](schemas/doctor-v1.schema.json)
+- [`schemas/operation-list-v1.schema.json`](schemas/operation-list-v1.schema.json)
+- [`schemas/policy-explanation-v1.schema.json`](schemas/policy-explanation-v1.schema.json)
+- [`schemas/schema-list-v1.schema.json`](schemas/schema-list-v1.schema.json)
 
-Representative files under [`schemas/fixtures/`](schemas/fixtures/) are checked against required,
-type, enum, const, property, and array constraints by `cargo test`.
+Every schema has a representative file under [`schemas/fixtures/`](schemas/fixtures/). Tests
+automatically discover every `*.schema.json`, require its matching fixture, and check required,
+type, enum, const, property, and array constraints.
+
+Discover these contracts from an installed binary without locating repository files:
+
+```bash
+atla schema list --output json
+atla schema print operation-list-v1 --output json
+```
+
+`schema print` emits the bundled schema itself and does not inject an output `schemaVersion` field
+into the schema document.
 
 ## Lists
 

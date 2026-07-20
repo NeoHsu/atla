@@ -256,6 +256,20 @@ Output shows the profile that would be created/updated, the storage method, and 
 
 ## Troubleshooting
 
+Start with a local, redacted diagnostic report:
+
+```bash
+atla doctor --output json
+```
+
+It checks the config path/schema, selected profile, credential source, site URL, API target, and
+policy without printing the token. If local checks are sound, explicitly add `--network` to verify
+the unauthenticated tenant-info endpoint and discovered cloud ID:
+
+```bash
+atla doctor --network --timeout 10 --output json
+```
+
 ### Token not found
 
 ```

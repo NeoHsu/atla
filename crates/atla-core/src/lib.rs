@@ -38,4 +38,7 @@ pub use jira::{
     JiraTransition, JiraUser, JiraWorklog, JiraWorklogCreate, JiraWorklogPage,
     default_issue_fields,
 };
-pub use profile::{AtlaConfig, AtlassianProduct, ConfigStore, PolicyMode, Profile, ProfilePolicy};
+pub use profile::{
+    AtlaConfig, AtlassianProduct, ConfigStore, PolicyDecisionSource, PolicyMode, Profile,
+    ProfilePolicy, ProfilePolicyDecision,
+};

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "operations": [
+    {
+      "id": "jira.issue.view",
+      "method": "GET",
+      "risk": "read",
+      "mutating": false,
+      "paginated": false,
+      "dryRun": true,
+      "retrySafe": true
+    }
+  ],
+  "pagination": {
+    "isLast": true,
+    "nextPageToken": null,
+    "nextCommand": null
+  }
+}

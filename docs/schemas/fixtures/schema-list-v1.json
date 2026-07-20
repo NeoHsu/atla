@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "schemas": [
+    {
+      "name": "error-v1",
+      "file": "error-v1.schema.json",
+      "description": "Structured stderr error envelope"
+    }
+  ],
+  "pagination": {
+    "isLast": true,
+    "nextPageToken": null,
+    "nextCommand": null
+  }
+}

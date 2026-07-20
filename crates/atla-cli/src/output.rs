@@ -109,6 +109,10 @@ fn print_bounded(rendered: String) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn print_raw(value: &str) -> anyhow::Result<()> {
+    print_bounded(value.trim_end().to_owned())
+}
+
 pub fn print_json<T: Serialize + ?Sized>(value: &T) -> anyhow::Result<()> {
     let mut value = serde_json::to_value(value)?;
     if let serde_json::Value::Object(object) = &mut value {

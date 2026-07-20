@@ -231,6 +231,179 @@ async fn auth_discover_prints_cloud_id_and_product_endpoints() {
 }
 
 #[tokio::test]
+async fn local_discovery_commands_emit_versioned_json_without_network() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+
+    let doctor = atla(&config, &["doctor", "--output", "json"]);
+    assert!(doctor.status.success(), "{}", stderr(&doctor));
+    let doctor_json: serde_json::Value =
+        serde_json::from_slice(&doctor.stdout).expect("doctor JSON");
+    assert_eq!(doctor_json["schemaVersion"], 1);
+    assert_eq!(doctor_json["healthy"], true);
+    assert!(doctor_json["checks"].as_array().is_some_and(|checks| {
+        checks
+            .iter()
+            .any(|check| check["name"] == "site-reachability" && check["status"] == "skipped")
+    }));
+
+    let operations = atla(&config, &["operation", "list", "--output", "json"]);
+    assert!(operations.status.success(), "{}", stderr(&operations));
+    let operations_json: serde_json::Value =
+        serde_json::from_slice(&operations.stdout).expect("operation JSON");
+    assert_eq!(operations_json["schemaVersion"], 1);
+    assert_eq!(operations_json["pagination"]["isLast"], true);
+    assert!(
+        operations_json["operations"]
+            .as_array()
+            .is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["id"] == "jira.issue.create"
+                        && item["risk"] == "write"
+                        && item["mutating"] == true
+                })
+            })
+    );
+
+    let schemas = atla(&config, &["schema", "list", "--output", "json"]);
+    assert!(schemas.status.success(), "{}", stderr(&schemas));
+    let schemas_json: serde_json::Value =
+        serde_json::from_slice(&schemas.stdout).expect("schema list JSON");
+    assert!(
+        schemas_json["schemas"]
+            .as_array()
+            .is_some_and(|items| { items.iter().any(|item| item["name"] == "operation-list-v1") })
+    );
+
+    let schema = atla(
+        &config,
+        &["schema", "print", "error-v1", "--output", "json"],
+    );
+    assert!(schema.status.success(), "{}", stderr(&schema));
+    let schema_json: serde_json::Value =
+        serde_json::from_slice(&schema.stdout).expect("printed schema JSON");
+    assert_eq!(
+        schema_json["$id"],
+        "https://github.com/NeoHsu/atla/docs/schemas/error-v1.schema.json"
+    );
+    assert!(schema_json.get("schemaVersion").is_none());
+
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("received requests")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn explain_policy_reports_deny_allow_mode_and_global_read_only() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+    let mut contents = std::fs::read_to_string(&config).expect("read config");
+    contents.push_str(
+        r#"
+[profiles.e2e.policy]
+mode = "read-only"
+allow = ["jira.issue.*"]
+deny = ["jira.issue.delete"]
+"#,
+    );
+    std::fs::write(&config, contents).expect("write policy config");
+
+    let allowed = atla(
+        &config,
+        &["explain-policy", "jira.issue.create", "--output", "json"],
+    );
+    assert!(allowed.status.success(), "{}", stderr(&allowed));
+    let allowed_json: serde_json::Value =
+        serde_json::from_slice(&allowed.stdout).expect("allowed policy JSON");
+    assert_eq!(allowed_json["allowed"], true);
+    assert_eq!(allowed_json["profileDecision"], "allow-rule");
+    assert_eq!(allowed_json["matchedPattern"], "jira.issue.*");
+
+    let denied = atla(
+        &config,
+        &["explain-policy", "jira.issue.delete", "--output", "json"],
+    );
+    assert!(denied.status.success(), "{}", stderr(&denied));
+    let denied_json: serde_json::Value =
+        serde_json::from_slice(&denied.stdout).expect("denied policy JSON");
+    assert_eq!(denied_json["allowed"], false);
+    assert_eq!(denied_json["profileDecision"], "deny-rule");
+
+    let read_only = atla(
+        &config,
+        &[
+            "--read-only",
+            "explain-policy",
+            "jira.issue.create",
+            "--output",
+            "json",
+        ],
+    );
+    assert!(read_only.status.success(), "{}", stderr(&read_only));
+    let read_only_json: serde_json::Value =
+        serde_json::from_slice(&read_only.stdout).expect("read-only policy JSON");
+    assert_eq!(read_only_json["allowed"], false);
+    assert_eq!(read_only_json["globalReadOnlyBlocked"], true);
+
+    let local = atla(
+        &config,
+        &["explain-policy", "auth.login", "--output", "json"],
+    );
+    assert!(local.status.success(), "{}", stderr(&local));
+    let local_json: serde_json::Value =
+        serde_json::from_slice(&local.stdout).expect("local policy JSON");
+    assert_eq!(local_json["allowed"], true);
+    assert_eq!(local_json["profileDecision"], "not-applicable");
+
+    let no_profile_config = _dir.path().join("no-profile.toml");
+    std::fs::write(&no_profile_config, "schema_version = 2\n").expect("write empty config");
+    let no_profile = atla(
+        &no_profile_config,
+        &["explain-policy", "jira.issue.create", "--output", "json"],
+    );
+    assert!(no_profile.status.success(), "{}", stderr(&no_profile));
+    let no_profile_json: serde_json::Value =
+        serde_json::from_slice(&no_profile.stdout).expect("no-profile policy JSON");
+    assert_eq!(no_profile_json["profileFound"], false);
+    assert_eq!(no_profile_json["allowed"], false);
+}
+
+#[tokio::test]
+async fn doctor_network_check_discovers_and_validates_cloud_id() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+    Mock::given(method("GET"))
+        .and(path("/_edge/tenant_info"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "cloudId": "cloud-doctor"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(
+        &config,
+        &["doctor", "--network", "--output", "json", "--timeout", "2"],
+    );
+    assert!(output.status.success(), "{}", stderr(&output));
+    let value: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("doctor network JSON");
+    assert!(value["checks"].as_array().is_some_and(|checks| {
+        checks.iter().any(|check| {
+            check["name"] == "site-reachability"
+                && check["status"] == "ok"
+                && check["detail"]
+                    .as_str()
+                    .is_some_and(|detail| detail.contains("cloud-doctor"))
+        })
+    }));
+}
+
+#[tokio::test]
 async fn auth_login_reads_token_from_stdin_without_echoing_it() {
     let server = MockServer::start().await;
     let server_uri = server.uri();
