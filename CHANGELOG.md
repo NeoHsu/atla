@@ -29,6 +29,13 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   changing the generated CLI surface.
 - Split Markdown-to-ADF parsing from ADF-to-Markdown rendering and added bidirectional golden
   fixtures for the conversion contract.
+- Made all partial-spec filters fail with contextual read/write errors instead of uncaught
+  filesystem exceptions.
+
+### Security
+
+- Added a repository gitleaks policy that excludes ignored Cargo artifacts and only allowlists
+  Atlassian's literal `admin:admin` documentation example in the pinned upstream specification.
 
 ### Fixed
 

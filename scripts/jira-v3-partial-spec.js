@@ -4,12 +4,21 @@ const fs = require("fs");
 
 const [, , inputPath, outputPath] = process.argv;
 
-if (!inputPath || !outputPath) {
-	console.error("Usage: scripts/jira-v3-partial-spec.js INPUT OUTPUT");
-	process.exit(2);
+function fail(message, exitCode = 1) {
+	process.stderr.write(`${message}\n`);
+	process.exit(exitCode);
 }
 
-const spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+if (!inputPath || !outputPath) {
+	fail("Usage: scripts/jira-v3-partial-spec.js INPUT OUTPUT", 2);
+}
+
+let spec;
+try {
+	spec = JSON.parse(fs.readFileSync(inputPath, "utf8"));
+} catch (error) {
+	fail(`failed to read Jira v3 spec ${inputPath}: ${error.message}`);
+}
 
 const selectedOperations = {
 	"/rest/api/3/issue": {
@@ -205,8 +214,7 @@ const partial = {
 
 for (const [path, methods] of Object.entries(selectedOperations)) {
 	if (!spec.paths[path]) {
-		console.error(`missing selected path in source spec: ${path}`);
-		process.exit(1);
+		fail(`missing selected path in source spec: ${path}`);
 	}
 
 	partial.paths[path] = {};
@@ -214,10 +222,9 @@ for (const [path, methods] of Object.entries(selectedOperations)) {
 	for (const [method, config] of Object.entries(methods)) {
 		const source = spec.paths[path][method];
 		if (!source) {
-			console.error(
+			fail(
 				`missing selected operation in source spec: ${method.toUpperCase()} ${path}`,
 			);
-			process.exit(1);
 		}
 
 		partial.paths[path][method] = {
@@ -231,7 +238,11 @@ for (const [path, methods] of Object.entries(selectedOperations)) {
 	}
 }
 
-fs.writeFileSync(outputPath, `${JSON.stringify(partial, null, 2)}\n`);
+try {
+	fs.writeFileSync(outputPath, `${JSON.stringify(partial, null, 2)}\n`);
+} catch (error) {
+	fail(`failed to write Jira v3 partial spec ${outputPath}: ${error.message}`);
+}
 
 function pathParameter(name, schema) {
 	return {

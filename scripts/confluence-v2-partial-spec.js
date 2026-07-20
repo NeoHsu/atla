@@ -203,7 +203,11 @@ const output = {
 };
 if (spec.security) output.security = spec.security;
 
-fs.writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+try {
+	fs.writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+} catch (error) {
+	fail(`failed to write Confluence v2 partial spec ${outputPath}: ${error.message}`);
+}
 const opCount = Object.values(keptPaths).reduce(
 	(n, item) => n + HTTP_METHODS.filter((m) => m in item).length,
 	0,

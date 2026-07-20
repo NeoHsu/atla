@@ -1,0 +1,15 @@
+title = "atla secret-scanning policy"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore Cargo build artifacts, which are already excluded from version control"
+paths = ['''(^|/)target/''']
+
+[[allowlists]]
+description = "Allow Atlassian's literal admin:admin curl example in the pinned upstream v1 spec"
+condition = "AND"
+regexTarget = "match"
+paths = ['''(^|/)specs/confluence-v1\.json$''']
+regexes = ['''-u admin:admin''']

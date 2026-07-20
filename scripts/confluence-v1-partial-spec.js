@@ -222,4 +222,8 @@ for (const section of Object.keys(partial.components)) {
 	}
 }
 
-fs.writeFileSync(outputPath, `${JSON.stringify(partial, null, 2)}\n`);
+try {
+	fs.writeFileSync(outputPath, `${JSON.stringify(partial, null, 2)}\n`);
+} catch (error) {
+	fail(`failed to write Confluence v1 partial spec ${outputPath}: ${error.message}`);
+}

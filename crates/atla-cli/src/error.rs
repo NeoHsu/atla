@@ -78,7 +78,7 @@ mod tests {
 
     fn http_error(status: u16) -> anyhow::Error {
         anyhow::Error::new(ApiError::Http {
-            status: reqwest::StatusCode::from_u16(status).unwrap(),
+            status: reqwest::StatusCode::from_u16(status).expect("valid test HTTP status"),
             body: "boom".to_owned(),
         })
         .context("failed to reach Jira")

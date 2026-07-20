@@ -380,8 +380,10 @@ fn percent_encode_query_value(s: &str) -> String {
                 out.push(byte as char);
             }
             _ => {
-                use std::fmt::Write;
-                write!(out, "%{byte:02X}").unwrap();
+                const HEX: &[u8; 16] = b"0123456789ABCDEF";
+                out.push('%');
+                out.push(HEX[usize::from(byte >> 4)] as char);
+                out.push(HEX[usize::from(byte & 0x0f)] as char);
             }
         }
     }
@@ -419,11 +421,11 @@ mod tests {
 
         assert_eq!(link.id.as_deref(), Some("link-1"));
         assert_eq!(link.link_type.as_deref(), Some("Blocks"));
-        let inward = link.inward_issue.unwrap();
+        let inward = link.inward_issue.expect("inward issue");
         assert_eq!(inward.key.as_deref(), Some("PROJ-2"));
         assert_eq!(inward.summary.as_deref(), Some("Blocked task"));
         assert_eq!(inward.status.as_deref(), Some("Open"));
-        let outward = link.outward_issue.unwrap();
+        let outward = link.outward_issue.expect("outward issue");
         assert_eq!(outward.key.as_deref(), Some("PROJ-3"));
         assert_eq!(outward.status.as_deref(), Some("Done"));
     }
@@ -445,6 +447,14 @@ mod tests {
         assert_eq!(linked.key.as_deref(), Some("ABC-5"));
         assert_eq!(linked.summary.as_deref(), Some("Some task"));
         assert_eq!(linked.status.as_deref(), Some("In Progress"));
+    }
+
+    #[test]
+    fn percent_encodes_query_values_without_panicking() {
+        assert_eq!(
+            percent_encode_query_value("github.com / ✓"),
+            "github.com%20%2F%20%E2%9C%93"
+        );
     }
 
     #[test]

@@ -175,7 +175,10 @@ mod tests {
         assert_eq!(fields["priority"], serde_json::json!({ "name": "High" }));
         assert_eq!(fields["description"]["type"], serde_json::json!("doc"));
         assert_eq!(
-            fields["description"]["content"].as_array().unwrap().len(),
+            fields["description"]["content"]
+                .as_array()
+                .expect("description content array")
+                .len(),
             1
         );
     }
@@ -619,7 +622,11 @@ mod tests {
         assert_eq!(wl.time_spent.as_deref(), Some("2h"));
         assert_eq!(wl.time_spent_seconds, Some(7200));
         assert_eq!(
-            wl.author.as_ref().unwrap().display_name.as_deref(),
+            wl.author
+                .as_ref()
+                .expect("worklog author")
+                .display_name
+                .as_deref(),
             Some("Bob")
         );
         assert_eq!(wl.started.as_deref(), Some("2026-06-01T09:00:00.000+0000"));

@@ -1001,21 +1001,21 @@ email = "neo@example.com"
         assert_eq!(
             config
                 .get_value("default.profile", None)
-                .unwrap()
+                .expect("default profile value")
                 .as_deref(),
             Some("default")
         );
         assert_eq!(
             config
                 .get_value("profiles.default.instance", None)
-                .unwrap()
+                .expect("profile instance value")
                 .as_deref(),
             Some("https://example.atlassian.net")
         );
         assert_eq!(
             config
                 .get_value("profiles.default.email", None)
-                .unwrap()
+                .expect("profile email value")
                 .as_deref(),
             Some("neo@example.com")
         );
@@ -1043,11 +1043,11 @@ email = "neo@example.com"
                 "https://new.atlassian.net".to_owned(),
                 None,
             )
-            .unwrap();
+            .expect("set profile instance");
         assert_eq!(
             config
                 .get_value("profiles.default.instance", None)
-                .unwrap()
+                .expect("updated profile instance")
                 .as_deref(),
             Some("https://new.atlassian.net")
         );
