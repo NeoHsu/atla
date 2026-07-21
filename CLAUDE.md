@@ -66,9 +66,10 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   confluence-v1 scripts hand-build minimal specs; `confluence-v2-partial-spec.js` prunes
   the upstream spec to the used operations via $ref closure — when core starts calling a
   new v2 operation, add its snake_case name to `usedOperations` in that script and rerun.
-- Enum patches (`specs/PATCHES.md`) for confluence-v2 are applied automatically by the
-  filter script (`stripEnumSchemas`); the jira patch is still manual — check PATCHES.md
-  on every refresh.
+- Every intentional schema repair in `specs/PATCHES.md` is applied automatically by its filter
+  script, including Jira `Project.projectTypeKey` and the Confluence v2 enum/scalar repairs. The
+  tooling test must reproduce all three checked-in partial specs; still review every invariant on
+  refresh.
 - `specs/manifest.json` tracks spec sources + SHA256; keep it updated via the script.
 
 ## Release workflow hardening

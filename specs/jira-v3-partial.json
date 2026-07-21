@@ -1709,12 +1709,7 @@
             "type": "string"
           },
           "projectTypeKey": {
-            "type": "string",
-            "enum": [
-              "software",
-              "service_desk",
-              "business"
-            ]
+            "type": "string"
           },
           "style": {
             "type": "string",

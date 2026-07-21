@@ -429,10 +429,9 @@ function simplifiedSchemas() {
 				id: { type: "string" },
 				key: { type: "string" },
 				name: { type: "string" },
-				projectTypeKey: {
-					type: "string",
-					enum: ["software", "service_desk", "business"],
-				},
+				// Keep this open-ended: Atlassian returns values such as
+				// `product_discovery` that are absent from the upstream enum.
+				projectTypeKey: { type: "string" },
 				style: {
 					type: "string",
 					enum: ["classic", "next-gen"],

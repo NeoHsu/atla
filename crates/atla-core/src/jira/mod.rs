@@ -138,7 +138,7 @@ mod tests {
                 id: Some("10000".to_owned()),
                 key: Some("PROJ".to_owned()),
                 name: Some("Project".to_owned()),
-                project_type_key: Some(generated_types::ProjectProjectTypeKey::Software),
+                project_type_key: Some("product_discovery".to_owned()),
                 style: Some(generated_types::ProjectStyle::Classic),
                 simplified: Some(false),
                 archived: Some(false),
@@ -149,7 +149,10 @@ mod tests {
 
         assert_eq!(page.total, Some(1));
         assert_eq!(page.values[0].key.as_deref(), Some("PROJ"));
-        assert_eq!(page.values[0].project_type_key.as_deref(), Some("software"));
+        assert_eq!(
+            page.values[0].project_type_key.as_deref(),
+            Some("product_discovery")
+        );
         assert_eq!(page.values[0].style.as_deref(), Some("classic"));
     }
 

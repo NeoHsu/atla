@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-21T02:28:56.706126Z",
+  "generated_at": "2026-07-21T17:00:39.098979Z",
   "generator": {
     "tool": "progenitor",
     "version": "progenitor-0.14"
@@ -7,7 +7,7 @@
   "specs": {
     "jira": {
       "source_file": "specs/jira-v3-partial.json",
-      "source_sha256": "dd3fb2ec9d4fbb5714ea906074d8132319e00a9a9e6f653030138deebe33c95b",
+      "source_sha256": "e035f25521ce53d330549cbeb90f917ab162ffa0540c484ae50100b02181dd5e",
       "upstream_source_file": "specs/jira-v3.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
       "upstream_sha256": "b9e7f99b7fb1bfeab2badb10ae14670118ca70b2e02e0d73c81d94124a585f26",

@@ -45,6 +45,9 @@ class MiseTaskTests(unittest.TestCase):
         self.assertIn(f"cargo-deny@{tools['cargo:cargo-deny']}", workflow)
         self.assertIn(f"cargo-llvm-cov@{tools['cargo:cargo-llvm-cov']}", workflow)
 
+    def test_spec_filter_runtime_is_pinned(self) -> None:
+        self.assertEqual(self.config["tools"]["node"], "24")
+
     def test_pr_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
         for command in (

@@ -5,7 +5,10 @@ description: How atla generates Rust API clients from Atlassian OpenAPI specs us
 
 # Code generation
 
-atla generates type-safe Rust API clients at compile time using [progenitor](https://github.com/oxidecomputer/progenitor), a Rust-native OpenAPI code generator. No external tools (Java, Python, etc.) are required.
+atla generates type-safe Rust API clients at compile time using
+[progenitor](https://github.com/oxidecomputer/progenitor), a Rust-native OpenAPI code generator.
+Normal Cargo builds consume checked-in partial specs and require no Java, Node.js, or Python
+code-generation runtime. Refreshing those specs separately requires `curl`, Node.js, and Python 3.
 
 ---
 
@@ -170,7 +173,10 @@ Filters the full Jira Cloud v3 spec to include only:
 - Projects: search, get
 - Issue types, attachments, issue links
 
-Also provides simplified schemas for complex types (`CreatedIssue`, `IssueUpdateDetails`, `Transitions`, etc.) to avoid pulling in the entire Jira type graph.
+Also provides simplified schemas for complex types (`CreatedIssue`, `IssueUpdateDetails`,
+`Transitions`, etc.) to avoid pulling in the entire Jira type graph. The simplified `Project`
+schema deliberately keeps `projectTypeKey` open-ended because Atlassian returns values missing from
+its published enum; the filter applies this invariant automatically.
 
 Jira Software Agile endpoints (boards, sprints) are not part of the Jira platform v3 spec. atla calls those endpoints directly via raw `reqwest` calls in `atla-core`.
 
@@ -215,14 +221,16 @@ merging.
 
 ### Refresh workflow
 
-`scripts/update-specs.sh` handles the full refresh cycle:
+The local refresh requires `curl`, Node.js, and Python 3 (`mise install` provisions the pinned
+Node.js and Python versions). `scripts/update-specs.sh` handles the full refresh cycle:
 
 1. Downloads upstream specs from Atlassian CDN
-2. Runs JS filter scripts to produce partial specs
-3. Updates `specs/manifest.json` with SHA256 hashes and metadata
+2. Runs JS filters that produce partial specs and apply every invariant in `specs/PATCHES.md`
+3. Updates `specs/manifest.json` with SHA-256 hashes and metadata
 
 ```bash
 scripts/update-specs.sh
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 cargo check --workspace
 ```
 

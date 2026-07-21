@@ -87,6 +87,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   JSON machine-readable, and allowed exactly eight chained alias expansions as documented.
 - Normalized upstream Confluence OpenAPI regressions so scheduled spec refreshes remain buildable,
   while keeping unsupported generated multipart upload operations excluded.
+- Made the Jira `projectTypeKey` compatibility repair reproducible in the partial-spec filter so
+  unknown project types remain deserializable after automated refreshes.
+- Corrected onboarding profile commands, alias-chain semantics, versioned JSON examples,
+  paginated-command flag summaries, verified installer guidance, and code-generation prerequisites.
 - Corrected API-token expiration guidance and Confluence v2 code-generation documentation.
 - Kept content `--version` flags in the generated CLI surface snapshot.
 - Made spec manifest refresh timestamps update on every refresh.

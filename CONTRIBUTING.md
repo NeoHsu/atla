@@ -33,8 +33,8 @@ workflows through discoverable convenience tasks:
 | `mise run check:pr` | Sequential local PR gate: lint, tests, tooling, MSRV, deny, and audit |
 
 After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
-project toolchain. The config pins Python and the security/coverage Cargo tools; its `cargo-deny`
-and `cargo-llvm-cov` versions match CI. `deny.toml`
+project toolchain. The config pins Node.js for partial-spec filters, Python for maintenance tools,
+and the Cargo security/coverage tools to versions matching CI. `deny.toml`
 rejects unknown registries, Git dependencies, wildcard dependency versions, unknown licenses,
 advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades can
 remove them incrementally; do not suppress one without a documented reason. CI also publishes LCOV and fails

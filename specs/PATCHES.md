@@ -1,13 +1,18 @@
 # Spec Patches
 
 This file documents intentional deviations from the upstream Jira and Confluence
-OpenAPI specs. When updating a spec file, re-apply all patches listed here.
+OpenAPI specs. Filter scripts apply every patch below automatically; after a
+refresh, verify each invariant and require the reproducibility test to match the
+checked-in partial specs.
 
 ---
 
 ## `jira-v3-partial.json`
 
 ### 1. `Project.projectTypeKey` — remove enum constraint
+
+**Applied automatically** by `scripts/jira-v3-partial-spec.js` when it builds the
+simplified `Project` schema.
 
 **Location:** `#/components/schemas/Project/properties/projectTypeKey`
 

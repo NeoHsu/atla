@@ -53,9 +53,9 @@ only with a conservative default body limit.
 
 ## Completed in the 0.6 hardening work
 
-- Partial OpenAPI refreshes are reproducible and now report parameter,
-  request/response, required, enum, and nested schema contract facts rather
-  than only operation/schema counts.
+- Partial OpenAPI refreshes are reproducible, apply every documented Jira/Confluence schema repair
+  automatically, and report parameter, request/response, required, enum, and nested schema contract
+  facts rather than only operation/schema counts.
 - Generated Jira/Confluence requests share bounded method-aware retry,
   exponential backoff, and `Retry-After` handling with raw reqwest paths;
   uncertain mutations remain non-retryable.
