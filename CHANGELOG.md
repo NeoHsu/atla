@@ -28,6 +28,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documentation, and release-contract review explicit.
 - Added an opt-in cross-worktree Cargo cache for fast CLI/core checks and a reproducible
   fresh-build benchmark.
+- Added discoverable `mise` development tasks for focused tests, contracts, security checks,
+  coverage, and a deterministic local PR gate with pinned tool versions.
 - Expanded spec-refresh summaries to report normalized parameter, request, response, requiredness,
   enum, and nested schema contract changes in addition to operation/schema counts.
 - Expanded the maintainer live-smoke ledger to every remote Jira, Confluence, and auth-discovery

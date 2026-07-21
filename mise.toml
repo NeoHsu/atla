@@ -1,4 +1,95 @@
 [tools]
 java = "21.0.2"
+python = "3.12.13"
 rust = "stable"
 zig = "latest"
+"cargo:cargo-audit" = "0.22.1"
+"cargo:cargo-deny" = "0.20.2"
+"cargo:cargo-llvm-cov" = "0.8.7"
+
+[tasks."check:fast"]
+description = "Run the fast atla package check with the shared worktree cache"
+run = "scripts/check-fast.sh"
+run_windows = "cargo check -p atla"
+
+[tasks.fmt]
+description = "Format all Rust sources"
+run = "cargo fmt --all"
+
+[tasks.lint]
+description = "Check Rust formatting and run the CI Clippy policy"
+run = [
+  "cargo fmt --all -- --check",
+  "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
+]
+
+[tasks.test]
+description = "Run every workspace test"
+run = "cargo test --workspace"
+
+[tasks."test:cli"]
+description = "Run CLI unit, contract, and integration tests"
+run = "cargo test -p atla"
+
+[tasks."test:core"]
+description = "Run atla-core unit and integration tests"
+run = "cargo test -p atla-core"
+
+[tasks."test:e2e"]
+description = "Run the CLI end-to-end test suite"
+run = "cargo test -p atla --test e2e"
+
+[tasks."contract:check"]
+description = "Check CLI, documentation, schema, and operation-catalog contracts"
+run = [
+  "cargo test -p atla doc_check",
+  "cargo test -p atla operation::tests::catalog_covers_every_cli_leaf_and_safety_marker",
+]
+
+[tasks."contract:update"]
+description = "Regenerate the checked-in CLI surface snapshot"
+env = { UPDATE_CLI_SURFACE = "1" }
+run = "cargo test -p atla cli_surface"
+
+[tasks."tooling:test"]
+description = "Run repository Python tooling tests"
+run = "python -m unittest discover -s scripts/tests -p \"test_*.py\""
+
+[tasks.msrv]
+description = "Check the workspace with the minimum supported Rust version"
+run = "cargo +1.91 check --workspace"
+
+[tasks.deny]
+description = "Check dependency licenses, sources, bans, and advisories"
+run = "cargo deny check"
+
+[tasks.audit]
+description = "Audit Cargo.lock against the RustSec advisory database"
+run = "cargo audit"
+
+[tasks.security]
+description = "Run dependency policy and RustSec checks"
+run = [
+  "cargo deny check",
+  "cargo audit",
+]
+
+[tasks.coverage]
+description = "Generate LCOV and enforce the 53 percent line-coverage floor"
+run = [
+  "cargo llvm-cov --workspace --lcov --output-path target/lcov.info",
+  "cargo llvm-cov report --summary-only --fail-under-lines 53",
+]
+
+[tasks."check:pr"]
+description = "Run the deterministic local checks required before opening a PR"
+run = [
+  "git diff --check",
+  "cargo fmt --all -- --check",
+  "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
+  "cargo test --workspace",
+  "python -m unittest discover -s scripts/tests -p \"test_*.py\"",
+  "cargo +1.91 check --workspace",
+  "cargo deny check",
+  "cargo audit",
+]

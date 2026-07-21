@@ -22,7 +22,10 @@ cargo clippy --workspace --all-targets \
 ```
 
 CI (`.github/workflows/ci.yml`) enforces these three plus a RustSec dependency audit. The CLI
-package is `atla`, not `atla-cli`: `cargo test -p atla`.
+package is `atla`, not `atla-cli`: `cargo test -p atla`. For local orchestration, use
+`mise run check:fast` during the inner loop and `mise run check:pr` before pushing; `mise tasks`
+lists focused test, contract, security, and coverage tasks. The explicit CI commands remain the
+authority.
 
 ## Changing the CLI surface (checklist)
 

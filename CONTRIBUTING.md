@@ -16,11 +16,28 @@ cargo audit
 cargo deny check
 ```
 
-`deny.toml` rejects unknown registries, Git dependencies, wildcard dependency versions, unknown
-licenses, advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades
-can remove them incrementally; do not suppress one without a documented reason. CI also publishes
-LCOV and fails below the 53% line-coverage ratchet; raise the floor only after deterministic tests
-land.
+These explicit commands remain the CI authority. Contributors using `mise` can run the same common
+workflows through discoverable convenience tasks:
+
+| Task | Purpose |
+| --- | --- |
+| `mise run check:fast` | Fast `atla` package check for the inner development loop |
+| `mise run lint` | Formatting check plus the CI Clippy policy |
+| `mise run test`, `mise run test:cli`, `mise run test:core`, or `mise run test:e2e` | Workspace or focused test suites |
+| `mise run contract:check` | CLI surface, docs, schemas, and operation-catalog contracts |
+| `mise run contract:update` | Regenerate `docs/cli-surface.txt` after a CLI change |
+| `mise run tooling:test` | Python maintenance-tool tests |
+| `mise run deny`, `mise run audit`, or `mise run security` | Dependency policy and RustSec checks |
+| `mise run coverage` | LCOV generation and the current coverage floor |
+| `mise run check:pr` | Sequential local PR gate: lint, tests, tooling, MSRV, deny, and audit |
+
+After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
+project toolchain. The config pins Python and the security/coverage Cargo tools; its `cargo-deny`
+and `cargo-llvm-cov` versions match CI. `deny.toml`
+rejects unknown registries, Git dependencies, wildcard dependency versions, unknown licenses,
+advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades can
+remove them incrementally; do not suppress one without a documented reason. CI also publishes LCOV and fails
+below the 53% line-coverage ratchet; raise the floor only after deterministic tests land.
 
 Generated API code is built into `OUT_DIR`; do not commit it. For ordinary
 CLI/core iteration, `scripts/check-fast.sh` reuses an opt-in Cargo target cache
