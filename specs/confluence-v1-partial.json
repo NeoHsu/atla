@@ -1224,7 +1224,7 @@
               "read:user:confluence": "View user details.",
               "moderate:core-content:confluence": "Moderate core contents",
               "moderate:comment:confluence": "Moderate comments",
-              "read:email-address:confluence": "View email addresses of all users regardless of the user\u2019s profile visibility settings."
+              "read:email-address:confluence": "View email addresses of all users regardless of the user’s profile visibility settings."
             }
           }
         }

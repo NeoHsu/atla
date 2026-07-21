@@ -4735,6 +4735,10 @@
             "type": "string",
             "description": "The account ID of the user who created this space originally."
           },
+          "spaceOwnerId": {
+            "type": "string",
+            "description": "The account ID of the user who owns this space."
+          },
           "currentActiveAlias": {
             "type": "string",
             "description": "Currently active alias for a Confluence space."
