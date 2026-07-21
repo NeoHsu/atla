@@ -7,6 +7,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-22
+
 ### Added
 
 - Added scoped-token profiles with separate Jira and Confluence gateway roots via
@@ -133,7 +135,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Accepted numeric Jira attachment identifiers.
 
-[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/NeoHsu/atla/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/NeoHsu/atla/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/NeoHsu/atla/compare/v0.3.0...v0.5.0
 [0.3.0]: https://github.com/NeoHsu/atla/compare/v0.2.3...v0.3.0
