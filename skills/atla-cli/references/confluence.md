@@ -28,6 +28,8 @@ atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN] [--al
 atla confluence space view <KEY>
 ```
 
+JSON includes optional `spaceOwnerId` when Confluence returns the current owner account ID.
+
 ### Create a space
 
 ```
@@ -64,15 +66,24 @@ atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=2
 ### View a page
 
 ```
-atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format] [--preserve-table-options] [--with-attachments]
+atla confluence page view <ID> [--web]
+  [--format markdown|storage|atlas-doc-format | --metadata-only]
+  [--fields FIELD,...] [--max-chars N]
+  [--preserve-table-options] [--with-attachments]
 ```
 
-- `--format markdown` returns rendered Markdown
-- `--web` opens it in the browser
-- `--with-attachments` also fetches and prints page attachments
-- `--preserve-table-options` keeps ADF table metadata directives (like numbered rows) in Markdown output (only valid with `--format markdown`).
-- With `--output json`, body and attachments stay in one object under `renderedBody`,
-  `renderedFormat`, and `attachments`; CSV also uses one combined schema
+- Metadata-only is the bounded 0.6 default. JSON sets `bodyIncluded: false` and returns a
+  profile-bound `bodyCommand`; use `--metadata-only` to make the choice explicit.
+- `--format markdown` returns rendered Markdown and sets `bodyIncluded: true`.
+- `--fields` projects comma-separated top-level fields and requires `--output json`; ID and
+  `schemaVersion` remain present.
+- `--max-chars` requires `--format`, truncates by Unicode characters, and reports
+  `renderedBodyChars` plus `renderedBodyTruncated`.
+- `--web` opens the page in the browser and cannot be combined with output/body/attachment view
+  flags; `--with-attachments` fetches attachments for printed views.
+- `--preserve-table-options` keeps ADF table directives and requires `--format markdown`.
+- With JSON output, body and attachments stay in one object under `renderedBody`,
+  `renderedFormat`, and `attachments`; CSV also uses one combined schema.
 
 ### List page children
 
@@ -101,6 +112,8 @@ atla confluence page create [-s SPACE | --space-id ID] --title TITLE
 
 `--numbered-table-rows` enables numbered rows in Markdown tables.
 `--mention` maps a single `NAME=ACCOUNT_ID` pair and `--resolve-mentions` attempts to auto-resolve `@name` mentions.
+Body input defaults to `storage`; likely Markdown produces a warning but is never silently
+converted, so pass `--representation markdown` explicitly.
 
 Example:
 
@@ -209,9 +222,12 @@ atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=2
 ### View a blog post
 
 ```
-atla confluence blog view <ID> [--format markdown|storage|atlas-doc-format]
+atla confluence blog view <ID>
+  [--metadata-only | --format markdown|storage|atlas-doc-format]
+  [--fields FIELD,...] [--max-chars N]
 ```
 
+Metadata mode, JSON field projection, and Unicode-safe truncation follow the page-view contract.
 With `--output json`, formatted content is added as `renderedBody` and `renderedFormat` in one
 blog object rather than printed as a second payload.
 

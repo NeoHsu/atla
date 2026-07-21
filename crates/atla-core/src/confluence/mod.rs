@@ -486,6 +486,7 @@ mod tests {
                 "status": "current",
                 "homepageId": "67890",
                 "currentActiveAlias": "DEV",
+                "spaceOwnerId": "owner-123",
                 "description": {
                     "plain": {
                         "value": "Team docs"
@@ -502,6 +503,7 @@ mod tests {
         assert_eq!(space.status.as_deref(), Some("current"));
         assert_eq!(space.homepage_id.as_deref(), Some("67890"));
         assert_eq!(space.current_active_alias.as_deref(), Some("DEV"));
+        assert_eq!(space.space_owner_id.as_deref(), Some("owner-123"));
     }
 
     #[test]
@@ -513,7 +515,8 @@ mod tests {
             "type": "global",
             "status": "current",
             "homepageId": "67890",
-            "currentActiveAlias": "dev"
+            "currentActiveAlias": "dev",
+            "spaceOwnerId": "owner-456"
         }))
         .expect("parse generated bulk space");
         let space = ConfluenceSpace::from(generated);
@@ -525,6 +528,7 @@ mod tests {
         assert_eq!(space.status.as_deref(), Some("current"));
         assert_eq!(space.homepage_id.as_deref(), Some("67890"));
         assert_eq!(space.current_active_alias.as_deref(), Some("dev"));
+        assert_eq!(space.space_owner_id.as_deref(), Some("owner-456"));
     }
 
     #[test]

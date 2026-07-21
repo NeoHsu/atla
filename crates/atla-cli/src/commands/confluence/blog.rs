@@ -7,9 +7,10 @@ use crate::context::AppContext;
 use super::blog_comment::run_blog_comment;
 use super::blog_label::run_blog_label;
 use super::format::{
-    prepare_optional_body_with_options, print_blog_body_view, print_blog_post, print_blog_posts,
-    print_blog_posts_with_footer, print_deleted, read_body, resolve_required_space_id,
-    resolve_space_id, status_from_draft, view_format_body_representation,
+    parse_view_fields, prepare_optional_body_with_options, print_blog_body_view,
+    print_blog_metadata_view, print_blog_post, print_blog_posts, print_blog_posts_with_footer,
+    print_deleted, read_body, resolve_required_space_id, resolve_space_id, status_from_draft,
+    view_format_body_representation,
 };
 
 pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyhow::Result<()> {
@@ -208,7 +209,15 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 }
             }
         }
-        BlogAction::View { id, format } => {
+        BlogAction::View {
+            id,
+            format,
+            metadata_only: _metadata_only,
+            fields,
+            max_chars,
+        } => {
+            let fields = parse_view_fields(fields.as_deref(), global)?;
+            let max_chars = max_chars.map(|value| value as usize);
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -238,9 +247,9 @@ pub(super) async fn run_blog(command: BlogCommand, global: &GlobalArgs) -> anyho
                 })?;
 
             if let Some(format) = format {
-                print_blog_body_view(&post, format, global)?;
+                print_blog_body_view(&post, format, global, max_chars, fields.as_deref())?;
             } else {
-                print_blog_post(&post, global)?;
+                print_blog_metadata_view(&post, &id, profile_name, fields.as_deref(), global)?;
             }
         }
         BlogAction::Update {

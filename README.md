@@ -12,7 +12,8 @@ human-friendly tables, and machine-friendly output formats.
 - Read and update Confluence spaces, pages, blogs, labels, comments, and
   attachments from scripts or interactive workflows.
 - Automate reporting and CI with stable `table`, `json`, `csv`, and `keys` output,
-  mutation policies (`--dry-run`, `--read-only`), and context budgets.
+  mutation policies (`--dry-run`, `--read-only`), context budgets, and bounded Confluence body
+  projection (`--fields`, `--max-chars`).
 
 ## Install
 
@@ -82,7 +83,7 @@ atla jira search "assignee = currentUser() order by updated desc" --limit 10
 atla jira issue transition PROJ-123 --to Done --dry-run
 atla plan jira issue create --project PROJ --type Task --summary 'Agent task' --out issue-plan.json
 atla apply issue-plan.json --yes --output json
-atla confluence page view 67890 --format markdown
+atla confluence page view 67890 --format markdown --max-chars 50000
 atla confluence search "type=page AND space=DEV" --output json
 ```
 
@@ -252,8 +253,8 @@ Confluence examples:
 atla confluence space list
 atla confluence space create "Development" --key DEV --description "Team docs"
 atla confluence page list --space DEV
-atla confluence page view 67890 --format markdown
-atla confluence page view 67890 --format markdown --preserve-table-options
+atla confluence page view 67890 --metadata-only --output json
+atla confluence page view 67890 --format markdown --max-chars 50000 --preserve-table-options
 atla confluence page create --space DEV --title "Meeting Notes" --body-file notes.html
 atla confluence page create --space DEV --title "Inventory" --body-file inventory.md --representation markdown --numbered-table-rows
 atla confluence page create --space DEV --title "Runbook" --body-file runbook.md --representation markdown --mention "Neo Hsu=abc-account-id"

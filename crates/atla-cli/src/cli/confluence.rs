@@ -119,11 +119,30 @@ pub enum PageAction {
         /// Page ID
         id: String,
         /// Open in the browser instead of printing
-        #[arg(long)]
+        #[arg(
+            long,
+            conflicts_with_all = [
+                "format",
+                "metadata_only",
+                "fields",
+                "max_chars",
+                "preserve_table_options",
+                "with_attachments"
+            ]
+        )]
         web: bool,
         /// Print the body in this format
         #[arg(long, value_enum)]
         format: Option<ContentViewFormat>,
+        /// Explicitly return metadata without fetching the body (the default in 0.6)
+        #[arg(long, conflicts_with = "format")]
+        metadata_only: bool,
+        /// Select top-level JSON fields (comma-separated; requires --output json)
+        #[arg(long, value_name = "FIELD,...")]
+        fields: Option<String>,
+        /// Truncate the rendered body after this many Unicode characters
+        #[arg(long, requires = "format", value_parser = clap::value_parser!(u32).range(1..))]
+        max_chars: Option<u32>,
         /// Emit atla Markdown directives for ADF table metadata (requires --format markdown).
         #[arg(long)]
         preserve_table_options: bool,
@@ -405,12 +424,24 @@ pub enum BlogAction {
         page_token: Option<String>,
     },
     /// Show blog metadata; pass --format to print the body
+    #[command(
+        after_help = "Without --format only metadata is printed. To read the content:\n  atla confluence blog view 123456 --format markdown"
+    )]
     View {
         /// Blog post ID
         id: String,
         /// Print the body in this format
         #[arg(long, value_enum)]
         format: Option<ContentViewFormat>,
+        /// Explicitly return metadata without fetching the body (the default in 0.6)
+        #[arg(long, conflicts_with = "format")]
+        metadata_only: bool,
+        /// Select top-level JSON fields (comma-separated; requires --output json)
+        #[arg(long, value_name = "FIELD,...")]
+        fields: Option<String>,
+        /// Truncate the rendered body after this many Unicode characters
+        #[arg(long, requires = "format", value_parser = clap::value_parser!(u32).range(1..))]
+        max_chars: Option<u32>,
     },
     /// Update a blog post
     Update {

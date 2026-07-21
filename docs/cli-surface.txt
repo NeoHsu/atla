@@ -62,7 +62,7 @@ atla confluence
 atla confluence page
 atla confluence page create --body --body-file --draft --mention --numbered-table-rows --parent --private --representation --resolve-mentions --root-level --space-id --space/-s --title
 atla confluence page list --all --limit --page-token --space-id --space/-s --title
-atla confluence page view <ID> --format --preserve-table-options --web --with-attachments
+atla confluence page view <ID> --fields --format --max-chars --metadata-only --preserve-table-options --web --with-attachments
 atla confluence page children <ID> --all --depth --limit --page-token
 atla confluence page copy <SOURCE_ID> --parent --root-level --space-id --space/-s --title
 atla confluence page update <ID> --body --body-file --draft --mention --message --numbered-table-rows --parent --representation --resolve-mentions --title --version
@@ -85,7 +85,7 @@ atla confluence space delete <KEY> --yes
 atla confluence blog
 atla confluence blog create --body --body-file --draft --private --representation --space-id --space/-s --title
 atla confluence blog list --all --limit --page-token --space-id --space/-s --title
-atla confluence blog view <ID> --format
+atla confluence blog view <ID> --fields --format --max-chars --metadata-only
 atla confluence blog update <ID> --body --body-file --draft --message --representation --title --version
 atla confluence blog delete <ID> --draft --purge --yes
 atla confluence blog label

@@ -74,6 +74,18 @@
         "Offers `confluence attachment upload 123456 report.pdf` if no comment is needed",
         "Does not upload first and claim the failed comment completed"
       ]
+    },
+    {
+      "id": 7,
+      "prompt": "Read Confluence page 123456 and summarize it, but keep the fetched body under 20000 characters and avoid unrelated metadata.",
+      "expected_output": "The agent requests an explicitly bounded Markdown body and projects only the fields needed for identification, content, and truncation handling.",
+      "files": [],
+      "expectations": [
+        "Uses `confluence page view 123456 --format markdown --max-chars 20000`",
+        "Uses JSON `--fields` to select id, title, rendered body, and truncation metadata",
+        "Checks `renderedBodyTruncated` before claiming the page was read completely",
+        "Does not rely on the metadata-only default when the body is required"
+      ]
     }
   ]
 }

@@ -308,12 +308,12 @@ both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 | Command | Args | Flags | Description | Example |
 | --- | --- | --- | --- | --- |
 | `confluence space list` | none | `--key`, `--limit`, `--page-token` | List spaces. | `atla confluence space list --key ENG --limit 10` |
-| `confluence space view` | `<KEY>` | none | Show one space. | `atla confluence space view ENG` |
+| `confluence space view` | `<KEY>` | none | Show one space; JSON includes optional `spaceOwnerId`. | `atla confluence space view ENG --output json` |
 | `confluence space create` | `<NAME>` | `--key`, `--alias`, `--description`, `--description-file`, `--private` | Create a space; exactly one of `--key`/`--alias` is required. | `atla confluence space create 'Engineering Docs' --key ENG` |
 | `confluence space update` | `<KEY>` | `--name`, `--description`, `--description-file` | Update space metadata; at least one update field is required. | `atla confluence space update ENG --name 'Engineering Knowledge Base'` |
 | `confluence space delete` | `<KEY>` | `--yes` | Delete a space. | `atla confluence space delete ENG --yes` |
 | `confluence page list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List pages. | `atla confluence page list --space ENG --title Runbook` |
-| `confluence page view` | `<ID>` | `--web`, `--format`, `--preserve-table-options`, `--with-attachments` | Show page metadata/body or open in browser. Body requires `--format`. | `atla confluence page view 123456 --format markdown` |
+| `confluence page view` | `<ID>` | `--web`, `--format`, `--metadata-only`, `--fields`, `--max-chars`, `--preserve-table-options`, `--with-attachments` | Metadata is the bounded default and includes `bodyCommand`; `--format` fetches the body. JSON projection uses `--fields`; `--max-chars` bounds body text. | `atla confluence page view 123456 --format markdown --max-chars 50000` |
 | `confluence page children` | `<ID>` | `--depth`, `--limit`, `--page-token` | List page children or descendants. | `atla confluence page children 123456 --depth 2` |
 | `confluence page copy` | `<SOURCE_ID>` | `--title`, `-s/--space`, `--space-id`, `--parent`, `--root-level` | Copy a page. | `atla confluence page copy 123456 --title 'Template Copy' --space ENG` |
 | `confluence page create` | none | `-s/--space`, `--space-id`, `--title`, `--parent`, `--root-level`, `--body`, `--body-file`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--draft`, `--private` | Create a page. | `atla confluence page create --space ENG --title 'Checklist' --body-file docs/checklist.md --representation markdown` |
@@ -327,7 +327,7 @@ both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 | `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment; exactly one body source is required. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
 | `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
-| `confluence blog view` | `<ID>` | `--format` | Show one blog post. Body requires `--format`. | `atla confluence blog view 234567 --format markdown` |
+| `confluence blog view` | `<ID>` | `--format`, `--metadata-only`, `--fields`, `--max-chars` | Metadata is the bounded default; body views support JSON projection and truncation. | `atla confluence blog view 234567 --format markdown --max-chars 50000` |
 | `confluence blog create` | none | `-s/--space`, `--space-id`, `--title`, `--body`, `--body-file`, `--representation`, `--draft`, `--private` | Create a blog post. | `atla confluence blog create --space ENG --title 'Release Notes' --body-file docs/release.md --representation markdown` |
 | `confluence blog update` | `<ID>` | `--title`, `--body`, `--body-file`, `--representation`, `--version`, `--message`, `--draft` | Update a blog post. | `atla confluence blog update 234567 --message 'Add known issues'` |
 | `confluence blog delete` | `<ID>` | `--purge`, `--draft`, `--yes` | Delete a blog post. | `atla confluence blog delete 234567 --yes` |

@@ -38,8 +38,23 @@ an additive integer `schemaVersion` (currently `1`).
 
 ```bash
 atla jira search 'project = PROJ' --output json
-atla confluence page view 123456 --output json
+atla confluence page view 123456 --metadata-only --output json
 ```
+
+Confluence page/blog metadata views set `bodyIncluded: false` and include a `bodyCommand` that can
+retrieve Markdown from the same profile. Body views set `bodyIncluded: true`; keep agent output
+bounded and select only needed top-level fields:
+
+```bash
+atla confluence page view 123456 --format markdown --max-chars 50000 \
+  --fields id,title,renderedBody,renderedBodyTruncated --output json
+```
+
+`--fields` on page/blog view requires JSON output and always retains the content ID plus
+`schemaVersion`. `--max-chars` counts Unicode characters, truncates `renderedBody`, and omits the
+duplicate raw `body` while reporting original character counts and truncation state. Global
+`--max-bytes` remains the
+hard upper bound for the complete JSON document.
 
 ### `csv`
 

@@ -373,6 +373,7 @@ pub struct ConfluenceSpace {
     pub status: Option<String>,
     pub homepage_id: Option<String>,
     pub current_active_alias: Option<String>,
+    pub space_owner_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -813,6 +814,7 @@ fn space_from_json(value: &Value) -> ConfluenceSpace {
         status: optional_string(value, &["status"]),
         homepage_id: optional_string(value, &["homepageId"]),
         current_active_alias: optional_string(value, &["currentActiveAlias"]),
+        space_owner_id: optional_string(value, &["spaceOwnerId"]),
     }
 }
 

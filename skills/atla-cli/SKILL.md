@@ -37,7 +37,7 @@ Read the exact target with `--read-only`, use IDs returned by the API, and bound
 
 ```bash
 atla --read-only --max-pages 5 --max-items 200 --max-bytes 1000000 --timeout 30 \
-  --output json confluence page view 123456
+  --output json confluence page view 123456 --metadata-only
 ```
 
 Record the target ID and, for versioned content, its current version. Do not infer a Jira project,
@@ -184,7 +184,7 @@ String custom fields require JSON string syntax, for example
 ### Read or author Confluence Markdown
 
 ```bash
-atla --read-only confluence page view 123456 --format markdown
+atla --read-only confluence page view 123456 --format markdown --max-chars 50000
 atla confluence page create --space ENG --title 'Meeting Notes' \
   --body-file notes.md --representation markdown --parent 654321
 ```
@@ -202,9 +202,12 @@ examples in `references/confluence.md`.
 
 ## Common traps
 
-- `confluence page view` and `blog view` return metadata unless `--format` is supplied.
+- `confluence page view` and `blog view` return self-describing metadata unless `--format` is
+  supplied. Use explicit `--metadata-only`, or bound body reads with `--max-chars`; JSON
+  `--fields` projects top-level fields while retaining the ID and `schemaVersion`.
 - Page/blog create/update and page/blog comments default body input to `storage`; always pass
-  `--representation markdown` for Markdown files. Markdown input is converted to ADF.
+  `--representation markdown` for Markdown files. Likely Markdown sent as storage warns but is not
+  silently converted; explicit Markdown input is converted to ADF.
 - Page/blog update plans are offline: supply explicit title, body/body-file, and next version.
   Create plans that name a Confluence space must use `--space-id`.
 - Confluence footer-comment replies must identify the parent comment; do not reuse an unrelated

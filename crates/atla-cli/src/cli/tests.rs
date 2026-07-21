@@ -75,6 +75,79 @@ fn page_view_accepts_preserve_table_options_flag() {
 }
 
 #[test]
+fn content_views_accept_bounded_json_projection_options() {
+    let cli = Cli::try_parse_from([
+        "atla",
+        "--output",
+        "json",
+        "confluence",
+        "page",
+        "view",
+        "123456",
+        "--format",
+        "markdown",
+        "--fields",
+        "title,renderedBody",
+        "--max-chars",
+        "5000",
+    ])
+    .expect("parse bounded page view");
+
+    let Command::Confluence(command) = cli.command else {
+        panic!("expected confluence command");
+    };
+    let ConfluenceResource::Page(command) = command.resource else {
+        panic!("expected page command");
+    };
+    let PageAction::View {
+        fields, max_chars, ..
+    } = command.action
+    else {
+        panic!("expected page view action");
+    };
+    assert_eq!(fields.as_deref(), Some("title,renderedBody"));
+    assert_eq!(max_chars, Some(5000));
+
+    Cli::try_parse_from([
+        "atla",
+        "confluence",
+        "blog",
+        "view",
+        "234567",
+        "--metadata-only",
+    ])
+    .expect("parse explicit metadata-only blog view");
+}
+
+#[test]
+fn content_view_options_reject_ambiguous_or_unbounded_syntax() {
+    let conflict = Cli::try_parse_from([
+        "atla",
+        "confluence",
+        "page",
+        "view",
+        "123456",
+        "--format",
+        "markdown",
+        "--metadata-only",
+    ])
+    .expect_err("metadata and body format conflict");
+    assert_eq!(conflict.kind(), ErrorKind::ArgumentConflict);
+
+    let missing_format = Cli::try_parse_from([
+        "atla",
+        "confluence",
+        "blog",
+        "view",
+        "234567",
+        "--max-chars",
+        "5000",
+    ])
+    .expect_err("max chars requires a body format");
+    assert_eq!(missing_format.kind(), ErrorKind::MissingRequiredArgument);
+}
+
+#[test]
 fn jira_comment_add_accepts_attachment_options() {
     let cli = Cli::try_parse_from([
         "atla",

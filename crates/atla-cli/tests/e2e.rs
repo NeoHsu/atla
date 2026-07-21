@@ -1308,6 +1308,184 @@ async fn confluence_body_views_emit_one_json_document_with_supplementary_data() 
 }
 
 #[tokio::test]
+async fn confluence_metadata_view_is_self_describing_and_projects_json_fields() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+    Mock::given(method("GET"))
+        .and(path("/wiki/api/v2/pages/111"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "111",
+            "status": "current",
+            "title": "Runbook",
+            "spaceId": "123"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(
+        &config,
+        &[
+            "--output",
+            "json",
+            "confluence",
+            "page",
+            "view",
+            "111",
+            "--metadata-only",
+            "--fields",
+            "title,bodyIncluded,bodyCommand",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let value: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("metadata view JSON");
+    assert_eq!(value["schemaVersion"], 1);
+    assert_eq!(value["id"], "111");
+    assert_eq!(value["title"], "Runbook");
+    assert_eq!(value["bodyIncluded"], false);
+    assert_eq!(
+        value["bodyCommand"],
+        "atla --profile e2e --output json confluence page view 111 --format markdown"
+    );
+    assert!(value.get("status").is_none());
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn confluence_fields_require_json_before_network_access() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+
+    let output = atla(
+        &config,
+        &[
+            "confluence",
+            "page",
+            "view",
+            "111",
+            "--metadata-only",
+            "--fields",
+            "title",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr(&output).contains("--fields requires --output json"));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn confluence_body_view_truncates_unicode_safely_and_projects_fields() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+    Mock::given(method("GET"))
+        .and(path("/wiki/api/v2/blogposts/222"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "222",
+            "status": "current",
+            "title": "Release",
+            "spaceId": "123",
+            "body": {"storage": {"value": "部署完成abc"}}
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(
+        &config,
+        &[
+            "--output",
+            "json",
+            "confluence",
+            "blog",
+            "view",
+            "222",
+            "--format",
+            "storage",
+            "--max-chars",
+            "3",
+            "--fields",
+            "title,body,bodyIncluded,sourceBodyChars,sourceBodyOmitted,renderedBody,renderedBodyChars,renderedBodyTruncated,renderedFormat",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let value: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("bounded body JSON");
+    assert_eq!(value["id"], "222");
+    assert_eq!(value["renderedBody"], "部署完");
+    assert_eq!(value["renderedBodyChars"], 7);
+    assert_eq!(value["renderedBodyTruncated"], true);
+    assert_eq!(value["bodyIncluded"], true);
+    assert!(value["body"].is_null());
+    assert_eq!(value["sourceBodyChars"], 7);
+    assert_eq!(value["sourceBodyOmitted"], true);
+    assert!(stderr(&output).contains("truncated from 7 to 3 characters"));
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn likely_markdown_storage_input_emits_actionable_warning_without_network() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+
+    let output = atla(
+        &config,
+        &[
+            "--dry-run",
+            "confluence",
+            "page",
+            "create",
+            "--space-id",
+            "123",
+            "--title",
+            "Runbook",
+            "--body",
+            "# Recovery",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).contains("pass --representation markdown"));
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn confluence_space_json_exposes_space_owner_id() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+    Mock::given(method("GET"))
+        .and(path("/wiki/api/v2/spaces"))
+        .and(query_param("keys", "ENG"))
+        .and(query_param("limit", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{
+                "id": "123",
+                "key": "ENG",
+                "name": "Engineering",
+                "type": "global",
+                "status": "current",
+                "spaceOwnerId": "owner-123"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(
+        &config,
+        &["--output", "json", "confluence", "space", "view", "ENG"],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let value: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("space JSON");
+    assert_eq!(value["spaceOwnerId"], "owner-123");
+    server.verify().await;
+}
+
+#[tokio::test]
 async fn pagination_accumulates_across_pages() {
     let server = MockServer::start().await;
     let (_dir, config) = setup(&server.uri()).await;
@@ -1480,7 +1658,7 @@ async fn generated_get_clients_retry_transient_statuses() {
 
     Mock::given(method("GET"))
         .and(path("/rest/api/3/issue/PROJ-1"))
-        .respond_with(ResponseTemplate::new(503))
+        .respond_with(ResponseTemplate::new(503).insert_header("Retry-After", "0"))
         .up_to_n_times(1)
         .expect(1)
         .mount(&server)
@@ -1505,7 +1683,11 @@ async fn generated_put_failures_remain_retryable_after_bounded_retries() {
     let (_directory, config) = setup(&server.uri()).await;
     Mock::given(method("PUT"))
         .and(path("/rest/api/3/issue/PROJ-1"))
-        .respond_with(ResponseTemplate::new(503).set_body_string("temporarily unavailable"))
+        .respond_with(
+            ResponseTemplate::new(503)
+                .insert_header("Retry-After", "0")
+                .set_body_string("temporarily unavailable"),
+        )
         .expect(3)
         .mount(&server)
         .await;

@@ -9,11 +9,12 @@ use crate::cli::{ContentViewFormat, GlobalArgs, OutputFormat, PageAction, PageCo
 use crate::context::AppContext;
 
 use super::format::{
-    markdown_to_adf_options_for_body, open_web_url, prepare_optional_body_with_options,
-    prepare_required_body_with_options, print_content_nodes, print_content_nodes_with_footer,
-    print_deleted, print_page, print_page_body_view, print_page_with_attachments, print_pages,
-    print_pages_with_footer, read_body, resolve_required_space_id, resolve_space_id,
-    status_from_draft, view_format_body_representation,
+    markdown_to_adf_options_for_body, open_web_url, parse_view_fields,
+    prepare_optional_body_with_options, prepare_required_body_with_options, print_content_nodes,
+    print_content_nodes_with_footer, print_deleted, print_page, print_page_body_view,
+    print_page_metadata_view, print_pages, print_pages_with_footer, read_body,
+    resolve_required_space_id, resolve_space_id, status_from_draft,
+    view_format_body_representation,
 };
 use super::page_comment::run_page_comment;
 use super::page_label::run_page_label;
@@ -242,6 +243,9 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             id,
             web,
             format,
+            metadata_only: _metadata_only,
+            fields,
+            max_chars,
             preserve_table_options,
             with_attachments,
         } => {
@@ -251,6 +255,8 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
             let markdown_options = AdfToMarkdownOptions {
                 table_numbered_rows_directives: preserve_table_options,
             };
+            let fields = parse_view_fields(fields.as_deref(), global)?;
+            let max_chars = max_chars.map(|value| value as usize);
             let ctx = AppContext::load(global)?;
             let profile_name = ctx.profile_name();
             let profile = ctx.profile();
@@ -317,11 +323,18 @@ pub(super) async fn run_page(command: PageCommand, global: &GlobalArgs) -> anyho
                     attachments.as_deref(),
                     global,
                     markdown_options,
+                    max_chars,
+                    fields.as_deref(),
                 )?;
-            } else if let Some(attachments) = attachments {
-                print_page_with_attachments(&page, &attachments, global)?;
             } else {
-                print_page(&page, global)?;
+                print_page_metadata_view(
+                    &page,
+                    &id,
+                    profile_name,
+                    attachments.as_deref(),
+                    fields.as_deref(),
+                    global,
+                )?;
             }
         }
         PageAction::Children {

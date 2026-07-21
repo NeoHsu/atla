@@ -97,6 +97,9 @@ atla confluence space view <KEY>
 atla confluence space view ENG
 ```
 
+With `--output json`, the stable object includes optional `spaceOwnerId` when Confluence v2
+returns the account ID of the current space owner.
+
 ### Create a space
 
 **Syntax**
@@ -166,24 +169,36 @@ atla confluence page list --space ENG --title 'Runbook' --limit 20
 **Syntax**
 
 ```bash
-atla confluence page view <ID> [--web] [--format markdown|storage|atlas-doc-format]
+atla confluence page view <ID> [--web]
+                           [--format markdown|storage|atlas-doc-format | --metadata-only]
+                           [--fields FIELD,...] [--max-chars N]
                            [--preserve-table-options] [--with-attachments]
 ```
 
 **Examples**
 
 ```bash
-atla confluence page view 123456
-atla confluence page view 123456 --format markdown
+atla confluence page view 123456 --metadata-only --output json
+atla confluence page view 123456 --format markdown --max-chars 50000
 atla confluence page view 123456 --format markdown --preserve-table-options
+atla confluence page view 123456 --format markdown --max-chars 50000 \
+  --fields id,title,renderedBody,renderedBodyTruncated --output json
 atla confluence page view 123456 --web
 ```
 
+Metadata-only remains the 0.6 default to keep agent output bounded and preserve compatibility.
+Metadata JSON sets `bodyIncluded: false` and provides a profile-bound `bodyCommand`; use
+`--metadata-only` to make the choice explicit. `--fields` selects comma-separated top-level fields
+for JSON output (the ID and `schemaVersion` remain present). `--max-chars` requires `--format`,
+counts Unicode characters, and reports `renderedBodyChars`/`renderedBodyTruncated`; JSON omits the
+duplicate raw body when this limit is active.
+
 Use `--preserve-table-options` with `--format markdown` to emit `<!-- atla:table ... -->`
 directives for ADF table metadata such as numbered rows. With `--output json`, a body view remains
-one JSON document and adds `renderedBody`/`renderedFormat`; `--with-attachments` adds an
-`attachments` array to that object. CSV uses one combined row schema, and keys output remains one
-page ID per line.
+one JSON document and adds `bodyIncluded`, `renderedBody`, and `renderedFormat`;
+`--with-attachments` adds an `attachments` array. CSV uses one combined row schema, and keys output
+remains one page ID per line. `--web` is exclusive with body, metadata projection, truncation, and attachment
+output flags.
 
 ### List page children
 
@@ -235,6 +250,10 @@ atla confluence page create --space ENG --title 'SSO Rollout Checklist'   --body
 atla confluence page create --space ENG --title 'Inventory'   --body-file docs/inventory.md   --representation markdown --numbered-table-rows
 atla confluence page create --space ENG --title 'Runbook'   --body-file docs/runbook.md   --representation markdown --mention 'Neo Hsu=abc-account-id'
 ```
+
+Body input still defaults to `storage` for compatibility. If storage input strongly resembles
+Markdown, atla prints an actionable warning but does not silently convert it; pass
+`--representation markdown` explicitly.
 
 ### Update a page
 
@@ -423,13 +442,20 @@ atla confluence blog list --space ENG --title 'Release' --limit 10
 
 ```bash
 atla confluence blog view <ID>
+                           [--format markdown|storage|atlas-doc-format | --metadata-only]
+                           [--fields FIELD,...] [--max-chars N]
 ```
 
-**Example**
+**Examples**
 
 ```bash
-atla confluence blog view 234567
+atla confluence blog view 234567 --metadata-only --output json
+atla confluence blog view 234567 --format markdown --max-chars 50000
+atla confluence blog view 234567 --format markdown \
+  --fields id,title,renderedBody --output json
 ```
+
+Blog metadata/body selection, field projection, and truncation follow the page-view contract above.
 
 ### Create a blog post
 

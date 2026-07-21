@@ -202,11 +202,42 @@ fn user_to_mention(query: &str, user: &JiraUser) -> markdown::MarkdownMention {
     }
 }
 
+fn looks_like_markdown(body: &str) -> bool {
+    let body = body.trim();
+    if body.is_empty() || body.starts_with('<') {
+        return false;
+    }
+
+    body.lines().any(|line| {
+        let line = line.trim_start();
+        let ordered_marker = line
+            .find(|character: char| !character.is_ascii_digit())
+            .is_some_and(|index| index > 0 && line[index..].starts_with(". "));
+        line.starts_with("# ")
+            || line.starts_with("## ")
+            || line.starts_with("- ")
+            || line.starts_with("* ")
+            || line.starts_with("+ ")
+            || line.starts_with("> ")
+            || line.starts_with("```")
+            || line.starts_with("~~~")
+            || ordered_marker
+    }) || (body.contains("[") && body.contains("]("))
+}
+
 pub(super) fn prepare_optional_body_with_options(
     body: Option<String>,
     representation: BodyRepresentation,
     markdown_options: markdown::MarkdownToAdfOptions,
 ) -> anyhow::Result<(Option<String>, ConfluenceBodyRepresentation)> {
+    if matches!(representation, BodyRepresentation::Storage)
+        && body.as_deref().is_some_and(looks_like_markdown)
+    {
+        eprintln!(
+            "warning: body looks like Markdown but is being sent as storage; pass --representation markdown to convert it"
+        );
+    }
+
     match representation {
         BodyRepresentation::Markdown => body
             .map(|body| markdown_body_to_adf_with_options(body, markdown_options))
@@ -276,6 +307,117 @@ pub(super) fn view_format_body_representation(
     }
 }
 
+pub(super) fn parse_view_fields(
+    fields: Option<&str>,
+    global: &GlobalArgs,
+) -> anyhow::Result<Option<Vec<String>>> {
+    let Some(fields) = fields else {
+        return Ok(None);
+    };
+    if global.output != Some(OutputFormat::Json) {
+        return Err(crate::error::UsageError("--fields requires --output json".to_owned()).into());
+    }
+
+    let mut parsed = Vec::new();
+    for field in fields.split(',').map(str::trim) {
+        if field.is_empty() {
+            return Err(crate::error::UsageError(
+                "--fields must contain non-empty comma-separated field names".to_owned(),
+            )
+            .into());
+        }
+        if !parsed.iter().any(|existing| existing == field) {
+            parsed.push(field.to_owned());
+        }
+    }
+    Ok(Some(parsed))
+}
+
+fn select_json_fields(
+    value: serde_json::Value,
+    fields: Option<&[String]>,
+) -> anyhow::Result<serde_json::Value> {
+    let Some(fields) = fields else {
+        return Ok(value);
+    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("Confluence view output is not a JSON object"))?;
+    let mut available = object.keys().cloned().collect::<Vec<_>>();
+    available.push("schemaVersion".to_owned());
+    available.sort();
+
+    for field in fields {
+        if field != "schemaVersion" && !object.contains_key(field) {
+            return Err(crate::error::UsageError(format!(
+                "unknown Confluence view field `{field}`; available fields: {}",
+                available.join(", ")
+            ))
+            .into());
+        }
+    }
+
+    let mut selected = serde_json::Map::new();
+    if let Some(id) = object.get("id") {
+        selected.insert("id".to_owned(), id.clone());
+    }
+    for field in fields {
+        if field == "schemaVersion" || field == "id" {
+            continue;
+        }
+        if let Some(value) = object.get(field) {
+            selected.insert(field.clone(), value.clone());
+        }
+    }
+    Ok(serde_json::Value::Object(selected))
+}
+
+struct BoundedBody {
+    value: String,
+    original_chars: usize,
+    truncated: bool,
+}
+
+fn bound_body(body: String, max_chars: Option<usize>) -> BoundedBody {
+    let original_chars = body.chars().count();
+    let truncated = max_chars.is_some_and(|maximum| original_chars > maximum);
+    let value = match max_chars.filter(|maximum| original_chars > *maximum) {
+        Some(maximum) => body.chars().take(maximum).collect(),
+        None => body,
+    };
+    BoundedBody {
+        value,
+        original_chars,
+        truncated,
+    }
+}
+
+fn content_view_format_name(format: ContentViewFormat) -> &'static str {
+    match format {
+        ContentViewFormat::Markdown => "markdown",
+        ContentViewFormat::Storage => "storage",
+        ContentViewFormat::AtlasDocFormat => "atlas_doc_format",
+    }
+}
+
+fn body_view_command(profile_name: &str, resource: &str, id: &str) -> String {
+    format!(
+        "atla --profile {} --output json confluence {resource} view {} --format markdown",
+        crate::pagination::quote(profile_name),
+        crate::pagination::quote(id)
+    )
+}
+
+fn warn_if_body_truncated(body: &BoundedBody, max_chars: Option<usize>) {
+    if body.truncated {
+        eprintln!(
+            "warning: rendered body truncated from {} to {} characters; increase --max-chars to read more",
+            body.original_chars,
+            max_chars.unwrap_or(body.original_chars)
+        );
+    }
+}
+
 fn render_page_body(
     page: &ConfluencePage,
     format: ContentViewFormat,
@@ -300,23 +442,32 @@ pub(super) fn print_page_body_view(
     attachments: Option<&[ConfluenceAttachment]>,
     global: &GlobalArgs,
     options: markdown::AdfToMarkdownOptions,
+    max_chars: Option<usize>,
+    fields: Option<&[String]>,
 ) -> anyhow::Result<()> {
-    let body = render_page_body(page, format, options)?;
-    let format_name = match format {
-        ContentViewFormat::Markdown => "markdown",
-        ContentViewFormat::Storage => "storage",
-        ContentViewFormat::AtlasDocFormat => "atlas_doc_format",
-    };
+    let rendered = bound_body(render_page_body(page, format, options)?, max_chars);
+    let format_name = content_view_format_name(format);
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => {
             let mut value = serde_json::to_value(page).context("failed to serialize page")?;
-            value["renderedBody"] = body.into();
+            if max_chars.is_some()
+                && let Some(source) = page.body.as_deref()
+            {
+                value["body"] = serde_json::Value::Null;
+                value["sourceBodyChars"] = source.chars().count().into();
+                value["sourceBodyOmitted"] = true.into();
+            }
+            value["bodyIncluded"] = true.into();
+            value["renderedBody"] = rendered.value.clone().into();
+            value["renderedBodyChars"] = rendered.original_chars.into();
+            value["renderedBodyTruncated"] = rendered.truncated.into();
             value["renderedFormat"] = format_name.into();
             if let Some(attachments) = attachments {
                 value["attachments"] =
                     serde_json::to_value(attachments).context("failed to serialize attachments")?;
             }
-            output::print_json(&value)
+            warn_if_body_truncated(&rendered, max_chars);
+            output::print_json(&select_json_fields(value, fields)?)
         }
         OutputFormat::Csv => {
             println!("id,title,rendered_format,rendered_body,attachment_ids");
@@ -331,9 +482,10 @@ pub(super) fn print_page_body_view(
                 output::csv_cell(page.id.as_deref().unwrap_or_default()),
                 output::csv_cell(page.title.as_deref().unwrap_or_default()),
                 output::csv_cell(format_name),
-                output::csv_cell(&body),
+                output::csv_cell(&rendered.value),
                 output::csv_cell(&attachment_ids),
             );
+            warn_if_body_truncated(&rendered, max_chars);
             Ok(())
         }
         OutputFormat::Keys => {
@@ -343,7 +495,8 @@ pub(super) fn print_page_body_view(
             Ok(())
         }
         OutputFormat::Table => {
-            println!("{body}");
+            println!("{}", rendered.value);
+            warn_if_body_truncated(&rendered, max_chars);
             if let Some(attachments) = attachments {
                 if attachments.is_empty() {
                     eprintln!("(no attachments)");
@@ -356,10 +509,41 @@ pub(super) fn print_page_body_view(
     }
 }
 
+pub(super) fn print_page_metadata_view(
+    page: &ConfluencePage,
+    id: &str,
+    profile_name: &str,
+    attachments: Option<&[ConfluenceAttachment]>,
+    fields: Option<&[String]>,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    let command = body_view_command(profile_name, "page", id);
+    if global.output == Some(OutputFormat::Json) {
+        let mut value = serde_json::to_value(page).context("failed to serialize page")?;
+        value["bodyIncluded"] = false.into();
+        value["bodyCommand"] = command.clone().into();
+        if let Some(attachments) = attachments {
+            value["attachments"] =
+                serde_json::to_value(attachments).context("failed to serialize attachments")?;
+        }
+        return output::print_json(&select_json_fields(value, fields)?);
+    }
+
+    if let Some(attachments) = attachments {
+        print_page_with_attachments(page, attachments, global)?;
+    } else {
+        print_page(page, global)?;
+    }
+    eprintln!("Body omitted; run: {command}");
+    Ok(())
+}
+
 pub(super) fn print_blog_body_view(
     post: &ConfluenceBlogPost,
     format: ContentViewFormat,
     global: &GlobalArgs,
+    max_chars: Option<usize>,
+    fields: Option<&[String]>,
 ) -> anyhow::Result<()> {
     let body = post
         .body
@@ -377,17 +561,23 @@ pub(super) fn print_blog_body_view(
     } else {
         body.to_owned()
     };
-    let format_name = match format {
-        ContentViewFormat::Markdown => "markdown",
-        ContentViewFormat::Storage => "storage",
-        ContentViewFormat::AtlasDocFormat => "atlas_doc_format",
-    };
+    let rendered = bound_body(rendered, max_chars);
+    let format_name = content_view_format_name(format);
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => {
             let mut value = serde_json::to_value(post).context("failed to serialize blog post")?;
-            value["renderedBody"] = rendered.into();
+            if max_chars.is_some() {
+                value["body"] = serde_json::Value::Null;
+                value["sourceBodyChars"] = body.chars().count().into();
+                value["sourceBodyOmitted"] = true.into();
+            }
+            value["bodyIncluded"] = true.into();
+            value["renderedBody"] = rendered.value.clone().into();
+            value["renderedBodyChars"] = rendered.original_chars.into();
+            value["renderedBodyTruncated"] = rendered.truncated.into();
             value["renderedFormat"] = format_name.into();
-            output::print_json(&value)
+            warn_if_body_truncated(&rendered, max_chars);
+            output::print_json(&select_json_fields(value, fields)?)
         }
         OutputFormat::Csv => {
             println!("id,title,rendered_format,rendered_body");
@@ -396,8 +586,9 @@ pub(super) fn print_blog_body_view(
                 output::csv_cell(post.id.as_deref().unwrap_or_default()),
                 output::csv_cell(post.title.as_deref().unwrap_or_default()),
                 output::csv_cell(format_name),
-                output::csv_cell(&rendered),
+                output::csv_cell(&rendered.value),
             );
+            warn_if_body_truncated(&rendered, max_chars);
             Ok(())
         }
         OutputFormat::Keys => {
@@ -407,10 +598,31 @@ pub(super) fn print_blog_body_view(
             Ok(())
         }
         OutputFormat::Table => {
-            println!("{rendered}");
+            println!("{}", rendered.value);
+            warn_if_body_truncated(&rendered, max_chars);
             Ok(())
         }
     }
+}
+
+pub(super) fn print_blog_metadata_view(
+    post: &ConfluenceBlogPost,
+    id: &str,
+    profile_name: &str,
+    fields: Option<&[String]>,
+    global: &GlobalArgs,
+) -> anyhow::Result<()> {
+    let command = body_view_command(profile_name, "blog", id);
+    if global.output == Some(OutputFormat::Json) {
+        let mut value = serde_json::to_value(post).context("failed to serialize blog post")?;
+        value["bodyIncluded"] = false.into();
+        value["bodyCommand"] = command.clone().into();
+        return output::print_json(&select_json_fields(value, fields)?);
+    }
+
+    print_blog_post(post, global)?;
+    eprintln!("Body omitted; run: {command}");
+    Ok(())
 }
 
 pub(super) fn open_web_url(url: &str) -> anyhow::Result<()> {
@@ -1069,6 +1281,9 @@ pub(super) fn print_space(space: &ConfluenceSpace, global: &GlobalArgs) -> anyho
             if let Some(homepage_id) = &space.homepage_id {
                 println!("Homepage ID: {homepage_id}");
             }
+            if let Some(space_owner_id) = &space.space_owner_id {
+                println!("Space Owner ID: {space_owner_id}");
+            }
             Ok(())
         }
     }
@@ -1077,6 +1292,19 @@ pub(super) fn print_space(space: &ConfluenceSpace, global: &GlobalArgs) -> anyho
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markdown_warning_heuristic_is_conservative() {
+        assert!(looks_like_markdown("# Runbook\n\n- recover"));
+        assert!(looks_like_markdown("1. stop\n2. restore"));
+        assert!(looks_like_markdown(
+            "Read [the runbook](https://example.com)"
+        ));
+        assert!(!looks_like_markdown("<p>Storage body</p>"));
+        assert!(!looks_like_markdown(
+            "Plain text remains valid storage input."
+        ));
+    }
 
     #[test]
     fn converts_markdown_body_to_adf_write_body() {
