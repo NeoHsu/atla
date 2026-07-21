@@ -7,7 +7,8 @@ description: Versioning, cargo-dist artifacts, SBOM, provenance, and supply-chai
 
 ## Before tagging
 
-1. Update versions and `CHANGELOG.md`.
+1. Confirm versions, then rename the combined `[Unreleased]` section to `[0.6.0]` with the
+   actual release date and restore an empty `[Unreleased]` section plus compare links.
 2. Run the workspace test, fmt, Clippy, RustSec, MSRV, doc, and CLI-surface checks.
 3. Run cargo-dist plan/local/global artifact smoke tests.
 4. Run `python3 scripts/verify-release-artifacts.py`; it checks archive contents,
@@ -47,8 +48,8 @@ additionally verify the attestation with GitHub CLI.
 Use a signed, SemVer-compatible tag only after the release commit is reviewed:
 
 ```bash
-git tag -s v1.0.0 -m 'atla v1.0.0'
-git push origin v1.0.0
+git tag -s v0.6.0 -m 'atla v0.6.0'
+git push origin v0.6.0
 ```
 
 Do not push a release tag from a dirty or unreviewed tree. After publishing, install from each

@@ -1,63 +1,70 @@
 # Improvement roadmap
 
-Consolidated from a deep architecture / agent-UX / doc-drift review on 2026-07-07
-(atla 0.3.0, commit da5e667). Ordered by return on investment. Each item is scoped so a
-single focused session can ship it. Check items off (or delete them) as they land.
+Updated 2026-07-21 for the 0.6 release line. This file tracks only
+current work; completed review items belong in `CHANGELOG.md` and Git history.
 
-## Remaining backlog
+## Release gates for 0.6.0
 
-- **Deeper output snapshot coverage**: the e2e suite locks keys/csv/table/json for
-  search and boards; extending the same wiremock pattern to sprint/page/space printers
-  is mechanical when a regression appears.
-- **Retry for generated-client calls**: progenitor clients accept a plain
-  `reqwest::Client`, so `send_with_retry` cannot wrap them. Options: progenitor
-  `pre_hook`/custom-client support in a future version, or operation-level retry
-  wrappers in core. Until then only raw paths (Agile API, attachments) auto-retry.
-- **Confluence dry-run payload preview**: body conversion happens after the dry-run
-  check and may need the network (space-id resolution, `--resolve-mentions`), so page
-  create/update previews print URL only. Printing the local-only conversion result
-  would need the markdown pipeline hoisted above the dry-run check.
+- Review and merge PR #4 through CI; do not push the feature branch directly
+  to `main`.
+- Cut the combined `[Unreleased]` changelog into a dated `[0.6.0]` section
+  only in the reviewed release commit.
+- Run the local/global cargo-dist artifact smoke tests and
+  `python3 scripts/verify-release-artifacts.py` before tagging.
+- Complete the bounded Jira + Confluence sandbox ledger from
+  `docs/live-smoke.md`; classify every selected operation and clean or report
+  every temporary resource.
+- Create and push a signed `v0.6.0` tag only from the clean reviewed release
+  commit. The existing `v0.9.0` prerelease is unrelated and must not be moved.
 
-## P4 — agent ergonomics (design decisions, discuss before doing)
+## Remaining engineering backlog
 
-12. `confluence page view --format` default: consider defaulting to `markdown` (or add
-    `--metadata-only`) — today's metadata-only default surprises agents. Breaking-ish.
-13. `--representation` default is `storage`; feeding markdown without the flag silently
-    produces broken content. Consider sniffing + warning.
-14. Confluence-side `--fields` filtering and a `--max-chars` guard on large page bodies
-    (protects agent context windows).
-## Done (this review)
+### Raise deterministic network-path coverage
 
-- **P1 test net (2026-07-07):** e2e suite (`crates/atla-cli/tests/e2e.rs`) runs the real
-  binary against wiremock — exit codes, error bodies, JSON errors, output formats,
-  pagination accumulation, dry-run isolation, and 429 retry.
-- **P2 discoverability (2026-07-07):** every subcommand/arg documented in `--help`,
-  after_help examples on the big five; `--dry-run` prints the JSON request body for
-  Jira issue create/update and comment add (`request_body()` previews live in core).
-- **P3 build debt (2026-07-07):** confluence-v2 now builds from a pruned partial spec
-  (103k → 34k generated lines; `scripts/confluence-v2-partial-spec.js`, $ref-closure
-  filter with automatic enum stripping); Basic-auth client construction unified into
-  `AtlassianClient::authed_http_client()`; raw-path requests retry transient failures
-  with Retry-After support (`send_with_retry`).
-- **P4-15 (2026-07-07):** `confluence page/blog comment add` accept `--body`, matching
-  the jira command.
+CI now fails below 53% line coverage. Ratchet that floor upward only after
+adding wiremock tests for thin core modules, especially Confluence
+comments/labels/search/spaces and Jira comments/projects/sprints. Prefer
+behavior assertions for retry, error-body propagation, pagination, and
+mutation ambiguity over line-only tests.
 
-- **P0 error contract (all three items, verified against the live API 2026-07-07):**
-  API error bodies now surface (bad JQL returns Jira's exact explanation); all
-  generated-client errors flow through `ProgenitorResultExt::or_api_error()` in the new
-  `atla-core/src/generated_api.rs` (also unified the three per-crate copies);
-  `ApiError::Network` fixes the CommunicationError→Decode misclassification and
-  `ApiError::retryable()/status()` expose retry semantics; exit codes are classified
-  (2 usage / 3 auth / 4 not-found / 5 retryable / 1 other, `atla-cli/src/error.rs`) and
-  `-o json` emits a structured `{"error": {...}}` on stderr.
+### Deeper output snapshots
 
-- Doc-drift protection: `crates/atla-cli/src/doc_check.rs` — every `atla` example in
-  docs/skills parse-checked; CLI surface snapshotted to `docs/cli-surface.txt`.
-- Fixed wrong examples: `issue get`→`view` (docs/authentication.md,
-  docs/configuration.md), `-o`→`--save-to` (agent-reference §5), confluence comment
-  `--body`→positional (SKILL.md).
-- agent-reference: added `issue fields`, `github-links`/`github-commits`,
-  `blog comment delete`, `--with-github`, `--with-attachments`, `blog view --format`.
-- SKILL.md: "Common Traps" section; completion shell list corrected.
-- Installed skill re-linked as symlink to repo (was a stale copy).
-- `CLAUDE.md` with the CLI-surface change checklist.
+The E2E suite locks representative JSON/table/CSV/keys output and the
+CLI/schema surfaces. Extend snapshot coverage to sprint, page, blog, and space
+printers when those contracts change. Avoid unstable timestamps or request IDs.
+
+### Behavioral skill evaluation
+
+The bundled skill has deterministic syntax and form checks plus adversarial
+eval definitions. Run mutation-bearing evals only against an explicitly
+approved sandbox, or add a fake `atla` harness so fail-closed target selection
+and cleanup can be compared without tenant writes.
+
+## Product design deferred to a breaking release
+
+`confluence page view` and `blog view` remain metadata-only by default in 0.6
+to preserve bounded agent output and existing scripts. Metadata JSON is
+self-describing (`bodyIncluded` and `bodyCommand`), `--metadata-only` is
+explicit, and callers can use `--format`, `--fields`, and `--max-chars`.
+Reconsider defaulting to Markdown only for a major compatibility boundary and
+only with a conservative default body limit.
+
+## Completed in the 0.6 hardening work
+
+- Partial OpenAPI refreshes are reproducible and now report parameter,
+  request/response, required, enum, and nested schema contract facts rather
+  than only operation/schema counts.
+- Generated Jira/Confluence requests share bounded method-aware retry,
+  exponential backoff, and `Retry-After` handling with raw reqwest paths;
+  uncertain mutations remain non-retryable.
+- Confluence page/blog dry-runs produce exact local converted payloads without
+  network access.
+- Confluence body views support explicit metadata mode, top-level JSON field
+  projection, and Unicode-safe rendered-body limits. Likely Markdown sent as
+  storage produces a warning instead of being silently misinterpreted.
+- Stable Confluence space JSON exposes the optional `spaceOwnerId` returned by
+  v2.
+- The obsolete unbudgeted `scripts/adf_spec_validate.py` live mutation helper
+  was removed; its ADF cases are covered by local Markdown/ADF tests and the
+  bounded live-smoke workflow.
+- CI uses the SHA-pinned Node 24 checkout action and enforces a coverage floor.

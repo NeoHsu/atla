@@ -91,7 +91,32 @@ class SpecDiffSummaryTests(unittest.TestCase):
         self.assertIn("`createItem`", result.stdout)
         self.assertIn("`oldOperation0`", result.stdout)
         self.assertIn("New SHA-256", result.stdout)
+        self.assertIn("Contract changes", result.stdout)
         self.assertIn("Reviewer checklist", result.stdout)
+
+    def test_reports_parameter_requiredness_and_schema_property_changes(self) -> None:
+        changed = spec("oldOperation0", "OldSchema")
+        changed["paths"]["/items"]["get"]["parameters"] = [
+            {
+                "in": "query",
+                "name": "limit",
+                "required": False,
+                "schema": {"type": "integer", "minimum": 1},
+            }
+        ]
+        changed["components"]["schemas"]["OldSchema"] = {
+            "type": "object",
+            "required": ["spaceOwnerId"],
+            "properties": {"spaceOwnerId": {"type": "string"}},
+        }
+        (self.root / SPEC_PATHS[0]).write_text(json.dumps(changed, indent=2) + "\n")
+
+        result = self.run_script()
+
+        self.assertIn("No operation IDs changed.", result.stdout)
+        self.assertIn("GET /items parameter query:limit", result.stdout)
+        self.assertIn("schema OldSchema property spaceOwnerId", result.stdout)
+        self.assertIn("schema OldSchema requires spaceOwnerId", result.stdout)
 
     def test_writes_requested_output_file(self) -> None:
         output = self.root / "summary.md"

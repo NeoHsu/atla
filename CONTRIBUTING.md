@@ -18,7 +18,9 @@ cargo deny check
 
 `deny.toml` rejects unknown registries, Git dependencies, wildcard dependency versions, unknown
 licenses, advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades
-can remove them incrementally; do not suppress one without a documented reason.
+can remove them incrementally; do not suppress one without a documented reason. CI also publishes
+LCOV and fails below the 53% line-coverage ratchet; raise the floor only after deterministic tests
+land.
 
 Generated API code is built into `OUT_DIR`; do not commit it. For ordinary
 CLI/core iteration, `scripts/check-fast.sh` reuses an opt-in Cargo target cache
@@ -63,7 +65,9 @@ operation ID, exact local plan construction, route/method/query allowlisting, po
 hash/expiry/input/profile/site checks, ambiguity handling, and E2E coverage.
 
 Never add a retry for a non-idempotent mutation after an uncertain timeout/server response. Return
-`ambiguous_mutation` and require remote-state verification.
+`ambiguous_mutation` and require remote-state verification. Generated Jira/Confluence builders
+must run through `generated_api::generated_request(method, ...)`; direct `.send()` bypasses shared
+`Retry-After`, backoff, body-reading, and ambiguity policy.
 
 ## API specifications
 
@@ -76,8 +80,9 @@ cargo test --workspace
 ```
 
 Review `specs/PATCHES.md`, operation pruning, manifest hashes/timestamp, and
-generated-model conversion tests. The scheduled workflow opens a PR with a
-generated partial-spec/operation summary; it never pushes directly to main.
+generated-model conversion tests. The scheduled workflow opens a PR with a generated
+partial-spec summary covering operations plus normalized parameter/request/response/schema contract
+facts; it never pushes directly to main.
 Generate the same summary locally with
 `python3 scripts/spec-diff-summary.py --base HEAD` after a refresh.
 
