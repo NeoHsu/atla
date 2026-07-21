@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="610" viewBox="0 0 1200 610" role="img" aria-labelledby="title description">
+  <title id="title">atla safe Jira mutation workflow</title>
+  <desc id="description">A terminal session saves a Jira issue creation plan, then explicitly applies it and receives versioned JSON receipt metadata.</desc>
+  <style>
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 16.5px; }
+    .command { fill: #f0f6fc; }
+    .prompt { fill: #7ee787; font-weight: 700; }
+    .json { fill: #c9d1d9; }
+    .accent { fill: #a5d6ff; }
+    .success { fill: #7ee787; }
+    .muted { fill: #8b949e; }
+  </style>
+  <rect width="1200" height="610" rx="14" fill="#0d1117"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="608.5" rx="13.25" fill="none" stroke="#30363d" stroke-width="1.5"/>
+  <path d="M0 48h1200" stroke="#30363d"/>
+  <circle cx="25" cy="24" r="6.5" fill="#ff5f56"/>
+  <circle cx="47" cy="24" r="6.5" fill="#ffbd2e"/>
+  <circle cx="69" cy="24" r="6.5" fill="#27c93f"/>
+  <text x="430" y="30" class="mono muted">atla — reviewed mutation workflow</text>
+
+  <text x="30" y="79" class="mono command"><tspan class="prompt">$</tspan><tspan> atla plan jira issue create --project PROJ --type Task \</tspan></text>
+  <text x="50" y="105" class="mono command">--summary 'Document rollback procedure' --out ./issue-plan.json</text>
+  <text x="30" y="137" class="mono json">{</text>
+  <text x="50" y="161" class="mono json">"expiresAt": "2026-07-21T19:26:43.145Z",</text>
+  <text x="50" y="185" class="mono accent">"operation": "jira.issue.create",</text>
+  <text x="50" y="209" class="mono json">"planFile": "./issue-plan.json",</text>
+  <text x="50" y="233" class="mono json">"planHash": "sha256:1045545e28d41441…114d95e8faf",</text>
+  <text x="50" y="257" class="mono json">"schemaVersion": 1</text>
+  <text x="30" y="281" class="mono json">}</text>
+
+  <text x="30" y="323" class="mono command"><tspan class="prompt">$</tspan><tspan> atla apply ./issue-plan.json --yes --output json</tspan></text>
+  <text x="30" y="355" class="mono json">{</text>
+  <text x="50" y="379" class="mono json">"completedAt": "2026-07-21T18:26:43.195Z",</text>
+  <text x="50" y="403" class="mono json">"id": "10023",</text>
+  <text x="50" y="427" class="mono json">"key": "PROJ-123",</text>
+  <text x="50" y="451" class="mono accent">"operation": "jira.issue.create",</text>
+  <text x="50" y="475" class="mono json">"profile": "demo",</text>
+  <text x="50" y="499" class="mono json">"requestId": null,</text>
+  <text x="50" y="523" class="mono json">"schemaVersion": 1,</text>
+  <text x="50" y="547" class="mono success">"target": "PROJ-123"</text>
+  <text x="30" y="571" class="mono json">}</text>
+</svg>

@@ -1,23 +1,77 @@
 # atla
 
-Unified Atlassian CLI for Jira and Confluence.
+**Jira and Confluence, one agent-ready CLI.**
 
-`atla` is a Rust single-binary CLI for day-to-day Atlassian Cloud work. It
-provides Jira and Confluence commands with profile-based authentication,
-human-friendly tables, and machine-friendly output formats.
+Work across Atlassian Cloud with bounded reads, versioned JSON, and mutations that move from
+preview to reviewed plan to explicit apply—without changing tools.
+
+[![CI](https://github.com/NeoHsu/atla/actions/workflows/ci.yml/badge.svg)](https://github.com/NeoHsu/atla/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/NeoHsu/atla?display_name=tag)](https://github.com/NeoHsu/atla/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+<p align="center">
+  <img src="docs/assets/atla-demo.svg" width="1000" alt="atla saving a Jira issue plan and applying it to produce a versioned JSON receipt">
+</p>
+<p align="center"><sub>Sanitized capture of actual atla 0.6.0 output against a local mock API; no Atlassian tenant data.</sub></p>
+
+## 30-second demo
+
+Once authenticated, check for related work, preview a mutation without sending it, save the same
+request as an expiring plan, and apply it only after review:
+
+```bash
+# Bound both the remote work and the JSON returned to a caller.
+atla --read-only --max-items 5 --output json \
+  jira search 'project = PROJ AND summary ~ "rollback" ORDER BY updated DESC'
+
+# Emit a structured preview. No request is sent.
+atla --dry-run --output json jira issue create \
+  --project PROJ --type Task --summary 'Document rollback procedure'
+
+# Persist a tamper-evident plan. This still sends no request.
+atla plan jira issue create \
+  --project PROJ --type Task --summary 'Document rollback procedure' \
+  --out ./issue-plan.json
+jq '{operation, planHash, expiresAt}' ./issue-plan.json
+
+# Apply only after review and receive a versioned JSON receipt.
+atla apply ./issue-plan.json --yes --output json
+```
+
+The final JSON object identifies the operation, profile, target, request ID when available, and
+completion time. The same safety model covers supported Jira issue, Confluence page, and
+Confluence blog plans.
 
 ## Why atla?
 
-- Work with Jira issues, boards, and sprints without leaving the terminal.
-- Read and update Confluence spaces, pages, blogs, labels, comments, and
-  attachments from scripts or interactive workflows.
-- Automate reporting and CI with stable `table`, `json`, `csv`, and `keys` output,
-  mutation policies (`--dry-run`, `--read-only`), context budgets, and bounded Confluence body
-  projection (`--fields`, `--max-chars`).
+Jira and Confluence workflows rarely stay in one product. A task may begin with an issue, depend
+on a Confluence runbook, and end in an automated update. Splitting that workflow across tools means
+duplicating authentication, output parsing, safety rules, and agent instructions.
+
+`atla` gives both products one profile and policy model. Humans get readable tables; scripts and
+agents get versioned JSON, resumable pagination, and explicit context budgets. Mutations can be
+previewed, saved as expiring tamper-evident plans, policy-checked, and applied only with explicit
+confirmation.
+
+## Core capabilities
+
+- **One binary for Jira and Confluence** — shared profiles, authentication, routing, and policy.
+- **Stable machine output** — versioned JSON schemas plus table, CSV, and `keys` output.
+- **Safe mutations** — dry-run previews, saved plans for supported operations, explicit
+  confirmation, and receipts.
+- **Bounded agent context** — page, item, byte, and timeout budgets with resumable pagination.
+- **Automation without hanging** — prompts appear only on TTYs and can be disabled with
+  `--no-input`.
+- **Content-aware Confluence workflows** — Markdown/ADF conversion and bounded body projection.
+- **Version-matched agent skill** — current commands, JQL/CQL patterns, and safety rules for coding
+  agents.
+
+See the [full feature matrix](docs/features.md) for the complete Jira, Confluence, output, and
+policy surface.
 
 ## Install
 
-Verified installer script (macOS/Linux):
+Verified installer for macOS and Linux:
 
 ```bash
 base=https://github.com/NeoHsu/atla/releases/latest/download
@@ -27,43 +81,10 @@ shasum -a 256 -c atla-installer.sh.sha256
 sh atla-installer.sh
 ```
 
-Verified Windows PowerShell installer:
-
-```powershell
-$base = "https://github.com/NeoHsu/atla/releases/latest/download"
-Invoke-WebRequest "$base/atla-installer.ps1" -OutFile atla-installer.ps1
-Invoke-WebRequest "$base/atla-installer.ps1.sha256" -OutFile atla-installer.ps1.sha256
-$expected = ((Get-Content -Raw atla-installer.ps1.sha256).Trim() -split '\s+')[0]
-$actual = (Get-FileHash -Algorithm SHA256 atla-installer.ps1).Hash.ToLowerInvariant()
-if ($actual -ne $expected) { throw "installer checksum verification failed" }
-& .\atla-installer.ps1
-```
-
-Direct release downloads:
-
-| Platform | Asset |
-| --- | --- |
-| Apple Silicon macOS | `atla-aarch64-apple-darwin.tar.xz` |
-| Intel macOS | `atla-x86_64-apple-darwin.tar.xz` |
-| ARM64 Linux | `atla-aarch64-unknown-linux-gnu.tar.xz` |
-| x64 Linux | `atla-x86_64-unknown-linux-gnu.tar.xz` |
-| x64 Windows | `atla-x86_64-pc-windows-msvc.zip` |
-
-Each archive contains the prebuilt `atla` executable plus README and license files.
-Checksums, build-provenance attestations, and a CycloneDX 1.5 binary SBOM (`atla.cdx.xml` plus
-`atla.cdx.xml.sha256`) are published with the release assets; release notes come from the changelog.
-
-mise:
+With mise:
 
 ```bash
 mise use -g github:NeoHsu/atla
-```
-
-In `mise.toml`:
-
-```toml
-[tools]
-"github:NeoHsu/atla" = "latest"
 ```
 
 From source:
@@ -72,262 +93,62 @@ From source:
 cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.0 atla
 ```
 
-## Common workflows
+For the verified Windows installer, direct downloads, and platform-specific instructions, see
+[Getting Started](docs/getting-started.md). Releases include checksum sidecars, build-provenance
+attestations, and a CycloneDX 1.5 binary SBOM.
+
+## Authenticate
+
+Tokens are read from stdin and stored in the OS keyring by default:
 
 ```bash
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
-  --email you@example.com --token-stdin
+printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --no-input \
+  --instance https://example.atlassian.net \
+  --email you@example.com \
+  --token-stdin
 atla doctor --output json
-atla operation list --output json
-atla jira search "assignee = currentUser() order by updated desc" --limit 10
-atla jira issue transition PROJ-123 --to Done --dry-run
-atla plan jira issue create --project PROJ --type Task --summary 'Agent task' --out issue-plan.json
-atla apply issue-plan.json --yes --output json
-atla confluence page view 67890 --format markdown --max-chars 50000
-atla confluence search "type=page AND space=DEV" --output json
 ```
 
-## Documentation
+Named profiles support multiple sites, scoped Atlassian tokens, file-backed credentials for
+headless environments, and per-operation allow/deny policy. See
+[Authentication](docs/authentication.md) and [Configuration](docs/configuration.md).
 
-| File | Description |
-| --- | --- |
-| [Getting Started](docs/getting-started.md) | Installation, first-time setup, shell completions, quick demo |
-| [Authentication](docs/authentication.md) | Auth commands, multi-profile management, token storage, env vars |
-| [Configuration](docs/configuration.md) | Config keys, aliases, config.toml schema, environment overrides |
-| [Jira](docs/jira.md) | Full Jira command reference: projects, issues, boards, sprints |
-| [Confluence](docs/confluence.md) | Full Confluence command reference: spaces, pages, blogs, attachments |
-| [Output Formats](docs/output-formats.md) | Global flags, output formats, scripting/CI patterns |
-| [JSON Contracts](docs/json-schemas.md) | Versioned schemas, plans, receipts, compatibility policy |
-| [Saved Plans](docs/plans.md) | Generate and safely apply expiring mutation plans |
-| [Operation Policy](docs/policy.md) | Read-only enforcement, allow/deny rules, context budgets |
-| [Config Migration](docs/migration-v1.md) | Schema v2 migration, backups, and rollback |
-| [Compatibility](docs/compatibility.md) | Supported platforms and v1 stability policy |
-| [Release Procedure](docs/releasing.md) | Artifacts, SBOM, provenance, and workflow hardening |
-| [Live Sandbox Smoke Testing](docs/live-smoke.md) | Bounded Jira/Confluence contract coverage and cleanup ledger |
-| [Contributing](CONTRIBUTING.md) | Development checks, CLI contracts, and PR process |
-| [Code Generation](docs/code-generation.md) | Progenitor-based API client generation, spec filtering, update workflow |
-| [Agent Reference](docs/agent-reference.md) | Structured command reference for AI agents and automation |
+## Agent integration
 
-## atla-cli Skill
-
-Install the bundled AI agent skill to enable `atla`-aware assistance — JQL/CQL
-patterns, all command flags, scripting idioms, and safety rules.
-
-Install the skill release that exactly matches `atla 0.6.0`:
+Install the `atla-cli` skill from the release tag that exactly matches the CLI:
 
 ```bash
 npx skills add https://github.com/NeoHsu/atla/tree/v0.6.0 --skill atla-cli
+atla doctor --skill-version 0.6.0 --output json
 ```
 
-Do not install the skill from an unversioned default branch for a released CLI. After upgrading
-`atla`, rerun the tag-pinned command using the new CLI version. The skill starts each execution
-session with `atla doctor --skill-version 0.6.0 --output json` and stops with an actionable update
-command if the versions differ.
+The skill fails closed on version mismatch and provides an explicit tagged update command; it does
+not update itself without confirmation. See the [Agent Reference](docs/agent-reference.md) for the
+machine-oriented command contract.
 
-From a local checkout of this repo, install the internal `skills/atla-cli` package with:
+## Documentation
 
-```bash
-npx skills add . --skill atla-cli
-```
-
-For non-interactive setup across all supported agents, add `--agent '*' -y`:
-
-```bash
-npx skills add . --skill atla-cli --agent '*' -y
-```
-
-Use `--copy` if you want the installed skill to be a standalone copy instead of a symlink
-back to the repo checkout.
-
-## Feature Matrix
-
-| Product | Resource | Commands |
-| --- | --- | --- |
-| Core | Auth | `login`, `discover`, `logout`, `status`, `switch` |
-| Core | Config | `set`, `get`, `list` |
-| Core | Discovery | `doctor`, `explain-policy`, `operation list`, `schema list`, `schema print` |
-| Core | Saved plans | `plan jira`, `plan confluence`, `apply` |
-| Core | Shell integration | `completion` |
-| Jira | Projects | `list`, `view`, `issue-types` |
-| Jira | Search | JQL search with table, JSON, CSV, and key output |
-| Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` |
-| Jira | Issue fields | `fields` — list create-meta fields with required flag, type, and allowed values |
-| Jira | Assignment | `assign --to me`, account ID, or user query |
-| Jira | Transitions | List or apply transitions, with interactive selection when possible |
-| Jira | Comments | `comment add`, `comment list`, `comment update`, `comment delete` |
-| Jira | Attachments | `attachment list`, `attachment upload`, `attachment download`, `attachment delete` |
-| Jira | Links | `link add`, `link list`, `link remove`, `link github-links`, `link github-commits` |
-| Jira | Worklogs | `worklog add`, `worklog list` |
-| Jira | Boards | `board list` with project, type, and name filters; `board view` |
-| Jira | Sprints | `sprint list`, `sprint active`, `sprint view`, `sprint create`, `sprint start`, `sprint close`, `sprint add`, `sprint remove`, `sprint issues` |
-| Confluence | Spaces | `list`, `view`, `create`, `update`, `delete` |
-| Confluence | Pages | `list`, `view`, `create`, `update`, `move`, `delete`, `children`, `copy` |
-| Confluence | Page content | Storage, wiki, Atlas Doc Format, and Markdown input; storage, ADF, and Markdown view output |
-| Confluence | Page labels | `label list`, `label add`, `label remove` |
-| Confluence | Page comments | `comment add`, `comment list`, `comment delete` |
-| Confluence | Blogs | `list`, `view`, `create`, `update`, `delete` |
-| Confluence | Blog labels | `label list`, `label add`, `label remove` |
-| Confluence | Blog comments | `comment add`, `comment list`, `comment delete` |
-| Confluence | Search | CQL search through scoped v1 REST endpoint |
-| Confluence | Attachments | `list`, `view`, `upload`, `download`, `delete` |
-| Output | Formats | `table`, `json`, `csv`, `keys` |
-| Safety | Mutation policy | Global `--dry-run` previews and `--read-only` enforcement |
-| Safety | Context budgets | `--max-pages`, `--max-items`, `--max-bytes`, `--timeout` |
-
-## Configuration
-
-On Linux and macOS, `atla` stores profile configuration in
-`~/.config/atla/config.toml` by default; Windows uses its platform config directory. Run
-`atla doctor --output json` to see the resolved path. API tokens are stored through the OS
-keyring and are not written to config files.
-
-Initial auth:
-
-```bash
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
-  --email you@example.com --token-stdin
-atla auth status
-atla config set default-project PROJ
-atla config set alias.mine "jira search 'assignee = currentUser() order by updated desc'"
-atla config list --output json
-```
-
-`atla` stores API tokens in the OS keyring by default. Token expiry is configured by Atlassian
-outside atla; record the expiration shown when creating a token, rotate it before that date, and
-re-run `atla auth login` when needed. Unscoped tokens use the site URL. For a scoped token,
-pass the tenant cloud ID; atla then routes Jira and Confluence through their respective
-`api.atlassian.com/ex/{product}/{cloudId}` gateways while retaining the site URL for web links:
-
-```bash
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --instance https://example.atlassian.net \
-  --cloud-id 11111111-2222-3333-4444-555555555555 --email you@example.com --token-stdin
-```
-
-In headless or container environments where keyring access is unavailable, use an explicit
-file-backed credential store or provide a token through the environment:
-
-```bash
-printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --storage file \
-  --instance https://example.atlassian.net --email you@example.com --token-stdin
-ATLA_TOKEN="$ATLASSIAN_TOKEN" atla jira project list
-```
-
-File-backed credentials are stored separately from the main config. The Unix default is
-`~/.config/atla/credentials.toml`; Windows uses its platform config directory. Override paths with
-`ATLA_CONFIG` and `ATLA_CREDENTIALS` for isolated runs.
-
-Aliases expand before command parsing, so the alias above can be used as:
-
-```bash
-atla mine --limit 25
-```
-
-Shell completions:
-
-```bash
-atla completion bash > ~/.local/share/bash-completion/completions/atla
-atla completion zsh > ~/.zfunc/_atla
-atla completion fish > ~/.config/fish/completions/atla.fish
-```
-
-## Usage
-
-Jira examples:
-
-```bash
-atla jira project list
-atla jira project list --query platform --limit 25 --output json
-atla jira project view PROJ
-atla jira search "project = PROJ order by created desc"
-atla jira issue list --project PROJ --status "In Progress"
-atla jira issue create --project PROJ --type Task --summary "Fix login"
-atla jira issue update PROJ-123 --summary "Updated summary"
-atla jira issue edit PROJ-123 --labels add:urgent,remove:low
-atla jira issue view PROJ-123 --web
-atla jira issue assign PROJ-123 --to me
-atla jira issue transition PROJ-123 --to Done
-atla jira issue comment add PROJ-123 "Ready for review"
-atla jira issue comment add PROJ-123 "Please check the screenshot" --attachment ./screenshot.png
-atla jira issue delete PROJ-123 --yes
-atla jira issue fields --project PROJ --type Bug --required-only
-atla jira board list --project PROJ
-atla jira sprint active --board 84
-```
-
-Confluence examples:
-
-```bash
-atla confluence space list
-atla confluence space create "Development" --key DEV --description "Team docs"
-atla confluence page list --space DEV
-atla confluence page view 67890 --metadata-only --output json
-atla confluence page view 67890 --format markdown --max-chars 50000 --preserve-table-options
-atla confluence page create --space DEV --title "Meeting Notes" --body-file notes.html
-atla confluence page create --space DEV --title "Inventory" --body-file inventory.md --representation markdown --numbered-table-rows
-atla confluence page create --space DEV --title "Runbook" --body-file runbook.md --representation markdown --mention "Neo Hsu=abc-account-id"
-atla confluence page update 67890 --title "Updated Notes"
-atla confluence page move 67890 --parent 12345
-atla confluence page label add 67890 runbook urgent
-atla confluence page comment add 67890 "Looks good"
-atla confluence page comment add 67890 "Please review the report" --representation markdown --attachment ./report.pdf
-atla confluence blog create --space DEV --title "Release Notes" --body-file release.html
-atla confluence search "type=page AND space=DEV"
-atla confluence attachment upload 67890 ./diagram.png --comment "Updated diagram"
-atla confluence attachment download 13579 --save-to ./diagram.png
-```
-
-Confluence v2 remains the primary generated client. Confluence search,
-attachment upload, and page label mutation use scoped Confluence v1 REST
-endpoints where v2 does not expose the required operation.
-
-### Pagination
-
-List and search commands treat `--limit N` as the maximum number of records to return for
-that invocation. If more records exist, table output prints a ready-to-copy next command:
-
-```text
-More results available.
-Next page:
-  atla jira project list --limit 25 --page-token <TOKEN>
-```
-
-JSON output includes the same information under `pagination.nextPageToken` and
-`pagination.nextCommand`. The token is opaque and validated against the command/query that
-created it. Use `--all` instead of `--limit` when you intentionally want to fetch every
-matching record. For agent runs, bound context and network work globally:
-
-```bash
-atla --read-only --max-pages 5 --max-items 200 --max-bytes 1000000 --timeout 30 \
-  --output json jira search 'project = PROJ ORDER BY updated DESC'
-```
-
-When `--max-pages` or `--max-items` stops an `--all` request, atla emits a resume token instead
-of pretending the result is complete. `--read-only` rejects local and remote mutations before
-credentials or network access.
+- [Getting Started](docs/getting-started.md) — installation, authentication, and first commands
+- [Feature Matrix](docs/features.md) — complete supported resource and command overview
+- [Jira](docs/jira.md) and [Confluence](docs/confluence.md) — product command references
+- [Output Formats](docs/output-formats.md) and [JSON Contracts](docs/json-schemas.md) — scripting
+  and schema guarantees
+- [Saved Plans](docs/plans.md) and [Operation Policy](docs/policy.md) — mutation and automation
+  safety
+- [Documentation Hub](docs/README.md) — all user, agent, and maintainer documentation
 
 ## Development
 
 ```bash
 mise trust
 mise install
-cargo check
-cargo test
+mise run check:pr
 ```
 
-Refresh Atlassian specs:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development checks and PR requirements. API client
+maintenance is documented in [Code Generation](docs/code-generation.md), and release hardening in
+[Release Procedure](docs/releasing.md).
 
-```bash
-scripts/update-specs.sh
-cargo check --workspace
-```
+## License
 
-Override config paths for isolated test runs:
-
-```bash
-ATLA_CONFIG=/tmp/atla-config.toml cargo run -p atla -- config list
-```
-
-## Release
-
-Releases are automated via cargo-dist. Pushing a version tag builds Linux,
-macOS, and Windows binaries and publishes them to GitHub Releases.
+[MIT](LICENSE)
