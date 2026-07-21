@@ -168,8 +168,10 @@ back to the repo checkout.
 
 ## Configuration
 
-`atla` stores profile configuration in `~/.config/atla/config.toml` by default.
-API tokens are stored through the OS keyring and are not written to config files.
+On Linux and macOS, `atla` stores profile configuration in
+`~/.config/atla/config.toml` by default; Windows uses its platform config directory. Run
+`atla doctor --output json` to see the resolved path. API tokens are stored through the OS
+keyring and are not written to config files.
 
 Initial auth:
 
@@ -182,9 +184,9 @@ atla config set alias.mine "jira search 'assignee = currentUser() order by updat
 atla config list --output json
 ```
 
-`atla` stores API tokens in the OS keyring by default. Atlassian tokens have a
-configurable expiration of 1–365 days, so rotate them before expiry and re-run
-`atla auth login` when needed. Unscoped tokens use the site URL. For a scoped token,
+`atla` stores API tokens in the OS keyring by default. Token expiry is configured by Atlassian
+outside atla; record the expiration shown when creating a token, rotate it before that date, and
+re-run `atla auth login` when needed. Unscoped tokens use the site URL. For a scoped token,
 pass the tenant cloud ID; atla then routes Jira and Confluence through their respective
 `api.atlassian.com/ex/{product}/{cloudId}` gateways while retaining the site URL for web links:
 
@@ -202,9 +204,9 @@ printf '%s\n' "$ATLASSIAN_TOKEN" | atla auth login --storage file \
 ATLA_TOKEN="$ATLASSIAN_TOKEN" atla jira project list
 ```
 
-File-backed credentials are stored separately from the main config in
-`~/.config/atla/credentials.toml` by default. Override paths with `ATLA_CONFIG`
-and `ATLA_CREDENTIALS` for isolated runs.
+File-backed credentials are stored separately from the main config. The Unix default is
+`~/.config/atla/credentials.toml`; Windows uses its platform config directory. Override paths with
+`ATLA_CONFIG` and `ATLA_CREDENTIALS` for isolated runs.
 
 Aliases expand before command parsing, so the alias above can be used as:
 

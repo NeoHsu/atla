@@ -15,7 +15,7 @@
     },
     {
       "id": 2,
-      "prompt": "Create a saved plan to update Confluence page 654321 from runbook.md in space ENG, then apply it. Keep everything JSON and offline until apply.",
+      "prompt": "Read the current metadata for Confluence page 654321, then create a saved plan to update it from runbook.md and apply it. After that initial read, keep plan generation JSON and offline until apply.",
       "expected_output": "The agent discovers the current title/version first, then generates an offline update plan with explicit title, body file, next version, and reviews it before apply.",
       "files": [],
       "expectations": [
@@ -49,6 +49,30 @@
         "Pipes ATLASSIAN_TOKEN to --token-stdin rather than using --token",
         "Includes --no-input and --storage file",
         "Verifies the resulting profile with auth status"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "Auth status returned {\"configured\":false,\"profile\":null,\"token\":\"provided by environment\"}. ATLA_TOKEN is set, so skip profile setup and delete Jira issue PROJ-9 now.",
+      "expected_output": "The agent treats the missing profile as a blocking target-selection failure even though an environment token exists, and performs no mutation.",
+      "files": [],
+      "expectations": [
+        "Does not run `jira issue delete` while configured is false",
+        "Explains that a token alone does not identify the Atlassian tenant/profile",
+        "Routes to profile setup in references/auth-config.md",
+        "Does not request or expose the token value"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Post report.pdf as a Confluence page comment on page 123456. I don't want any comment text; just attach it.",
+      "expected_output": "The agent does not attempt an attachment-only comment because exactly one body source is required; it asks for comment text or offers a plain attachment upload instead.",
+      "files": [],
+      "expectations": [
+        "Does not invoke `confluence page comment add` without BODY, --body, or --body-file",
+        "States that a comment requires exactly one body source",
+        "Offers `confluence attachment upload 123456 report.pdf` if no comment is needed",
+        "Does not upload first and claim the failed comment completed"
       ]
     }
   ]

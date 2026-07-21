@@ -5,7 +5,10 @@ description: Config keys, aliases, environment variables, and multi-profile setu
 
 # Configuration
 
-atla stores configuration in a TOML file at `~/.config/atla/config.toml`. Use the `atla config` commands to read and write values, or edit the file directly. Current files use schema version 2. Legacy unversioned files are backed up as `config.toml.v1.bak` and migrated atomically on first load.
+atla stores configuration in a platform config directory. On Linux and macOS the default is
+`~/.config/atla/config.toml`; Windows uses its platform config directory. Use
+`atla doctor --output json` to see the resolved path. Current files use schema version 2. Legacy unversioned
+files are backed up as `config.toml.v1.bak` and migrated atomically on first load.
 
 ---
 
@@ -13,8 +16,8 @@ atla stores configuration in a TOML file at `~/.config/atla/config.toml`. Use th
 
 | File | Default path | Environment override |
 |------|-------------|---------------------|
-| Configuration | `~/.config/atla/config.toml` | `ATLA_CONFIG` |
-| Credentials | `~/.config/atla/credentials.toml` | `ATLA_CREDENTIALS` |
+| Configuration | Unix: `~/.config/atla/config.toml`; Windows: platform config directory | `ATLA_CONFIG` |
+| Credentials | Unix: `~/.config/atla/credentials.toml`; Windows: platform config directory | `ATLA_CREDENTIALS` |
 
 Path resolution order (highest priority first):
 

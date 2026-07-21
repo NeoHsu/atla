@@ -5,8 +5,9 @@ controls and safety gates live in `../SKILL.md`.
 
 ## Authentication
 
-Atlassian API tokens expire after a configurable 1–365 days. Rotate stored tokens before
-their expiry. Unscoped tokens use the site URL. For scoped tokens, pass the tenant cloud ID;
+Token expiry is configured by Atlassian outside atla. Record the expiration shown when creating a
+token and rotate it before that date; atla reports token availability/source, not expiry. Unscoped
+tokens use the site URL. For scoped tokens, pass the tenant cloud ID;
 atla routes Jira and Confluence through their product-specific
 `api.atlassian.com/ex/{product}/{cloudId}` gateways.
 
@@ -48,7 +49,9 @@ Instance URL is auto-normalized: `example.atlassian.net` becomes `https://exampl
 atla auth status
 ```
 
-Shows: active profile, instance, email, credential storage, API target/cloud ID, policy mode, and token availability.
+With `--output json`, `configured` is false and profile fields are null when no active profile
+exists. Otherwise status shows the active profile, instance, email, credential storage, API
+target/cloud ID, policy mode, and token availability/source.
 
 ### Diagnostics and local discovery
 
@@ -103,7 +106,7 @@ atla --profile personal jira search "project = SIDE"
 | Method | Flag | Where stored | Best for |
 |--------|------|-------------|----------|
 | Keyring (default) | `--storage keyring` | OS credential manager | Developer workstations |
-| File | `--storage file` | `~/.config/atla/credentials.toml` | Headless, CI, containers |
+| File | `--storage file` | Unix: `~/.config/atla/credentials.toml`; Windows: platform config directory | Headless, CI, containers |
 | Environment | N/A | `ATLA_TOKEN` env var | CI pipelines, one-off runs |
 
 Token precedence: `ATLA_TOKEN` > `ATLA_API_TOKEN` > stored credential (keyring/file).
@@ -112,7 +115,8 @@ Token precedence: `ATLA_TOKEN` > `ATLA_API_TOKEN` > stored credential (keyring/f
 
 ## Configuration
 
-Config file: `~/.config/atla/config.toml`
+Config file: Unix defaults to `~/.config/atla/config.toml`; Windows uses the platform config
+directory. Run `atla doctor --output json` to see the resolved path.
 
 ### Commands
 
@@ -128,10 +132,13 @@ atla config list [--output json|table|csv|keys]
 # Generate completion script for supported shells
 atla completion <shell>
 
-# Examples
+# POSIX shell examples
 atla completion bash > ~/.local/share/bash-completion/completions/atla
 atla completion zsh > ~/.zsh/completions/_atla
 atla completion fish > ~/.config/fish/completions/atla.fish
+```
+
+```powershell
 atla completion powershell | Out-File -Encoding utf8 atla-completion.ps1
 ```
 
@@ -182,8 +189,8 @@ atla mine --output json --limit 25
 |----------|---------|---------|
 | `ATLA_TOKEN` | API token override (highest priority) | unset |
 | `ATLA_API_TOKEN` | Alternative token variable | unset |
-| `ATLA_CONFIG` | Config file path | `~/.config/atla/config.toml` |
-| `ATLA_CREDENTIALS` | Credentials file path | `~/.config/atla/credentials.toml` |
+| `ATLA_CONFIG` | Config file path | Unix: `~/.config/atla/config.toml`; Windows: platform config directory |
+| `ATLA_CREDENTIALS` | Credentials file path | Unix: `~/.config/atla/credentials.toml`; Windows: platform config directory |
 | `ATLA_READ_ONLY` | Enforce mutation blocking | unset/false |
 | `XDG_CONFIG_HOME` | XDG base config directory (Linux & macOS) | `~/.config` |
 

@@ -5,6 +5,13 @@ authority. Global flags,
 operation gates, and pagination-token semantics live in `../SKILL.md`; the summaries below show
 which Confluence collection commands accept pagination controls.
 
+## Contents
+
+- [Spaces](#spaces), [Pages](#pages), [Page Labels](#page-labels), [Page Comments](#page-comments)
+- [Blogs](#blogs), [Search](#search), [Attachments](#attachments)
+- [Body representations](#content-body-representations) and [CQL](#cql-quick-reference)
+- [File embedding](#file-embedding-prefer-attachments) and [API notes](#api-notes)
+
 ---
 
 ## Spaces
@@ -24,7 +31,7 @@ atla confluence space view <KEY>
 ### Create a space
 
 ```
-atla confluence space create <NAME> [--key KEY] [--alias ALIAS]
+atla confluence space create <NAME> (--key KEY | --alias ALIAS)
                                      [--description TEXT | --description-file FILE] [--private]
 ```
 
@@ -35,6 +42,8 @@ Requires either `--key` or `--alias`.
 ```
 atla confluence space update <KEY> [--name NAME] [--description TEXT | --description-file FILE]
 ```
+
+Requires at least one of `--name`, `--description`, or `--description-file`.
 
 ### Delete a space
 
@@ -170,7 +179,7 @@ atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN] 
 ### Add a comment
 
 ```
-atla confluence page comment add <PAGE_ID> [BODY | --body TEXT | --body-file FILE]
+atla confluence page comment add <PAGE_ID> (BODY | --body TEXT | --body-file FILE)
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
                                   [--numbered-table-rows]
@@ -245,7 +254,7 @@ atla confluence blog label remove <BLOG_ID> <LABEL> --yes
 
 ```
 atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN] [--all]
-atla confluence blog comment add <BLOG_ID> [BODY | --body TEXT | --body-file FILE]
+atla confluence blog comment add <BLOG_ID> (BODY | --body TEXT | --body-file FILE)
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
 atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> --yes
@@ -341,13 +350,13 @@ space-admin permission.
 
 ---
 
-## File Embedding: Always Use Attachments
+## File Embedding: Prefer Attachments
 
-### Never reference files by external URL
+### Do not rely on external URL rendering
 
-Confluence Cloud enforces a Content Security Policy (CSP) that prevents externally hosted files from rendering — images, PDFs, and any other embedded content included. `<ri:url>` references silently fail for all users and cannot be fixed without admin-level domain allowlisting. This is a platform constraint, not a permissions issue.
-
-**Always upload files as page attachments and reference them by filename.**
+External file rendering depends on tenant CSP and domain allowlists, and atla does not validate
+whether another user can load an external URL. For deterministic output, upload files as page
+attachments and reference them by filename.
 
 ### Upload → reference workflow
 

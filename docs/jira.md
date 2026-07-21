@@ -197,7 +197,7 @@ line. See [GitHub Development Links](#github-development-links) for details.
 **Syntax**
 
 ```bash
-atla jira issue delete <KEY> [--delete-subtasks] [--yes]
+atla jira issue delete <KEY> [--delete-subtasks] --yes
 ```
 
 **Example**
@@ -247,7 +247,7 @@ Use `--no-input` in CI to disable that prompt.
 **Syntax**
 
 ```bash
-atla jira issue comment add <KEY> [BODY | --body TEXT | --body-file FILE]
+atla jira issue comment add <KEY> (BODY | --body TEXT | --body-file FILE)
                                   [--attachment FILE ...]
                                   [--attachment-mode auto|link|embed]
 ```
@@ -280,7 +280,7 @@ atla jira issue comment list PROJ-123 --limit 10
 **Syntax**
 
 ```bash
-atla jira issue comment update <KEY> <COMMENT_ID> [--body TEXT | --body-file FILE]
+atla jira issue comment update <KEY> <COMMENT_ID> (--body TEXT | --body-file FILE)
 ```
 
 **Example**
@@ -294,7 +294,7 @@ atla jira issue comment update PROJ-123 10001 --body 'QA passed. Merging now.'
 **Syntax**
 
 ```bash
-atla jira issue comment delete <KEY> <COMMENT_ID> [--yes]
+atla jira issue comment delete <KEY> <COMMENT_ID> --yes
 ```
 
 **Example**
@@ -353,7 +353,7 @@ atla jira issue attachment download PROJ-123 --all --dest ./downloads
 **Syntax**
 
 ```bash
-atla jira issue attachment delete <ATTACHMENT_ID> [--yes]
+atla jira issue attachment delete <ATTACHMENT_ID> --yes
 ```
 
 **Example**
@@ -397,7 +397,7 @@ atla jira issue link list PROJ-123
 **Syntax**
 
 ```bash
-atla jira issue link remove <LINK_ID> [--yes]
+atla jira issue link remove <LINK_ID> --yes
 ```
 
 **Example**

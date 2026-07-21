@@ -72,8 +72,9 @@ The interactive prompt will ask for:
 2. Your email address
 3. An API token (generate one at <https://id.atlassian.com/manage-profile/security/api-tokens>)
 
-Atlassian tokens expire after a configurable 1–365 days. Record the chosen expiry and rotate the
-stored token before it expires. Unscoped tokens use your `https://SITE.atlassian.net` URL. For a
+Token expiry is configured by Atlassian outside atla. Record the expiration shown when creating a
+token and rotate the stored token before that date; atla reports availability/source, not expiry.
+Unscoped tokens use your `https://SITE.atlassian.net` URL. For a
 scoped token, pass `--cloud-id`; atla uses separate Jira and Confluence
 `api.atlassian.com/ex/{product}/{cloudId}` gateway roots.
 

@@ -9,8 +9,9 @@ description: Compact complete reference for AI agents and automation using atla.
 
 `atla` is a unified Atlassian Cloud CLI for Jira and Confluence, written in Rust. It provides profile-based authentication, machine-friendly and human-friendly output modes, global dry-run safety, and command coverage for Jira projects/issues/boards/sprints plus Confluence spaces/pages/blogs/search/comments/labels/attachments.
 
-Atlassian API tokens expire after a configurable 1–365 days; rotate them before expiry.
-Unscoped tokens use the site URL. For a scoped token, pass `--cloud-id` during login; the same
+Token expiry is configured by Atlassian outside atla. Record the expiration shown when creating a
+token and rotate it before that date; atla reports availability/source, not expiry. Unscoped
+tokens use the site URL. For a scoped token, pass `--cloud-id` during login; the same
 profile then routes Jira and Confluence through their product-specific
 `api.atlassian.com/ex/{product}/{cloudId}` gateway roots.
 
@@ -46,7 +47,7 @@ back to the repo checkout.
 - `atla auth login` — create/update a profile; use `--token-stdin` in automation and add `--cloud-id <ID>` for a scoped token.
 - `atla auth discover --site <URL>` — discover cloud ID and product gateway roots.
 - `atla auth logout --yes` — remove stored credentials for the active profile.
-- `atla auth status` — show whether the current profile is authenticated.
+- `atla auth status` — show profile configuration and token availability/source.
 - `atla auth switch <profile>` — make a profile the default.
 - `atla config set <key> <value>` — set a config key.
 - `atla config get <key>` — read a config key.
@@ -275,9 +276,9 @@ both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 | `jira issue delete` | `<KEY>` | `--delete-subtasks`, `--yes` | Delete an issue. | `atla jira issue delete PROJ-123 --yes` |
 | `jira issue assign` | `<KEY>` | `--to`, `--account-id`, `--unassign` | Assign or clear assignee. | `atla jira issue assign PROJ-123 --to me` |
 | `jira issue transition` | `<KEY>` | `--to`, `--field` | Apply workflow transition; can prompt unless `--no-input`. | `atla jira issue transition PROJ-123 --to Done` |
-| `jira issue comment add` | `<KEY>` | `BODY`, `--body`, `--body-file`, `--attachment`, `--attachment-mode` | Add a comment. | `atla jira issue comment add PROJ-123 --body 'Ready for review'` |
+| `jira issue comment add` | `<KEY>` | `BODY`, `--body`, `--body-file`, `--attachment`, `--attachment-mode` | Add a comment; exactly one body source is required. | `atla jira issue comment add PROJ-123 --body 'Ready for review'` |
 | `jira issue comment list` | `<KEY>` | `--limit`, `--page-token` | List comments. | `atla jira issue comment list PROJ-123 --limit 10` |
-| `jira issue comment update` | `<KEY> <COMMENT_ID>` | `--body`, `--body-file` | Update a comment. | `atla jira issue comment update PROJ-123 10001 --body 'Merged'` |
+| `jira issue comment update` | `<KEY> <COMMENT_ID>` | `--body`, `--body-file` | Update a comment; exactly one body source is required. | `atla jira issue comment update PROJ-123 10001 --body 'Merged'` |
 | `jira issue comment delete` | `<KEY> <COMMENT_ID>` | `--yes` | Delete a comment. | `atla jira issue comment delete PROJ-123 10001 --yes` |
 | `jira issue attachment upload` | `<KEY>` | `--file` | Upload attachment. | `atla jira issue attachment upload PROJ-123 --file ./bug.png` |
 | `jira issue attachment list` | `<KEY>` | none | List attachments. | `atla jira issue attachment list PROJ-123` |
@@ -308,8 +309,8 @@ both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 | --- | --- | --- | --- | --- |
 | `confluence space list` | none | `--key`, `--limit`, `--page-token` | List spaces. | `atla confluence space list --key ENG --limit 10` |
 | `confluence space view` | `<KEY>` | none | Show one space. | `atla confluence space view ENG` |
-| `confluence space create` | `<NAME>` | `--key`, `--alias`, `--description`, `--description-file`, `--private` | Create a space. | `atla confluence space create 'Engineering Docs' --key ENG` |
-| `confluence space update` | `<KEY>` | `--name`, `--description`, `--description-file` | Update space metadata. | `atla confluence space update ENG --name 'Engineering Knowledge Base'` |
+| `confluence space create` | `<NAME>` | `--key`, `--alias`, `--description`, `--description-file`, `--private` | Create a space; exactly one of `--key`/`--alias` is required. | `atla confluence space create 'Engineering Docs' --key ENG` |
+| `confluence space update` | `<KEY>` | `--name`, `--description`, `--description-file` | Update space metadata; at least one update field is required. | `atla confluence space update ENG --name 'Engineering Knowledge Base'` |
 | `confluence space delete` | `<KEY>` | `--yes` | Delete a space. | `atla confluence space delete ENG --yes` |
 | `confluence page list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List pages. | `atla confluence page list --space ENG --title Runbook` |
 | `confluence page view` | `<ID>` | `--web`, `--format`, `--preserve-table-options`, `--with-attachments` | Show page metadata/body or open in browser. Body requires `--format`. | `atla confluence page view 123456 --format markdown` |
@@ -323,7 +324,7 @@ both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 | `confluence page label add` | `<PAGE_ID> LABEL...` | none | Add page labels. | `atla confluence page label add 123456 runbook urgent` |
 | `confluence page label remove` | `<PAGE_ID> <LABEL>` | `--yes` | Remove page label. | `atla confluence page label remove 123456 urgent --yes` |
 | `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
-| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment. | `atla confluence page comment add 123456 'Looks good'` |
+| `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment; exactly one body source is required. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
 | `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
 | `confluence blog view` | `<ID>` | `--format` | Show one blog post. Body requires `--format`. | `atla confluence blog view 234567 --format markdown` |
@@ -334,7 +335,7 @@ both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 | `confluence blog label add` | `<BLOG_ID> LABEL...` | none | Add blog labels. | `atla confluence blog label add 234567 release-notes engineering` |
 | `confluence blog label remove` | `<BLOG_ID> <LABEL>` | `--yes` | Remove blog label. | `atla confluence blog label remove 234567 engineering --yes` |
 | `confluence blog comment list` | `<BLOG_ID>` | `--limit`, `--page-token` | List blog comments. | `atla confluence blog comment list 234567 --limit 10` |
-| `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation` | Add blog comment. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
+| `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation` | Add blog comment; exactly one body source is required. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
 | `confluence blog comment delete` | `<BLOG_ID> <COMMENT_ID>` | `--yes` | Delete blog comment. | `atla confluence blog comment delete 234567 78910 --yes` |
 | `confluence search` | `<CQL>` | `--limit`, `--page-token` | Run CQL search. | `atla confluence search 'type = page AND space = ENG' --limit 25` |
 | `confluence attachment list` | `<PAGE_ID>` | `--filename`, `--limit`, `--page-token` | List page attachments. | `atla confluence attachment list 123456 --filename diagram` |
@@ -384,8 +385,8 @@ Tokens are not config keys; they live in the OS keyring, the file credential sto
 | --- | --- | --- |
 | `ATLA_TOKEN` | Primary API token override | If set, used before stored credentials |
 | `ATLA_API_TOKEN` | Alternate token override | Used if `ATLA_TOKEN` is unset |
-| `ATLA_CONFIG` | Main config file path | Defaults to `~/.config/atla/config.toml` |
-| `ATLA_CREDENTIALS` | File credential store path | Defaults to `~/.config/atla/credentials.toml` |
+| `ATLA_CONFIG` | Main config file path | Unix: `~/.config/atla/config.toml`; Windows: platform config directory |
+| `ATLA_CREDENTIALS` | File credential store path | Unix: `~/.config/atla/credentials.toml`; Windows: platform config directory |
 | `ATLA_READ_ONLY` | Enforce mutation blocking | Unset/false by default |
 
 ## 9. Common Patterns

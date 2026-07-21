@@ -25,9 +25,10 @@ Run these gates before copying a command from the examples below.
 atla --output json auth status
 ```
 
-Confirm the profile, instance, API target, and policy mode match the user's intended tenant. An
-exit code `3` means auth/profile setup is missing; read `references/auth-config.md` and follow the
-exact remediation from stderr before continuing. Never put a token in a shell argument when
+Confirm `configured` is true, token status is neither missing nor unavailable, and the profile,
+instance, API target, and policy mode match the user's intended tenant. If the profile or token is
+not ready, read `references/auth-config.md` and finish setup before continuing. Commands that require a missing profile or credential exit with code
+`3`; follow the structured stderr remediation. Never put a token in a shell argument when
 `--token-stdin` is available.
 
 ### 2. Discover before mutating
@@ -39,8 +40,8 @@ atla --read-only --max-pages 5 --max-items 200 --max-bytes 1000000 --timeout 30 
   --output json confluence page view 123456
 ```
 
-Record the target ID and current version. Do not infer a Jira project, Confluence space, profile,
-or resource ID from a title alone.
+Record the target ID and, for versioned content, its current version. Do not infer a Jira project,
+Confluence space, profile, or resource ID from a title alone.
 
 ### 3. Make mutation scope auditable
 
@@ -195,9 +196,9 @@ atla confluence page comment add 123456 'See attached evidence' \
   --attachment ./evidence.png --attachment-mode auto
 ```
 
-Confluence-hosted files must be uploaded as attachments before they are referenced. See the
-storage/ADF examples and CSP caveat in `references/confluence.md` rather than embedding an external
-URL.
+For deterministic rendering, upload files as Confluence attachments before referencing them.
+External URL rendering depends on tenant policy and is not validated by atla; see the storage/ADF
+examples in `references/confluence.md`.
 
 ## Common traps
 

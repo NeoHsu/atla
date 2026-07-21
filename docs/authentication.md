@@ -7,8 +7,9 @@ description: Manage profiles, tokens, and credential storage for atla.
 
 atla uses API tokens to authenticate with Atlassian Cloud instances. Credentials are stored per-profile and can be managed via the OS keyring or a local file.
 
-Atlassian API tokens expire after a configurable 1–365 days. Record the selected expiry and
-rotate the stored token before that date. Unscoped tokens use the
+Token expiry is configured by Atlassian outside atla. Record the expiration shown when creating a
+token and rotate the stored token before that date; atla reports token availability/source, not
+expiry. Unscoped tokens use the
 `https://SITE.atlassian.net` URL. For scoped tokens, store the tenant cloud ID in the profile;
 atla routes Jira and Confluence through their product-specific
 `api.atlassian.com/ex/{product}/{cloudId}` gateways.
@@ -93,10 +94,11 @@ Instance URL normalization:
 Display the current authentication state.
 
 ```bash
-atla auth status
+atla --output json auth status
 ```
 
-Shows:
+JSON output always remains machine-readable. When there is no active profile, `configured` is
+`false` and profile fields are `null`; otherwise `configured` is `true` and status shows:
 
 - Active profile name
 - Instance URL
@@ -104,7 +106,7 @@ Shows:
 - Credential storage method
 - API target (`site` or `scoped-token-gateway`) and cloud ID when configured
 - Profile operation-policy mode
-- Whether a valid token is available
+- Whether a token is available and its source
 
 ---
 
@@ -154,7 +156,8 @@ printf '%s\n' "$PERSONAL_TOKEN" | atla auth login --profile personal \
   --instance https://personal.atlassian.net --email me@personal.com --token-stdin
 ```
 
-Each unique instance/email combination creates a separate profile in your config.
+Profile identity comes from global `--profile`; without it, login creates or updates the
+`default` profile. Instance/email values do not generate profile names automatically.
 
 ### Switching profiles
 
@@ -196,7 +199,8 @@ Best for: developer workstations with a desktop environment.
 atla auth login --storage file
 ```
 
-Tokens are stored in `~/.config/atla/credentials.toml` (plain text, file-permission protected).
+On Linux and macOS, tokens are stored in `~/.config/atla/credentials.toml`; Windows uses its
+platform config directory. The file is plain text and file-permission protected.
 
 Best for:
 
@@ -329,9 +333,8 @@ atla jira issue view PROJ-1 --profile work
 
 ### Token expired or revoked
 
-Atlassian API tokens expire on the date selected at creation (1–365 days) and can also be
-revoked earlier. Tokens created before the expiration policy was introduced were assigned an
-expiry between March 14 and May 12, 2026. If requests return 401:
+API tokens may expire or be revoked. atla does not track token expiration; record any expiration
+shown when creating the token. If requests return 401:
 
 1. Check whether the token expired or was revoked.
 2. Generate a replacement at <https://id.atlassian.com/manage-profile/security/api-tokens>.

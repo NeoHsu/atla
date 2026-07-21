@@ -311,8 +311,8 @@ atla jira issue list --project PROJ --status 'To Do' --output keys \
 | --- | --- | --- |
 | `ATLA_TOKEN` | API token used instead of stored credentials | unset |
 | `ATLA_API_TOKEN` | Backward-compatible alternative token variable | unset |
-| `ATLA_CONFIG` | Path to the main config TOML file | `~/.config/atla/config.toml` |
-| `ATLA_CREDENTIALS` | Path to the file credential store when using file-backed auth | `~/.config/atla/credentials.toml` |
+| `ATLA_CONFIG` | Path to the main config TOML file | Unix: `~/.config/atla/config.toml`; Windows: platform config directory |
+| `ATLA_CREDENTIALS` | Path to the file credential store when using file-backed auth | Unix: `~/.config/atla/credentials.toml`; Windows: platform config directory |
 | `ATLA_READ_ONLY` | Enforce mutation blocking | unset/false |
 
 ### Token precedence

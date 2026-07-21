@@ -5,6 +5,13 @@ Global execution controls,
 safety gates, and opaque pagination-token behavior live in `../SKILL.md`; the summaries below show
 which Jira collection commands accept pagination controls.
 
+## Contents
+
+- [Projects](#projects), [Search](#search), [Issues](#issues), [Comments](#comments)
+- [Attachments](#attachments), [Links](#links), [Worklogs](#worklogs)
+- [Boards](#boards), [Sprints](#sprints), [JQL](#jql-quick-reference)
+- [`--fields`](#--fields-usage) and [`--field`](#--field-keyvalue-on-mutating-commands)
+
 ---
 
 ## Projects
@@ -162,7 +169,7 @@ atla jira issue fields --project PROJ --type Bug -o json
 ### Add a comment
 
 ```
-atla jira issue comment add <KEY> [BODY | --body TEXT | --body-file FILE]
+atla jira issue comment add <KEY> (BODY | --body TEXT | --body-file FILE)
                                   [--attachment FILE ...]
                                   [--attachment-mode auto|link|embed]
 ```
@@ -185,7 +192,7 @@ atla jira issue comment list <KEY> [--limit N=25] [--page-token TOKEN] [--all]
 ### Update a comment
 
 ```
-atla jira issue comment update <KEY> <COMMENT_ID> [--body TEXT | --body-file FILE]
+atla jira issue comment update <KEY> <COMMENT_ID> (--body TEXT | --body-file FILE)
 ```
 
 ### Delete a comment
@@ -263,7 +270,7 @@ These commands read from Jira's internal dev-status API (`/rest/dev-status/1.0/i
 atla jira issue link github-links <KEY>
 ```
 
-Returns: status, PR id, author, source/destination branch, URL.
+Returns: status, PR id, title, author, source/destination branch, URL.
 
 ```bash
 atla jira issue link github-links PROJ-123

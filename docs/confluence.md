@@ -102,7 +102,7 @@ atla confluence space view ENG
 **Syntax**
 
 ```bash
-atla confluence space create <NAME> [--key KEY] [--alias ALIAS]
+atla confluence space create <NAME> (--key KEY | --alias ALIAS)
                                      [--description TEXT | --description-file FILE] [--private]
 ```
 
@@ -123,6 +123,8 @@ atla confluence space update <KEY> [--name NAME]
                                      [--description TEXT | --description-file FILE]
 ```
 
+At least one of `--name`, `--description`, or `--description-file` is required.
+
 **Example**
 
 ```bash
@@ -134,7 +136,7 @@ atla confluence space update ENGOPS --name 'Engineering Operations'   --descript
 **Syntax**
 
 ```bash
-atla confluence space delete <KEY> [--yes]
+atla confluence space delete <KEY> --yes
 ```
 
 **Example**
@@ -275,7 +277,7 @@ To enable numbered rows for just one table in a Markdown file, place a directive
 **Syntax**
 
 ```bash
-atla confluence page delete <ID> [--purge] [--draft] [--yes]
+atla confluence page delete <ID> [--purge] [--draft] --yes
 ```
 
 **Example**
@@ -367,7 +369,7 @@ atla confluence page comment list 123456 --limit 10
 **Syntax**
 
 ```bash
-atla confluence page comment add <PAGE_ID> [BODY | --body-file FILE]
+atla confluence page comment add <PAGE_ID> (BODY | --body TEXT | --body-file FILE)
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
                                   [--numbered-table-rows]
@@ -390,7 +392,7 @@ When `--attachment` is used, `atla` uploads files to the page before creating th
 **Syntax**
 
 ```bash
-atla confluence page comment delete <PAGE_ID> <COMMENT_ID> [--yes]
+atla confluence page comment delete <PAGE_ID> <COMMENT_ID> --yes
 ```
 
 **Example**
@@ -468,7 +470,7 @@ atla confluence blog update 234567 --title 'Release 2.4 Notes (Updated)'   --mes
 **Syntax**
 
 ```bash
-atla confluence blog delete <ID> [--purge] [--draft] [--yes]
+atla confluence blog delete <ID> [--purge] [--draft] --yes
 ```
 
 **Example**
@@ -546,7 +548,7 @@ atla confluence blog comment list 234567 --limit 10
 **Syntax**
 
 ```bash
-atla confluence blog comment add <BLOG_ID> [BODY | --body-file FILE]
+atla confluence blog comment add <BLOG_ID> (BODY | --body TEXT | --body-file FILE)
                                   [--parent COMMENT_ID]
                                   [--representation storage|wiki|atlas-doc-format|markdown]
 ```
@@ -562,7 +564,7 @@ atla confluence blog comment add 234567 'Publish after the maintenance window cl
 **Syntax**
 
 ```bash
-atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> [--yes]
+atla confluence blog comment delete <BLOG_ID> <COMMENT_ID> --yes
 ```
 
 **Example**
@@ -650,7 +652,7 @@ atla confluence attachment download 987654 --save-to ./downloads/sso-flow.png
 **Syntax**
 
 ```bash
-atla confluence attachment delete <ATTACHMENT_ID> [--purge] [--yes]
+atla confluence attachment delete <ATTACHMENT_ID> [--purge] --yes
 ```
 
 **Example**

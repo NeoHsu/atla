@@ -73,7 +73,15 @@ fn shell_lex(line: &str) -> Option<Vec<String>> {
     Some(tokens)
 }
 
-const GLOBAL_VALUE_FLAGS: &[&str] = &["--output", "-o", "--profile"];
+const GLOBAL_VALUE_FLAGS: &[&str] = &[
+    "--output",
+    "-o",
+    "--profile",
+    "--max-pages",
+    "--max-items",
+    "--max-bytes",
+    "--timeout",
+];
 const TOP_COMMANDS: &[&str] = &[
     "auth",
     "config",
@@ -160,14 +168,14 @@ fn extract_argv(line: &str) -> Option<Vec<String>> {
     Some(tokens)
 }
 
-/// Prose often names a command without its required args, and placeholders
-/// cannot satisfy typed values; both still prove the command path and flags
-/// exist, which is all this check asserts.
-fn is_acceptable_error(err: &clap::Error) -> bool {
+/// Inline prose may name a command without all required args, while runnable
+/// fenced examples must satisfy clap's required arguments. Placeholders can
+/// still fail typed value validation after proving that their flags exist.
+fn is_acceptable_error(err: &clap::Error, allow_missing_required: bool) -> bool {
     use clap::error::ErrorKind;
     match err.kind() {
-        ErrorKind::MissingRequiredArgument
-        | ErrorKind::MissingSubcommand
+        ErrorKind::MissingRequiredArgument if allow_missing_required => true,
+        ErrorKind::MissingSubcommand
         | ErrorKind::DisplayHelp
         | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand => true,
         ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
@@ -179,8 +187,9 @@ fn is_acceptable_error(err: &clap::Error) -> bool {
 
 /// Collect candidate example lines from one markdown file: lines inside
 /// ```bash fences (with backslash continuations joined) plus inline
-/// `atla ...` code spans.
-fn candidate_lines(content: &str) -> Vec<(usize, String)> {
+/// `atla ...` code spans. The boolean marks a runnable fenced command; inline
+/// command-path mentions may intentionally omit required values.
+fn candidate_lines(content: &str) -> Vec<(usize, String, bool)> {
     let mut candidates = Vec::new();
     let mut in_bash = false;
     let mut pending: Option<(usize, String)> = None;
@@ -201,17 +210,144 @@ fn candidate_lines(content: &str) -> Vec<(usize, String)> {
             if trimmed.ends_with('\\') {
                 pending = Some((start, joined));
             } else {
-                candidates.push((start, joined));
+                candidates.push((start, joined, true));
             }
         } else {
             for span in raw.split('`').skip(1).step_by(2) {
                 if span.starts_with("atla ") {
-                    candidates.push((line_no, span.to_string()));
+                    candidates.push((line_no, span.to_string(), false));
                 }
             }
         }
     }
     candidates
+}
+
+/// Collect logical `atla ...` commands from every fenced block, including the
+/// untagged usage summaries that are intentionally not parsed as shell.
+fn fenced_commands(content: &str) -> Vec<(usize, String)> {
+    let mut commands = Vec::new();
+    let mut in_fence = false;
+    let mut pending: Option<(usize, String)> = None;
+    let mut explicit_continuation = false;
+
+    for (idx, raw) in content.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = raw.trim();
+        if trimmed.starts_with("```") {
+            if let Some(command) = pending.take() {
+                commands.push(command);
+            }
+            in_fence = !in_fence;
+            explicit_continuation = false;
+            continue;
+        }
+        if !in_fence {
+            continue;
+        }
+        if trimmed.starts_with("atla ") {
+            if let Some(command) = pending.take() {
+                commands.push(command);
+            }
+            explicit_continuation = trimmed.ends_with('\\');
+            pending = Some((line_no, trimmed.trim_end_matches('\\').trim().to_owned()));
+            continue;
+        }
+        let usage_continuation = trimmed.starts_with("[--")
+            || trimmed.starts_with("[-")
+            || trimmed.starts_with("--")
+            || trimmed.starts_with("-s ");
+        if !trimmed.is_empty()
+            && (explicit_continuation || usage_continuation)
+            && let Some((_, command)) = pending.as_mut()
+        {
+            command.push(' ');
+            command.push_str(trimmed.trim_end_matches('\\').trim());
+            explicit_continuation = trimmed.ends_with('\\');
+            continue;
+        }
+        if let Some(command) = pending.take() {
+            commands.push(command);
+            explicit_continuation = false;
+        }
+    }
+    if let Some(command) = pending {
+        commands.push(command);
+    }
+    commands
+}
+
+fn documented_command<'a>(root: &'a clap::Command, line: &str) -> Option<&'a clap::Command> {
+    let tokens = shell_lex(line)?;
+    if tokens.first().map(String::as_str) != Some("atla")
+        || tokens.get(1).is_none_or(|token| token.starts_with('-'))
+    {
+        return None;
+    }
+
+    let mut command = root;
+    let mut descended = false;
+    for token in &tokens[1..] {
+        let token = token.trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | '<' | '>'));
+        let Some(subcommand) = command.get_subcommands().find(|subcommand| {
+            subcommand.get_name() == token
+                || subcommand.get_all_aliases().any(|alias| alias == token)
+        }) else {
+            break;
+        };
+        command = subcommand;
+        descended = true;
+    }
+    descended.then_some(command)
+}
+
+fn documented_flags(line: &str) -> Vec<String> {
+    // Usage alternatives put another option after `|`; a shell pipeline does not.
+    let shell_pipeline = line.contains(" | ") && !line.contains(" | -");
+    let line = if shell_pipeline {
+        line.split_once(" | ").map_or(line, |(command, _)| command)
+    } else {
+        line
+    };
+    shell_lex(line)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|token| {
+            let token = token
+                .trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | ',' | '|'));
+            if token.starts_with("--") {
+                Some(
+                    token
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                        .collect(),
+                )
+            } else if token.starts_with('-')
+                && token.len() == 2
+                && token
+                    .chars()
+                    .nth(1)
+                    .is_some_and(|c| c.is_ascii_alphabetic())
+            {
+                Some(token.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn command_flags(command: &clap::Command) -> std::collections::BTreeSet<String> {
+    let mut flags = std::collections::BTreeSet::new();
+    for arg in command.get_arguments() {
+        if let Some(long) = arg.get_long() {
+            flags.insert(format!("--{long}"));
+        }
+        if let Some(short) = arg.get_short() {
+            flags.insert(format!("-{short}"));
+        }
+    }
+    flags
 }
 
 #[test]
@@ -225,13 +361,13 @@ fn doc_examples_parse() {
     let mut checked = 0usize;
     for file in doc_files() {
         let content = std::fs::read_to_string(&file).expect("read doc file");
-        for (line_no, line) in candidate_lines(&content) {
+        for (line_no, line, runnable) in candidate_lines(&content) {
             let Some(argv) = extract_argv(&line) else {
                 continue;
             };
             checked += 1;
             if let Err(err) = Cli::try_parse_from(&argv) {
-                if is_acceptable_error(&err) {
+                if is_acceptable_error(&err, !runnable) {
                     continue;
                 }
                 failures.push(format!(
@@ -252,6 +388,45 @@ fn doc_examples_parse() {
         failures.is_empty(),
         "{} documented atla example(s) no longer parse against the CLI.\n\
          Fix the docs/skill files or the CLI definition:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn documented_fenced_flags_match_cli() {
+    let mut cli = Cli::command();
+    cli.build();
+    let mut checked = 0usize;
+    let mut failures = Vec::new();
+
+    for file in doc_files() {
+        let content = std::fs::read_to_string(&file).expect("read doc file");
+        for (line_no, line) in fenced_commands(&content) {
+            let Some(command) = documented_command(&cli, &line) else {
+                continue;
+            };
+            let allowed = command_flags(command);
+            for flag in documented_flags(&line) {
+                checked += 1;
+                if !allowed.contains(&flag) {
+                    failures.push(format!(
+                        "{}:{line_no}: `{flag}` is not accepted by `{}`\n    {line}",
+                        file.display(),
+                        command.get_name()
+                    ));
+                }
+            }
+        }
+    }
+
+    assert!(
+        checked > 100,
+        "fenced usage extraction broke: only {checked} flags found"
+    );
+    assert!(
+        failures.is_empty(),
+        "{} documented fenced flag(s) no longer exist in clap:\n{}",
         failures.len(),
         failures.join("\n")
     );
