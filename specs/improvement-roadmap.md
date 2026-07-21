@@ -9,6 +9,8 @@ current work; completed review items belong in `CHANGELOG.md` and Git history.
   to `main`.
 - Cut the combined `[Unreleased]` changelog into a dated `[0.6.0]` section
   only in the reviewed release commit.
+- Require `python3 scripts/check-skill-version.py --tag v0.6.0` to confirm exact
+  CLI/skill/lockfile/docs version lockstep before tagging.
 - Run the local/global cargo-dist artifact smoke tests and
   `python3 scripts/verify-release-artifacts.py` before tagging.
 - Complete the bounded Jira + Confluence sandbox ledger from
@@ -64,6 +66,8 @@ only with a conservative default body limit.
   storage produces a warning instead of being silently misinterpreted.
 - Stable Confluence space JSON exposes the optional `spaceOwnerId` returned by
   v2.
+- CLI and bundled skill releases use exact SemVer lockstep, tag-pinned skill
+  installation, and a fail-closed local version gate with actionable remediation.
 - The obsolete unbudgeted `scripts/adf_spec_validate.py` live mutation helper
   was removed; its ADF cases are covered by local Markdown/ADF tests and the
   bounded live-smoke workflow.

@@ -51,6 +51,9 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   `npx skills add --copy` (a copy caused a 3-week doc/CLI drift in 2026-05/06).
 - Skill content policy: SKILL.md holds the command tree, common traps, and quick
   patterns; exact flag syntax lives in `references/*.md`.
+- Released CLI and skill versions are exact lockstep. Update
+  `skills/atla-cli/compatibility.json`, the SKILL.md compatibility/version gate, and tag-pinned
+  install docs together; `python3 scripts/check-skill-version.py` must pass.
 - The distributable skill must remain self-contained around the installed `atla` CLI. Do not
   reference or bundle repository-only maintainer, CI, release, or live-smoke tooling there;
   document those workflows under `docs/` instead.
@@ -74,8 +77,8 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   action refs and installer bytes are SHA-pinned, permissions are job-scoped, shell expressions are
   injection-safe, and cargo-cyclonedx 0.5.9 emits a binary-only CycloneDX 1.5 SBOM with hashes.
 - `allow-dirty = ["ci"]` in `dist-workspace.toml` is intentional. Do not replace release.yml with
-  raw `dist generate` output. If regenerating, reapply and verify the hardening with pi-lens before
-  committing, then run `dist plan` and artifact smoke tests.
+  raw `dist generate` output. If regenerating, reapply the hardening and the release-tag skill
+  version gate, verify with pi-lens, then run `dist plan` and artifact smoke tests.
 
 ## Agent-facing contracts (do not break)
 
@@ -97,8 +100,8 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   given; `--metadata-only` makes that choice explicit, `--fields` projects top-level JSON fields,
   and `--max-chars` bounds rendered bodies. Markdown input requires explicit
   `--representation markdown`; likely Markdown sent as storage emits a warning.
-- Exit-code taxonomy (`crates/atla-cli/src/error.rs`): 2 usage, 3 auth, 4 not-found,
-  5 safe-to-retry, 1 other/ambiguous mutation; `-o json` emits `{"error": {...}}` on
+- Exit-code taxonomy (`crates/atla-cli/src/error.rs`): 2 usage/policy/version mismatch, 3 auth,
+  4 not-found, 5 safe-to-retry, 1 other/ambiguous mutation; `-o json` emits `{"error": {...}}` on
   stderr. Never mark an uncertain mutation retryable. Documented in
   `docs/agent-reference.md` §3 — keep all three in sync.
 - Config schema version 2 auto-migrates legacy files only after creating a `.v1.bak`; config

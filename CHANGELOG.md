@@ -30,6 +30,9 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fresh-build benchmark.
 - Added discoverable `mise` development tasks for focused tests, contracts, security checks,
   coverage, and a deterministic local PR gate with pinned tool versions.
+- Added exact CLI/agent-skill release lockstep with a machine-readable compatibility manifest,
+  tag-pinned installation, CI/release enforcement, and fail-closed `doctor --skill-version`
+  remediation before config, credential, or network access.
 - Expanded spec-refresh summaries to report normalized parameter, request, response, requiredness,
   enum, and nested schema contract changes in addition to operation/schema counts.
 - Expanded the maintainer live-smoke ledger to every remote Jira, Confluence, and auth-discovery

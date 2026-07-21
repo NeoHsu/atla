@@ -61,6 +61,14 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+      - name: Verify exact CLI, skill, and release-tag version lockstep
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ !github.event.pull_request && github.ref_name || '' }}
+        run: |
+          tag_args=()
+          [[ -z "$RELEASE_TAG" ]] || tag_args+=(--tag "$RELEASE_TAG")
+          python3 scripts/check-skill-version.py "${tag_args[@]}"
       - name: Install verified dist
         shell: bash
         run: |

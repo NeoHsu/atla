@@ -42,6 +42,7 @@ run = "cargo test -p atla --test e2e"
 [tasks."contract:check"]
 description = "Check CLI, documentation, schema, and operation-catalog contracts"
 run = [
+  "python scripts/check-skill-version.py",
   "cargo test -p atla doc_check",
   "cargo test -p atla operation::tests::catalog_covers_every_cli_leaf_and_safety_marker",
 ]
@@ -54,6 +55,10 @@ run = "cargo test -p atla cli_surface"
 [tasks."tooling:test"]
 description = "Run repository Python tooling tests"
 run = "python -m unittest discover -s scripts/tests -p \"test_*.py\""
+
+[tasks."skill:version"]
+description = "Verify exact CLI, skill, lockfile, docs, and release-tag version lockstep"
+run = "python scripts/check-skill-version.py"
 
 [tasks.msrv]
 description = "Check the workspace with the minimum supported Rust version"
@@ -69,10 +74,7 @@ run = "cargo audit"
 
 [tasks.security]
 description = "Run dependency policy and RustSec checks"
-run = [
-  "cargo deny check",
-  "cargo audit",
-]
+run = ["cargo deny check", "cargo audit"]
 
 [tasks.coverage]
 description = "Generate LCOV and enforce the 53 percent line-coverage floor"
@@ -85,6 +87,7 @@ run = [
 description = "Run the deterministic local checks required before opening a PR"
 run = [
   "git diff --check",
+  "python scripts/check-skill-version.py",
   "cargo fmt --all -- --check",
   "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
   "cargo test --workspace",

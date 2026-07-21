@@ -19,6 +19,7 @@ EXPECTED_TASKS = {
     "lint",
     "msrv",
     "security",
+    "skill:version",
     "test",
     "test:cli",
     "test:core",
@@ -47,6 +48,7 @@ class MiseTaskTests(unittest.TestCase):
     def test_pr_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
         for command in (
+            "python scripts/check-skill-version.py",
             "cargo +1.91 check --workspace",
             "cargo audit",
             "cargo deny check",

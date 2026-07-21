@@ -18,17 +18,22 @@
 ## Public contract review
 
 - [ ] CLI commands and flags are unchanged, or `docs/cli-surface.txt`, topic docs, and `skills/atla-cli/` were updated.
+- [ ] `python3 scripts/check-skill-version.py` confirms exact CLI/skill version
+      lockstep.
 - [ ] Stdout JSON is unchanged, or its schema and fixture were updated additively.
 - [ ] Stderr JSON error shape and exit-code classification are unchanged, or the compatibility impact is documented.
 - [ ] Pagination token binding and resume behavior are unchanged, or migration notes were added.
 - [ ] Mutation receipt, plan, dry-run, `--yes`, and `--read-only` guarantees remain intact.
-- [ ] New operations are registered with risk, HTTP method, pagination, dry-run, and policy metadata.
+- [ ] New operations are registered with risk, HTTP method, pagination, dry-run,
+      and policy metadata.
 
 ## Security and operations
 
 - [ ] No credentials, tenant data, generated build output, live-smoke ledger, or temporary resource IDs are committed.
-- [ ] New network paths preserve same-origin authentication, bounded timeouts, and mutation retry safety.
-- [ ] New mutations include mock E2E coverage and a documented verification/cleanup path.
+- [ ] New network paths preserve same-origin authentication, bounded timeouts,
+      and mutation retry safety.
+- [ ] New mutations include mock E2E coverage and a documented
+      verification/cleanup path.
 
 ## Documentation and release notes
 

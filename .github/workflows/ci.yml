@@ -28,6 +28,8 @@ jobs:
         run: cargo deny check
       - name: Test repository safety tools
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+      - name: Verify exact CLI and skill version lockstep
+        run: python3 scripts/check-skill-version.py
       - name: Audit Rust dependencies
         uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:

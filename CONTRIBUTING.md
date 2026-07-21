@@ -27,6 +27,7 @@ workflows through discoverable convenience tasks:
 | `mise run contract:check` | CLI surface, docs, schemas, and operation-catalog contracts |
 | `mise run contract:update` | Regenerate `docs/cli-surface.txt` after a CLI change |
 | `mise run tooling:test` | Python maintenance-tool tests |
+| `mise run skill:version` | Exact CLI/skill/Cargo/docs release-version lockstep |
 | `mise run deny`, `mise run audit`, or `mise run security` | Dependency policy and RustSec checks |
 | `mise run coverage` | LCOV generation and the current coverage floor |
 | `mise run check:pr` | Sequential local PR gate: lint, tests, tooling, MSRV, deny, and audit |
