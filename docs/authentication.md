@@ -274,6 +274,20 @@ the unauthenticated tenant-info endpoint and discovered cloud ID:
 atla doctor --network --timeout 10 --output json
 ```
 
+### CLI/skill version mismatch
+
+The bundled skill checks exact compatibility before auth or network access:
+
+```bash
+atla doctor --skill-version 0.6.0 --output json
+```
+
+When versions differ, stdout contains `skillCompatibility` with the installed versions,
+`recommendedAction`, and an exact tagged `updateCommand`; stderr contains
+`kind=version_mismatch`, and the process exits `2`. Review the command and run it only with user
+approval, then repeat the check. The mismatch path does not load config or credentials and ignores
+`--network`.
+
 ### Token not found
 
 ```

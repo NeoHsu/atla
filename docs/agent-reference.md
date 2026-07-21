@@ -19,11 +19,16 @@ profile then routes Jira and Confluence through their product-specific
 
 The repo contains an installable AI-agent skill at `skills/atla-cli`.
 
-From GitHub:
+Install the skill tag that exactly matches `atla 0.6.0`:
 
 ```bash
-npx skills add NeoHsu/atla --skill atla-cli
+npx skills add https://github.com/NeoHsu/atla/tree/v0.6.0 --skill atla-cli
 ```
+
+Released CLI/skill versions are exact lockstep. Never install a released skill from an unversioned
+default branch; after a CLI upgrade, reinstall from the matching tag. Every skill execution begins
+with `atla doctor --skill-version 0.6.0 --output json` and stops before config, credentials, or
+network access when versions differ.
 
 From a local checkout of this repo:
 
@@ -53,7 +58,8 @@ back to the repo checkout.
 - `atla config get <key>` — read a config key.
 - `atla config list` — print all config entries.
 - `atla doctor` — inspect config, profile, credential source, API target, and policy locally; add
-  `--network` to test tenant reachability/cloud-ID discovery.
+  `--skill-version <VERSION>` for an exact fail-closed CLI/skill check or `--network` to test
+  tenant reachability/cloud-ID discovery.
 - `atla explain-policy <operation-id>` — explain deny → allow → mode evaluation plus global
   `--read-only` for one stable operation ID.
 - `atla operation list` — list stable IDs, methods, risk, pagination, dry-run, and retry metadata.
@@ -164,7 +170,7 @@ back to the repo checkout.
 | --- | --- | --- |
 | `0` | — | Success |
 | `1` | `other`, `ambiguous_mutation` | Non-retryable business/IO failures, or a mutation whose remote outcome must be verified |
-| `2` | `usage` | Invalid arguments (emitted by clap) |
+| `2` | `usage`, `version_mismatch` | Invalid arguments/policy, or an exact CLI/skill mismatch |
 | `3` | `auth` | Missing/invalid credentials or profile (HTTP 401/403) |
 | `4` | `not_found` | Resource does not exist (HTTP 404) |
 | `5` | `retryable` | Safe-to-retry transient failure, including HTTP 429 and read/idempotent request failures |
@@ -250,15 +256,17 @@ endpoint and never prints a token.
 
 | Command | Args | Flags | Description | Example |
 | --- | --- | --- | --- | --- |
-| `doctor` | none | `--network` | Report config path/load, profile, token source, site, API target, policy, and optional tenant discovery. | `atla doctor --output json` |
+| `doctor` | none | `--network`, `--skill-version` | Report local configuration and optionally verify exact CLI/skill compatibility or tenant discovery. | `atla doctor --skill-version 0.6.0 --output json` |
 | `explain-policy` | `<OPERATION_ID>` | none | Show the matching deny/allow rule or mode and global read-only result. | `atla --profile agent explain-policy jira.issue.create --output json` |
 | `operation list` | none | none | List the complete stable operation registry and safety metadata. | `atla operation list --output json` |
 | `schema list` | none | none | List every bundled public JSON schema. | `atla schema list --output json` |
 | `schema print` | `<NAME>` | JSON/default output only | Print the exact bundled schema without adding result-envelope fields. | `atla schema print error-v1 --output json` |
 
 `doctor` reports check-level `ok`, `warning`, `error`, or `skipped` status and an aggregate
-`healthy` boolean. It does not fail merely because a check is unhealthy. `schema print` accepts
-both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
+`healthy` boolean. Ordinary unhealthy checks remain diagnostic-only. An exact `--skill-version`
+mismatch is the exception: it exits `2` with `kind=version_mismatch`, emits structured
+`skillCompatibility` remediation, and performs no config, credential, or network checks.
+`schema print` accepts both `error-v1` and `error-v1.schema.json`; table/csv/keys output is rejected.
 
 ## 4. Jira Commands
 

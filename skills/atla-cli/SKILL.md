@@ -8,6 +8,7 @@ description: >
   Jira ticket”, “check my sprint”, “publish this Confluence page”, 「開一張 Jira 票」、
   「建立工單」、「查 sprint」、「更新 Confluence 頁面」、「找我負責的 issue」、
   「搜尋 Confluence」或「上傳附件到頁面」, because `atla` is the installed execution tool.
+compatibility: Requires atla CLI 0.6.0 exactly
 ---
 
 # atla CLI
@@ -18,6 +19,25 @@ bounded, non-interactive commands and verify remote state after mutations.
 ## Execution gate
 
 Run these gates before copying a command from the examples below.
+
+### 0. Verify CLI/skill compatibility
+
+This skill release targets exactly `atla 0.6.0`, as recorded in `compatibility.json`. Before auth,
+credentials, network access, or any Atlassian operation, run:
+
+```bash
+atla doctor --skill-version 0.6.0 --output json
+```
+
+Proceed only when `skillCompatibility.compatible` is `true`. If it reports `false`, stop without
+running another `atla` command. Show the user the installed CLI and skill versions plus
+`recommendedAction` and `updateCommand`; ask for approval before running that command, never update
+automatically. If this older CLI does not recognize the gate, run only `atla --version`, report that
+this skill requires `0.6.0`, and offer
+`cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.0 atla` with the same
+approval requirement. After an approved update, rerun the gate. A mismatch intentionally exits
+with code `2` and `kind=version_mismatch`, without reading config, credentials, or contacting
+Atlassian.
 
 ### 1. Verify the active target
 
@@ -110,9 +130,9 @@ not prove tenant permissions, API semantics, or cleanup success. For local disco
 | `--no-input` | Disable interactive input for automation and CI |
 | `--verbose` | Emit request/response diagnostics on stderr |
 
-Runtime failures use exit codes `2` usage/policy, `3` auth, `4` not found, `5` safely retryable,
-and `1` other. With JSON output, stderr contains a versioned error object. Stdout remains one JSON
-document; warnings and pagination hints use stderr.
+Runtime failures use exit codes `2` usage/policy/version mismatch, `3` auth, `4` not found, `5`
+safely retryable, and `1` other. With JSON output, stderr contains a versioned error object. Stdout
+remains one JSON document; warnings and pagination hints use stderr.
 
 ## Pagination
 
@@ -130,7 +150,7 @@ prefer bounded runs.
 
 - `auth login/discover/logout/status/switch`
 - `config set/get/list`
-- `doctor [--network]`
+- `doctor [--network] [--skill-version VERSION]`
 - `explain-policy <OPERATION_ID>`
 - `operation list`
 - `schema list/print`
@@ -217,6 +237,8 @@ examples in `references/confluence.md`.
   `--no-input` for agents.
 - Treat `--page-token` and plan hashes as opaque. A plan digest detects modification but is not a
   signature; never apply an untrusted plan.
+- Run the version gate before every execution session. A mismatch fails closed and provides an
+  exact tagged update command; never continue or update automatically.
 - `doctor` is local-only unless `--network` is explicit. It reports token availability/source but
   never prints the token. `schema print` supports default/JSON output, not table/csv/keys.
 

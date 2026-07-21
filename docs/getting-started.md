@@ -39,7 +39,7 @@ mise use -g github:NeoHsu/atla
 ### From source (requires Rust toolchain)
 
 ```bash
-cargo install --git https://github.com/NeoHsu/atla atla
+cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.0 atla
 ```
 
 ### Direct downloads
@@ -131,11 +131,14 @@ atla config set profiles.work.default-space DEV
 If you use an AI coding assistant, install the bundled `atla-cli` skill so the agent knows
 current `atla` commands, flags, pagination behavior, JQL/CQL patterns, and safety rules.
 
-From GitHub:
+From the release tag matching `atla 0.6.0`:
 
 ```bash
-npx skills add NeoHsu/atla --skill atla-cli
+npx skills add https://github.com/NeoHsu/atla/tree/v0.6.0 --skill atla-cli
 ```
+
+Do not use an unversioned default branch for a released CLI. The skill checks exact compatibility
+before execution and asks before applying any suggested update.
 
 From a local checkout of this repo:
 

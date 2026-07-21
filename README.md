@@ -69,7 +69,7 @@ In `mise.toml`:
 From source:
 
 ```bash
-cargo install --git https://github.com/NeoHsu/atla atla
+cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.0 atla
 ```
 
 ## Common workflows
@@ -113,11 +113,16 @@ atla confluence search "type=page AND space=DEV" --output json
 Install the bundled AI agent skill to enable `atla`-aware assistance — JQL/CQL
 patterns, all command flags, scripting idioms, and safety rules.
 
-From the published repository:
+Install the skill release that exactly matches `atla 0.6.0`:
 
 ```bash
-npx skills add NeoHsu/atla --skill atla-cli
+npx skills add https://github.com/NeoHsu/atla/tree/v0.6.0 --skill atla-cli
 ```
+
+Do not install the skill from an unversioned default branch for a released CLI. After upgrading
+`atla`, rerun the tag-pinned command using the new CLI version. The skill starts each execution
+session with `atla doctor --skill-version 0.6.0 --output json` and stops with an actionable update
+command if the versions differ.
 
 From a local checkout of this repo, install the internal `skills/atla-cli` package with:
 

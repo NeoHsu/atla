@@ -56,6 +56,7 @@ target/cloud ID, policy mode, and token availability/source.
 ### Diagnostics and local discovery
 
 ```bash
+atla doctor --skill-version 0.6.0 --output json
 atla doctor --output json
 atla doctor --network --timeout 10 --output json
 atla --profile agent explain-policy jira.issue.create --output json
@@ -64,10 +65,13 @@ atla schema list --output json
 atla schema print error-v1 --output json
 ```
 
-`doctor` checks config/profile/token-source/API-target/policy locally. `--network` additionally calls
-the unauthenticated tenant-info endpoint to verify site reachability and discover the cloud ID; it
-never prints token contents. `explain-policy` shows deny → allow → mode evaluation plus global
-`--read-only`. The operation and schema commands do not need credentials or network access.
+`doctor --skill-version` first checks exact CLI/skill lockstep. A mismatch exits `2` with structured
+update instructions before config, credentials, or network access; never apply its `updateCommand`
+without user approval. Ordinary `doctor` checks config/profile/token-source/API-target/policy
+locally. `--network` additionally calls the unauthenticated tenant-info endpoint to verify site
+reachability and discover the cloud ID; it never prints token contents. `explain-policy` shows deny
+→ allow → mode evaluation plus global `--read-only`. The operation and schema commands do not need
+credentials or network access.
 
 ### Logout
 
