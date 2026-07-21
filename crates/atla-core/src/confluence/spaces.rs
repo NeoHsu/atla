@@ -21,17 +21,19 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let mut request = self
-                .generated
-                .get_spaces()
-                .limit(limit_non_zero(page_size)?);
-            if let Some(key) = &search.key {
-                request = request.keys(vec![key.clone()]);
-            }
-            if let Some(cursor) = &cursor {
-                request = request.cursor(cursor.clone());
-            }
-            let page = request.send().await.or_api_error().await?.into_inner();
+            let page_limit = limit_non_zero(page_size)?;
+            let page = generated_request(reqwest::Method::GET, || {
+                let mut request = self.generated.get_spaces().limit(page_limit);
+                if let Some(key) = &search.key {
+                    request = request.keys(vec![key.clone()]);
+                }
+                if let Some(cursor) = &cursor {
+                    request = request.cursor(cursor.clone());
+                }
+                request.send()
+            })
+            .await?
+            .into_inner();
 
             let received = page.results.len();
             collected.extend(page.results.into_iter().map(ConfluenceSpace::from));
@@ -71,16 +73,17 @@ impl ConfluenceClient {
     }
 
     pub async fn get_space_by_id(&self, id: &str) -> Result<Option<ConfluenceSpace>, ApiError> {
-        let page = self
-            .generated
-            .get_spaces()
-            .ids(vec![parse_i64_id(id)?])
-            .limit(limit_non_zero(1)?)
-            .send()
-            .await
-            .or_api_error()
-            .await?
-            .into_inner();
+        let id = parse_i64_id(id)?;
+        let limit = limit_non_zero(1)?;
+        let page = generated_request(reqwest::Method::GET, || {
+            self.generated
+                .get_spaces()
+                .ids(vec![id])
+                .limit(limit)
+                .send()
+        })
+        .await?
+        .into_inner();
 
         Ok(page.results.into_iter().next().map(ConfluenceSpace::from))
     }
@@ -107,16 +110,14 @@ impl ConfluenceClient {
             ));
         }
 
-        match self
-            .generated
-            .create_space()
-            .body(space.to_generated())
-            .send()
-            .await
-        {
-            Ok(rv) => Ok(ConfluenceSpace::from(rv.into_inner())),
-            Err(e) => Err(generated_error_with_body(e).await),
-        }
+        generated_request(reqwest::Method::POST, || {
+            self.generated
+                .create_space()
+                .body(space.to_generated())
+                .send()
+        })
+        .await
+        .map(|response| ConfluenceSpace::from(response.into_inner()))
     }
 
     pub async fn update_space(
@@ -129,17 +130,14 @@ impl ConfluenceClient {
             ));
         }
 
-        let _space = match self
-            .generated_v1
-            .update_space()
-            .space_key(&space.key)
-            .body(space.to_v1_update_request())
-            .send()
-            .await
-        {
-            Ok(rv) => rv,
-            Err(e) => return Err(generated_v1_error_with_body(e).await),
-        };
+        let _space = generated_request(reqwest::Method::PUT, || {
+            self.generated_v1
+                .update_space()
+                .space_key(&space.key)
+                .body(space.to_v1_update_request())
+                .send()
+        })
+        .await?;
 
         self.get_space_by_key(&space.key).await?.ok_or_else(|| {
             ApiError::Decode(format!(
@@ -150,14 +148,10 @@ impl ConfluenceClient {
     }
 
     pub async fn delete_space(&self, key: &str) -> Result<(), ApiError> {
-        let _task = self
-            .generated_v1
-            .delete_space()
-            .space_key(key)
-            .send()
-            .await
-            .or_api_error()
-            .await?;
+        let _task = generated_request(reqwest::Method::DELETE, || {
+            self.generated_v1.delete_space().space_key(key).send()
+        })
+        .await?;
         Ok(())
     }
 }

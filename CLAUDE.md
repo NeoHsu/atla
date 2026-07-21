@@ -90,8 +90,10 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 - Saved plans are allowlisted semantic operations, not arbitrary HTTP replay. Apply must validate
   hash, expiry, inputs, profile/site, policy, same-origin route/method/query, and `--yes` before
   token/network access.
-- `confluence page view`/`blog view` return metadata only unless `--format` is given;
-  markdown input requires explicit `--representation markdown`.
+- `confluence page view`/`blog view` return self-describing metadata only unless `--format` is
+  given; `--metadata-only` makes that choice explicit, `--fields` projects top-level JSON fields,
+  and `--max-chars` bounds rendered bodies. Markdown input requires explicit
+  `--representation markdown`; likely Markdown sent as storage emits a warning.
 - Exit-code taxonomy (`crates/atla-cli/src/error.rs`): 2 usage, 3 auth, 4 not-found,
   5 safe-to-retry, 1 other/ambiguous mutation; `-o json` emits `{"error": {...}}` on
   stderr. Never mark an uncertain mutation retryable. Documented in
@@ -102,11 +104,9 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 
 ## Known debt (verified 2026-07, keep in mind when touching these areas)
 
-- Generated-client errors flow through `ProgenitorResultExt::or_api_error()`
-  (`atla-core/src/generated_api.rs`) which reads the response body. Never map errors
-  with a sync helper that drops the body.
-- Raw reqwest paths honor `Retry-After` and backoff; progenitor clients use reqwest's
-  method-aware built-in retry policy, which currently has no delay/`Retry-After` support.
-  Preserve the operation-aware ambiguous-mutation override when changing either path.
+- Every generated-client call must flow through `generated_api::generated_request(method, ...)`.
+  It reads final error bodies, honors `Retry-After`/backoff, retries only safe methods except an
+  explicit 429 rejection, and leaves uncertain mutations non-retryable. Never call a generated
+  builder's `.send()` directly or map errors with the sync fallback.
 - Shared Basic-auth client construction lives in `AtlassianClient::authed_http_client()`;
   don't hand-roll header setup in Jira/Confluence client constructors.

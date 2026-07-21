@@ -203,28 +203,12 @@ impl AtlassianClient {
         value.set_sensitive(true);
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, value);
-        let retry_host = reqwest::Url::parse(&self.instance.base_url)
-            .ok()
-            .and_then(|url| url.host_str().map(str::to_owned))
-            .unwrap_or_default();
-        let retry_policy = reqwest::retry::for_host(retry_host)
-            .max_retries_per_request(MAX_RETRIES)
-            .classify_fn(|attempt| {
-                let idempotent = matches!(
-                    attempt.method().as_str(),
-                    "GET" | "HEAD" | "PUT" | "DELETE" | "OPTIONS" | "TRACE"
-                );
-                match attempt.status().map(|status| status.as_u16()) {
-                    Some(429) => attempt.retryable(),
-                    Some(502..=504) if idempotent => attempt.retryable(),
-                    None if idempotent && attempt.error().is_some() => attempt.retryable(),
-                    _ => attempt.success(),
-                }
-            });
         reqwest::Client::builder()
             .connect_timeout(self.policy.connect_timeout)
             .timeout(self.policy.request_timeout)
-            .retry(retry_policy)
+            // Generated calls use `generated_api::generated_request` so retries can
+            // honor Retry-After and share the raw-request backoff policy.
+            .retry(reqwest::retry::never())
             .default_headers(headers)
             .build()
             .expect("reqwest client construction only fails on TLS backend init")
@@ -327,10 +311,10 @@ pub(crate) fn extract_api_error_body(body: &str) -> String {
     }
 }
 
-const MAX_RETRIES: u32 = 2;
+pub(crate) const MAX_RETRIES: u32 = 2;
 const MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(30);
 
-fn is_idempotent(method: &reqwest::Method) -> bool {
+pub(crate) fn is_idempotent(method: &reqwest::Method) -> bool {
     matches!(
         *method,
         reqwest::Method::GET
@@ -374,14 +358,21 @@ fn parse_retry_after(value: &str, now: std::time::SystemTime) -> Option<std::tim
         })
 }
 
-fn retry_delay(response: Option<&reqwest::Response>, attempt: u32) -> std::time::Duration {
-    let retry_after = response
-        .and_then(|response| response.headers().get(reqwest::header::RETRY_AFTER))
+pub(crate) fn retry_delay_from_headers(
+    headers: Option<&reqwest::header::HeaderMap>,
+    attempt: u32,
+) -> std::time::Duration {
+    let retry_after = headers
+        .and_then(|headers| headers.get(reqwest::header::RETRY_AFTER))
         .and_then(|value| value.to_str().ok())
         .and_then(|value| parse_retry_after(value, std::time::SystemTime::now()));
     retry_after
         .unwrap_or_else(|| std::time::Duration::from_millis(500 << attempt))
         .min(MAX_RETRY_DELAY)
+}
+
+fn retry_delay(response: Option<&reqwest::Response>, attempt: u32) -> std::time::Duration {
+    retry_delay_from_headers(response.map(reqwest::Response::headers), attempt)
 }
 
 fn request_failure(method: &reqwest::Method, error: reqwest::Error) -> ApiError {

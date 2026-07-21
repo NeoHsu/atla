@@ -2,10 +2,7 @@ use std::num::NonZeroU32;
 
 use crate::client::ApiError;
 
-pub(super) use crate::generated_api::{
-    ProgenitorResultExt, generated_error_with_body,
-    generated_error_with_body as generated_v1_error_with_body,
-};
+pub(super) use crate::generated_api::generated_request;
 
 /// Per-request page cap used when iterating Confluence v2 cursor endpoints.
 /// The server enforces its own ceiling (250 for most list endpoints); we stay

@@ -1,6 +1,6 @@
 use crate::markdown::markdown_to_adf;
 
-pub(super) use crate::generated_api::{ProgenitorResultExt, generated_error_with_body};
+pub(super) use crate::generated_api::generated_request;
 
 pub(super) fn limit_i32(limit: u32) -> i32 {
     limit.min(i32::MAX as u32) as i32

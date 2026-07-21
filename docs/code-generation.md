@@ -57,12 +57,12 @@ All three crates follow the same pattern:
 ```rust
 use progenitor::{Generator, GenerationSettings, InterfaceStyle};
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let src = "../../specs/<spec-file>.json";
-    println!("cargo:rerun-if-changed={}", src);
+    println!("cargo:rerun-if-changed={src}");
 
-    let file = std::fs::File::open(src).unwrap();
-    let spec: openapiv3::OpenAPI = serde_json::from_reader(file).unwrap();
+    let file = std::fs::File::open(src)?;
+    let spec: openapiv3::OpenAPI = serde_json::from_reader(file)?;
 
     let mut settings = GenerationSettings::default();
     settings
@@ -70,13 +70,13 @@ fn main() {
         .with_derive("PartialEq");
 
     let mut generator = Generator::new(&settings);
-    let tokens = generator.generate_tokens(&spec).unwrap();
-    let ast = syn::parse2(tokens).unwrap();
-    let content = prettyplease::unparse(&ast);
+    let tokens = generator.generate_tokens(&spec)
+        .map_err(|error| std::io::Error::other(format!("generation failed: {error:?}")))?;
+    let content = prettyplease::unparse(&syn::parse2(tokens)?);
 
-    let out_path = std::path::Path::new(&std::env::var("OUT_DIR").unwrap())
-        .join("codegen.rs");
-    std::fs::write(out_path, content).unwrap();
+    let out_path = std::path::Path::new(&std::env::var("OUT_DIR")?).join("codegen.rs");
+    std::fs::write(out_path, content)?;
+    Ok(())
 }
 ```
 
@@ -207,9 +207,11 @@ its snake_case operation name to `usedOperations` and refresh the specs.
 `.github/workflows/spec-refresh.yml` runs weekly and on manual dispatch. It
 executes the update script, verifies fmt/check/workspace tests, and opens a
 review PR containing only `specs/**` changes; it never pushes directly to
-`main`. `scripts/spec-diff-summary.py` adds per-spec line/size/hash totals plus
-operation-ID and schema-count deltas to the PR body and workflow summary. Review
-every invariant in `specs/PATCHES.md` and all operation diffs before merging.
+`main`. `scripts/spec-diff-summary.py` adds per-spec line/size/hash totals, operation-ID/schema-count
+deltas, and normalized parameter/request/response/schema contract facts to the PR body and
+workflow summary. This exposes nested field, requiredness, enum, type, and default changes that
+counts alone miss. Review every invariant in `specs/PATCHES.md` and all contract diffs before
+merging.
 
 ### Refresh workflow
 
@@ -245,26 +247,26 @@ Tracks integrity and provenance for each spec:
 
 ## Core consumption pattern
 
-progenitor generates a `Client` struct with builder-pattern methods:
+progenitor generates a `Client` struct with builder-pattern methods. Core constructs it with the
+shared `AtlassianClient::authed_http_client()` so credentials, timeouts, redirect protection, and
+retry ownership stay centralized. Every generated call must then use the shared wrapper:
 
 ```rust
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-
-// Build an authenticated reqwest client
-let mut headers = HeaderMap::new();
-let creds = base64::encode(format!("{}:{}", email, api_token));
-headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Basic {}", creds))?);
-let http_client = reqwest::Client::builder().default_headers(headers).build()?;
-
-// Create the progenitor client
-let client = atla_jira_api::Client::new_with_client(&base_url, http_client);
-
-// Use builder-pattern API calls
-let result = client.create_issue().body(body).send().await?;
+let client = atla_jira_api::Client::new_with_client(
+    &base_url,
+    raw_client.authed_http_client(),
+);
+let result = generated_request(reqwest::Method::POST, || {
+    client.create_issue().body(body.clone()).send()
+})
+.await?;
 let issue = result.into_inner();
 ```
 
-Auth is handled via `reqwest::Client` default headers — progenitor's `Client` has no built-in auth fields.
+Do not call a generated builder's `.send()` directly. `generated_request` applies bounded,
+method-aware retry with exponential backoff and `Retry-After`, reads final API error bodies, retries
+an explicit 429 rejection for any method, and otherwise never repeats a non-idempotent mutation.
+Progenitor itself has no auth fields; Basic auth remains in the shared reqwest client.
 
 ---
 

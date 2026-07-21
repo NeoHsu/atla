@@ -21,17 +21,16 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let raw = self
-                .generated_v1
-                .search_by_cql()
-                .cql(&search.cql)
-                .limit(limit_i32(page_size))
-                .start(start)
-                .send()
-                .await
-                .or_api_error()
-                .await?
-                .into_inner();
+            let raw = generated_request(reqwest::Method::GET, || {
+                self.generated_v1
+                    .search_by_cql()
+                    .cql(&search.cql)
+                    .limit(limit_i32(page_size))
+                    .start(start)
+                    .send()
+            })
+            .await?
+            .into_inner();
 
             let received = raw.results.len() as i32;
             let total = u64::try_from(raw.total_size).ok();

@@ -22,18 +22,23 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let mut req = self
-                .generated
-                .get_page_labels()
-                .id(content_id)
-                .limit(limit_non_zero(page_size)?);
-            if let Some(prefix) = &search.prefix {
-                req = req.prefix(prefix.clone());
-            }
-            if let Some(cursor) = &cursor {
-                req = req.cursor(cursor.clone());
-            }
-            let raw = req.send().await.or_api_error().await?.into_inner();
+            let page_limit = limit_non_zero(page_size)?;
+            let raw = generated_request(reqwest::Method::GET, || {
+                let mut request = self
+                    .generated
+                    .get_page_labels()
+                    .id(content_id)
+                    .limit(page_limit);
+                if let Some(prefix) = &search.prefix {
+                    request = request.prefix(prefix.clone());
+                }
+                if let Some(cursor) = &cursor {
+                    request = request.cursor(cursor.clone());
+                }
+                request.send()
+            })
+            .await?
+            .into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceLabel::from));
@@ -77,18 +82,23 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let mut req = self
-                .generated
-                .get_blog_post_labels()
-                .id(content_id)
-                .limit(limit_non_zero(page_size)?);
-            if let Some(prefix) = &search.prefix {
-                req = req.prefix(prefix.clone());
-            }
-            if let Some(cursor) = &cursor {
-                req = req.cursor(cursor.clone());
-            }
-            let raw = req.send().await.or_api_error().await?.into_inner();
+            let page_limit = limit_non_zero(page_size)?;
+            let raw = generated_request(reqwest::Method::GET, || {
+                let mut request = self
+                    .generated
+                    .get_blog_post_labels()
+                    .id(content_id)
+                    .limit(page_limit);
+                if let Some(prefix) = &search.prefix {
+                    request = request.prefix(prefix.clone());
+                }
+                if let Some(cursor) = &cursor {
+                    request = request.cursor(cursor.clone());
+                }
+                request.send()
+            })
+            .await?
+            .into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceLabel::from));
@@ -120,38 +130,37 @@ impl ConfluenceClient {
         content_id: &str,
         labels: &[String],
     ) -> Result<ConfluenceLabelPage, ApiError> {
-        let request = atla_confluence_v1_api::types::LabelCreateArray(
-            labels
-                .iter()
-                .map(|label| atla_confluence_v1_api::types::LabelCreate {
-                    prefix: "global".to_owned(),
-                    name: label.clone(),
-                })
-                .collect(),
-        );
-        let labels = self
-            .generated_v1
-            .add_labels_to_content()
-            .id(content_id)
-            .body(request)
-            .send()
-            .await
-            .or_api_error()
-            .await?
-            .into_inner();
+        let labels = generated_request(reqwest::Method::POST, || {
+            let body = atla_confluence_v1_api::types::LabelCreateArray(
+                labels
+                    .iter()
+                    .map(|label| atla_confluence_v1_api::types::LabelCreate {
+                        prefix: "global".to_owned(),
+                        name: label.clone(),
+                    })
+                    .collect(),
+            );
+            self.generated_v1
+                .add_labels_to_content()
+                .id(content_id)
+                .body(body)
+                .send()
+        })
+        .await?
+        .into_inner();
 
         Ok(labels.into())
     }
 
     pub async fn remove_page_label(&self, content_id: &str, label: &str) -> Result<(), ApiError> {
-        self.generated_v1
-            .remove_label_from_content_using_query_parameter()
-            .id(content_id)
-            .name(label)
-            .send()
-            .await
-            .or_api_error()
-            .await?;
+        generated_request(reqwest::Method::DELETE, || {
+            self.generated_v1
+                .remove_label_from_content_using_query_parameter()
+                .id(content_id)
+                .name(label)
+                .send()
+        })
+        .await?;
         Ok(())
     }
 

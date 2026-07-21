@@ -21,20 +21,23 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let mut request = self
-                .generated
-                .get_blog_posts()
-                .limit(limit_non_zero(page_size)?);
-            if let Some(space_id) = optional_i64_vec(search.space_id.as_deref())? {
-                request = request.space_id(space_id);
-            }
-            if let Some(title) = &search.title {
-                request = request.title(title.clone());
-            }
-            if let Some(cursor) = &cursor {
-                request = request.cursor(cursor.clone());
-            }
-            let page = request.send().await.or_api_error().await?.into_inner();
+            let space_ids = optional_i64_vec(search.space_id.as_deref())?;
+            let page_limit = limit_non_zero(page_size)?;
+            let page = generated_request(reqwest::Method::GET, || {
+                let mut request = self.generated.get_blog_posts().limit(page_limit);
+                if let Some(space_ids) = &space_ids {
+                    request = request.space_id(space_ids.clone());
+                }
+                if let Some(title) = &search.title {
+                    request = request.title(title.clone());
+                }
+                if let Some(cursor) = &cursor {
+                    request = request.cursor(cursor.clone());
+                }
+                request.send()
+            })
+            .await?
+            .into_inner();
 
             let received = page.results.len();
             collected.extend(page.results.into_iter().map(ConfluenceBlogPost::from));
@@ -71,15 +74,20 @@ impl ConfluenceClient {
         id: &str,
         body_format: Option<ConfluenceBodyRepresentation>,
     ) -> Result<ConfluenceBlogPost, ApiError> {
-        let mut request = self
-            .generated
-            .get_blog_post_by_id()
-            .id(parse_i64_id(id)?)
-            .include_version(true);
-        if let Some(body_format) = body_format {
-            request = request.body_format(body_format.as_primary_body_single());
-        }
-        let post = request.send().await.or_api_error().await?.into_inner();
+        let id = parse_i64_id(id)?;
+        let post = generated_request(reqwest::Method::GET, || {
+            let mut request = self
+                .generated
+                .get_blog_post_by_id()
+                .id(id)
+                .include_version(true);
+            if let Some(body_format) = body_format {
+                request = request.body_format(body_format.as_primary_body_single());
+            }
+            request.send()
+        })
+        .await?
+        .into_inner();
 
         Ok(post.into())
     }
@@ -88,14 +96,15 @@ impl ConfluenceClient {
         &self,
         post: &ConfluenceBlogPostCreate,
     ) -> Result<ConfluenceBlogPost, ApiError> {
-        let mut request = self.generated.create_blog_post().body(post.to_generated());
-        if let Some(private) = post.private {
-            request = request.private(private);
-        }
-        let post = match request.send().await {
-            Ok(rv) => rv.into_inner(),
-            Err(e) => return Err(generated_error_with_body(e).await),
-        };
+        let post = generated_request(reqwest::Method::POST, || {
+            let mut request = self.generated.create_blog_post().body(post.to_generated());
+            if let Some(private) = post.private {
+                request = request.private(private);
+            }
+            request.send()
+        })
+        .await?
+        .into_inner();
 
         Ok(post.into())
     }
@@ -104,17 +113,16 @@ impl ConfluenceClient {
         &self,
         post: &ConfluenceBlogPostUpdate,
     ) -> Result<ConfluenceBlogPost, ApiError> {
-        let post = match self
-            .generated
-            .update_blog_post()
-            .id(parse_i64_id(&post.id)?)
-            .body(post.to_generated())
-            .send()
-            .await
-        {
-            Ok(rv) => rv.into_inner(),
-            Err(e) => return Err(generated_error_with_body(e).await),
-        };
+        let id = parse_i64_id(&post.id)?;
+        let post = generated_request(reqwest::Method::PUT, || {
+            self.generated
+                .update_blog_post()
+                .id(id)
+                .body(post.to_generated())
+                .send()
+        })
+        .await?
+        .into_inner();
 
         Ok(post.into())
     }
@@ -125,10 +133,14 @@ impl ConfluenceClient {
         purge: bool,
         draft: bool,
     ) -> Result<(), ApiError> {
-        let request = self.generated.delete_blog_post().id(parse_i64_id(id)?);
-        let request = if purge { request.purge(true) } else { request };
-        let request = if draft { request.draft(true) } else { request };
-        request.send().await.or_api_error().await?;
+        let id = parse_i64_id(id)?;
+        generated_request(reqwest::Method::DELETE, || {
+            let request = self.generated.delete_blog_post().id(id);
+            let request = if purge { request.purge(true) } else { request };
+            let request = if draft { request.draft(true) } else { request };
+            request.send()
+        })
+        .await?;
         Ok(())
     }
 }

@@ -22,16 +22,21 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let mut req = self
-                .generated
-                .get_page_footer_comments()
-                .id(content_id)
-                .body_format(atla_confluence_api::types::PrimaryBodyRepresentation::Storage)
-                .limit(limit_non_zero(page_size)?);
-            if let Some(cursor) = &cursor {
-                req = req.cursor(cursor.clone());
-            }
-            let raw = req.send().await.or_api_error().await?.into_inner();
+            let page_limit = limit_non_zero(page_size)?;
+            let raw = generated_request(reqwest::Method::GET, || {
+                let mut request = self
+                    .generated
+                    .get_page_footer_comments()
+                    .id(content_id)
+                    .body_format(atla_confluence_api::types::PrimaryBodyRepresentation::Storage)
+                    .limit(page_limit);
+                if let Some(cursor) = &cursor {
+                    request = request.cursor(cursor.clone());
+                }
+                request.send()
+            })
+            .await?
+            .into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceComment::from));
@@ -62,27 +67,27 @@ impl ConfluenceClient {
         &self,
         comment: &ConfluenceCommentCreate,
     ) -> Result<ConfluenceComment, ApiError> {
-        let created = self
-            .generated
-            .create_footer_comment()
-            .body(comment.to_generated_page_footer())
-            .send()
-            .await
-            .or_api_error()
-            .await?
-            .into_inner();
+        let created = generated_request(reqwest::Method::POST, || {
+            self.generated
+                .create_footer_comment()
+                .body(comment.to_generated_page_footer())
+                .send()
+        })
+        .await?
+        .into_inner();
 
         Ok(created.into())
     }
 
     pub async fn delete_page_comment(&self, comment_id: &str) -> Result<(), ApiError> {
-        self.generated
-            .delete_footer_comment()
-            .comment_id(parse_i64_id(comment_id)?)
-            .send()
-            .await
-            .or_api_error()
-            .await?;
+        let comment_id = parse_i64_id(comment_id)?;
+        generated_request(reqwest::Method::DELETE, || {
+            self.generated
+                .delete_footer_comment()
+                .comment_id(comment_id)
+                .send()
+        })
+        .await?;
         Ok(())
     }
 
@@ -103,16 +108,21 @@ impl ConfluenceClient {
             }
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
-            let mut req = self
-                .generated
-                .get_blog_post_footer_comments()
-                .id(content_id)
-                .body_format(atla_confluence_api::types::PrimaryBodyRepresentation::Storage)
-                .limit(limit_non_zero(page_size)?);
-            if let Some(cursor) = &cursor {
-                req = req.cursor(cursor.clone());
-            }
-            let raw = req.send().await.or_api_error().await?.into_inner();
+            let page_limit = limit_non_zero(page_size)?;
+            let raw = generated_request(reqwest::Method::GET, || {
+                let mut request = self
+                    .generated
+                    .get_blog_post_footer_comments()
+                    .id(content_id)
+                    .body_format(atla_confluence_api::types::PrimaryBodyRepresentation::Storage)
+                    .limit(page_limit);
+                if let Some(cursor) = &cursor {
+                    request = request.cursor(cursor.clone());
+                }
+                request.send()
+            })
+            .await?
+            .into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceComment::from));
@@ -143,15 +153,14 @@ impl ConfluenceClient {
         &self,
         comment: &ConfluenceCommentCreate,
     ) -> Result<ConfluenceComment, ApiError> {
-        let created = self
-            .generated
-            .create_footer_comment()
-            .body(comment.to_generated_blog_footer())
-            .send()
-            .await
-            .or_api_error()
-            .await?
-            .into_inner();
+        let created = generated_request(reqwest::Method::POST, || {
+            self.generated
+                .create_footer_comment()
+                .body(comment.to_generated_blog_footer())
+                .send()
+        })
+        .await?
+        .into_inner();
 
         Ok(created.into())
     }

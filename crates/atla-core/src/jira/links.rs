@@ -15,7 +15,7 @@ const GITHUB_APP_TYPE_KEYS: &[&str] = &[
 use super::models::{
     JiraGithubCommit, JiraGithubPullRequest, JiraIssueLink, JiraIssueLinkCreate, JiraLinkedIssue,
 };
-use super::util::ProgenitorResultExt;
+use super::util::generated_request;
 use crate::client::{ApiError, read_json};
 
 impl JiraClient {
@@ -25,14 +25,14 @@ impl JiraClient {
             ..link.clone()
         };
 
-        self.generated
-            .link_issues()
-            .body(resolved.to_generated())
-            .send()
-            .await
-            .map(|_| ())
-            .or_api_error()
-            .await
+        generated_request(reqwest::Method::POST, || {
+            self.generated
+                .link_issues()
+                .body(resolved.to_generated())
+                .send()
+        })
+        .await
+        .map(|_| ())
     }
 
     pub async fn list_issue_links(
@@ -183,14 +183,11 @@ impl JiraClient {
     }
 
     pub async fn delete_issue_link(&self, link_id: &str) -> Result<(), ApiError> {
-        self.generated
-            .delete_issue_link()
-            .link_id(link_id)
-            .send()
-            .await
-            .map(|_| ())
-            .or_api_error()
-            .await
+        generated_request(reqwest::Method::DELETE, || {
+            self.generated.delete_issue_link().link_id(link_id).send()
+        })
+        .await
+        .map(|_| ())
     }
 
     async fn resolve_link_type(&self, user_input: &str) -> Result<String, ApiError> {
