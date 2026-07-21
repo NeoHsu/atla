@@ -114,27 +114,45 @@ mod tests {
         ))
     }
 
+    fn rust_source_files(root: &std::path::Path) -> std::io::Result<Vec<std::path::PathBuf>> {
+        let mut pending = vec![root.to_path_buf()];
+        let mut files = Vec::new();
+        while let Some(directory) = pending.pop() {
+            for entry in std::fs::read_dir(directory)? {
+                let entry = entry?;
+                let path = entry.path();
+                let file_type = entry.file_type()?;
+                if file_type.is_dir() {
+                    pending.push(path);
+                } else if file_type.is_file()
+                    && path
+                        .extension()
+                        .is_some_and(|extension| extension == std::ffi::OsStr::new("rs"))
+                {
+                    files.push(path);
+                }
+            }
+        }
+        files.sort();
+        Ok(files)
+    }
+
     #[test]
-    fn generated_calls_use_shared_retry_wrapper() {
-        let modules = [
-            (
-                "confluence/attachments.rs",
-                include_str!("confluence/attachments.rs"),
-            ),
-            ("confluence/blog.rs", include_str!("confluence/blog.rs")),
-            (
-                "confluence/comments.rs",
-                include_str!("confluence/comments.rs"),
-            ),
-            ("confluence/labels.rs", include_str!("confluence/labels.rs")),
-            ("confluence/pages.rs", include_str!("confluence/pages.rs")),
-            ("confluence/search.rs", include_str!("confluence/search.rs")),
-            ("confluence/spaces.rs", include_str!("confluence/spaces.rs")),
-            ("jira/comments.rs", include_str!("jira/comments.rs")),
-            ("jira/issues.rs", include_str!("jira/issues.rs")),
-            ("jira/links.rs", include_str!("jira/links.rs")),
-            ("jira/projects.rs", include_str!("jira/projects.rs")),
-        ];
+    fn generated_calls_use_shared_retry_wrapper() -> Result<(), Box<dyn std::error::Error>> {
+        let source_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut modules = Vec::new();
+        for product in ["confluence", "jira"] {
+            for path in rust_source_files(&source_root.join(product))? {
+                let source = std::fs::read_to_string(&path)?;
+                if source.contains("self.generated") {
+                    modules.push((path, source));
+                }
+            }
+        }
+        assert!(
+            !modules.is_empty(),
+            "expected to discover generated-client source modules"
+        );
 
         for (path, source) in modules {
             let mut ranges = Vec::new();
@@ -157,7 +175,12 @@ mod tests {
                         _ => {}
                     }
                 }
-                let end = end.expect("generated_request call should have balanced parentheses");
+                let Some(end) = end else {
+                    panic!(
+                        "generated_request call in {} has unbalanced parentheses",
+                        path.display()
+                    );
+                };
                 ranges.push(start..end);
                 search_from = end;
             }
@@ -165,10 +188,12 @@ mod tests {
             for (index, _) in source.match_indices("self.generated") {
                 assert!(
                     ranges.iter().any(|range| range.contains(&index)),
-                    "{path} accesses a generated client outside generated_request near byte {index}"
+                    "{} accesses a generated client outside generated_request near byte {index}",
+                    path.display()
                 );
             }
         }
+        Ok(())
     }
 
     #[tokio::test]

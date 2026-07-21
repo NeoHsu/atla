@@ -108,11 +108,12 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   and file credentials use atomic mode-0600 replacement. Scoped profiles retain the site URL
   but route each product through `api.atlassian.com/ex/{product}/{cloudId}`.
 
-## Known debt (verified 2026-07, keep in mind when touching these areas)
+## Critical implementation invariants
 
 - Every generated-client call must flow through `generated_api::generated_request(method, ...)`.
   It reads final error bodies, honors `Retry-After`/backoff, retries only safe methods except an
-  explicit 429 rejection, and leaves uncertain mutations non-retryable. Never call a generated
-  builder's `.send()` directly or map errors with the sync fallback.
+  explicit 429 rejection, and leaves uncertain mutations non-retryable. The source contract test
+  recursively discovers Jira/Confluence modules; never call a generated builder's `.send()`
+  outside the wrapper or map errors with the sync fallback.
 - Shared Basic-auth client construction lives in `AtlassianClient::authed_http_client()`;
   don't hand-roll header setup in Jira/Confluence client constructors.
