@@ -70,7 +70,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without silently changing the payload.
 - Partial-spec filters now fail with contextual read/write errors instead of uncaught filesystem
   exceptions.
-- CI and spec-refresh workflows now use the SHA-pinned Node 24 checkout action.
+- Refreshed the Rust 1.91-compatible lockfile, upgraded `dialoguer`, `sha2`, and `toml`, removed
+  unused dependency declarations, and preserved stable SHA-256 plan/input-digest output.
+- Updated CI, release, and spec-refresh workflows to current SHA-pinned Node 24 action generations;
+  the MSRV job now pins Rust 1.91.0 explicitly instead of relying on an action revision.
+- Limited Dependabot grouping to Cargo patch updates and non-major Actions updates so breaking
+  migrations remain independently reviewable.
 - Removed the obsolete unbudgeted ADF live-mutation helper; its cases remain covered by local
   Markdown/ADF tests and the bounded sandbox workflow.
 

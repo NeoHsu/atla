@@ -161,7 +161,8 @@ fn verify_input_files(plan: &OperationPlan) -> anyhow::Result<()> {
             }
             hasher.update(&buffer[..read]);
         }
-        let actual = format!("sha256:{:x}", hasher.finalize());
+        let digest = hasher.finalize();
+        let actual = format!("sha256:{}", output::lower_hex(&digest));
         if input.sha256 != actual {
             return usage(format!(
                 "input file hash mismatch for `{}`; create a new plan",

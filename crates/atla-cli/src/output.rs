@@ -32,6 +32,16 @@ struct PlanOutput {
     expires_in_seconds: u64,
 }
 
+pub(crate) fn lower_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
+
 pub fn configure_operation(operation: impl Into<String>, mutating: bool, dry_run: bool) {
     let mut context = EXECUTION_CONTEXT
         .get_or_init(|| Mutex::new(ExecutionContext::default()))
@@ -71,9 +81,10 @@ pub fn register_plan_input(path: &std::path::Path) -> anyhow::Result<()> {
             canonical.display()
         )
     })?;
+    let digest = Sha256::digest(bytes);
     let input = schema::InputFileDigest {
         path: canonical.to_string_lossy().into_owned(),
-        sha256: format!("sha256:{:x}", Sha256::digest(bytes)),
+        sha256: format!("sha256:{}", lower_hex(&digest)),
     };
     let mut inputs = PLAN_INPUTS
         .get_or_init(|| Mutex::new(Vec::new()))
@@ -267,7 +278,7 @@ pub fn operation_plan_hash(plan: &schema::OperationPlan) -> anyhow::Result<Strin
     let mut unsigned = plan.clone();
     unsigned.plan_hash.clear();
     let digest = Sha256::digest(serde_json::to_vec(&unsigned)?);
-    Ok(format!("sha256:{digest:x}"))
+    Ok(format!("sha256:{}", lower_hex(&digest)))
 }
 
 fn ensure_within_byte_budget(rendered: &str) -> anyhow::Result<()> {
@@ -337,5 +348,26 @@ pub fn csv_cell(value: &str) -> String {
         format!("\"{}\"", value.replace('"', "\"\""))
     } else {
         value.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sha2::{Digest, Sha256};
+
+    use super::lower_hex;
+
+    #[test]
+    fn lower_hex_preserves_leading_zeroes() {
+        assert_eq!(lower_hex(&[0x00, 0x0f, 0x10, 0xab, 0xff]), "000f10abff");
+    }
+
+    #[test]
+    fn sha256_digest_format_is_stable() {
+        let digest = Sha256::digest(b"abc");
+        assert_eq!(
+            lower_hex(&digest),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 }
