@@ -71,7 +71,7 @@ policy surface.
 
 ## Install
 
-Verified installer for macOS and Linux:
+### macOS and Linux
 
 ```bash
 base=https://github.com/NeoHsu/atla/releases/latest/download
@@ -80,6 +80,20 @@ curl --proto '=https' --tlsv1.2 -LsSfO "$base/atla-installer.sh.sha256"
 shasum -a 256 -c atla-installer.sh.sha256
 sh atla-installer.sh
 ```
+
+### Windows
+
+```powershell
+$base = "https://github.com/NeoHsu/atla/releases/latest/download"
+Invoke-WebRequest "$base/atla-installer.ps1" -OutFile atla-installer.ps1
+Invoke-WebRequest "$base/atla-installer.ps1.sha256" -OutFile atla-installer.ps1.sha256
+$expected = ((Get-Content -Raw atla-installer.ps1.sha256).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 atla-installer.ps1).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "installer checksum verification failed" }
+& .\atla-installer.ps1
+```
+
+### Other options
 
 With mise:
 
@@ -93,7 +107,7 @@ From source:
 cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.0 atla
 ```
 
-For the verified Windows installer, direct downloads, and platform-specific instructions, see
+For direct downloads and platform-specific instructions, see
 [Getting Started](docs/getting-started.md). Releases include checksum sidecars, build-provenance
 attestations, and a CycloneDX 1.5 binary SBOM.
 
