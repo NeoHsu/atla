@@ -223,14 +223,22 @@ pub struct IssueAssignTargetArgs {
 #[derive(Debug, Subcommand)]
 pub enum IssueCommentAction {
     /// Add a comment
-    #[command(after_help = "Examples:
+    #[command(
+        after_help = "Exactly one comment body source is required: positional BODY, --body, or --body-file.
+
+Examples:
   atla jira issue comment add PROJ-123 'Deployed to staging'
-  atla jira issue comment add PROJ-123 --body-file notes.md --attachment error.log --attachment-mode link")]
+  atla jira issue comment add PROJ-123 --body-file notes.md --attachment error.log --attachment-mode link"
+    )]
     Add {
         /// Issue key, e.g. PROJ-123
         key: String,
         /// Comment body in Markdown
-        #[arg(conflicts_with = "body_file", conflicts_with = "body_flag")]
+        #[arg(
+            conflicts_with = "body_file",
+            conflicts_with = "body_flag",
+            required_unless_present_any = ["body_flag", "body_file"]
+        )]
         body: Option<String>,
         /// Comment body (alternative to the positional argument)
         #[arg(long = "body", conflicts_with = "body_file", conflicts_with = "body")]
@@ -260,13 +268,18 @@ pub enum IssueCommentAction {
         page_token: Option<String>,
     },
     /// Edit a comment
+    #[command(after_help = "Exactly one comment body source is required: --body or --body-file.")]
     Update {
         /// Issue key, e.g. PROJ-123
         key: String,
         /// Comment ID
         comment_id: String,
         /// New comment body in Markdown
-        #[arg(long, conflicts_with = "body_file")]
+        #[arg(
+            long,
+            conflicts_with = "body_file",
+            required_unless_present = "body_file"
+        )]
         body: Option<String>,
         /// Read the body from a file
         #[arg(long)]

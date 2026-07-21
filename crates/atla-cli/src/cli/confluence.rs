@@ -295,11 +295,18 @@ pub enum PageCommentAction {
         page_token: Option<String>,
     },
     /// Add a comment to a page
+    #[command(
+        after_help = "Exactly one comment body source is required: positional BODY, --body, or --body-file."
+    )]
     Add {
         /// Page ID
         page_id: String,
         /// Comment body (interpretation follows --representation)
-        #[arg(conflicts_with = "body_file", conflicts_with = "body_flag")]
+        #[arg(
+            conflicts_with = "body_file",
+            conflicts_with = "body_flag",
+            required_unless_present_any = ["body_flag", "body_file"]
+        )]
         body: Option<String>,
         /// Comment body (alternative to the positional argument)
         #[arg(long = "body", conflicts_with = "body_file", conflicts_with = "body")]
@@ -512,11 +519,18 @@ pub enum BlogCommentAction {
         page_token: Option<String>,
     },
     /// Add a comment to a blog post
+    #[command(
+        after_help = "Exactly one comment body source is required: positional BODY, --body, or --body-file."
+    )]
     Add {
         /// Blog post ID
         blog_id: String,
         /// Comment body (interpretation follows --representation)
-        #[arg(conflicts_with = "body_file", conflicts_with = "body_flag")]
+        #[arg(
+            conflicts_with = "body_file",
+            conflicts_with = "body_flag",
+            required_unless_present_any = ["body_flag", "body_file"]
+        )]
         body: Option<String>,
         /// Comment body (alternative to the positional argument)
         #[arg(long = "body", conflicts_with = "body_file", conflicts_with = "body")]
@@ -576,10 +590,10 @@ pub enum SpaceAction {
         /// Space name
         name: String,
         /// Space key (required unless --alias is given)
-        #[arg(long)]
+        #[arg(long, conflicts_with = "alias", required_unless_present = "alias")]
         key: Option<String>,
         /// Space alias (alternative to --key)
-        #[arg(long)]
+        #[arg(long, conflicts_with = "key")]
         alias: Option<String>,
         /// Space description
         #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]
@@ -591,11 +605,17 @@ pub enum SpaceAction {
         private: bool,
     },
     /// Update space name or description
+    #[command(
+        after_help = "At least one of --name, --description, or --description-file is required."
+    )]
     Update {
         /// Space key, e.g. ENG
         key: String,
         /// New space name
-        #[arg(long)]
+        #[arg(
+            long,
+            required_unless_present_any = ["description", "description_file"]
+        )]
         name: Option<String>,
         /// New space description
         #[arg(long, conflicts_with = "description_file", allow_hyphen_values = true)]

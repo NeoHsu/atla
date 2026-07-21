@@ -1,5 +1,5 @@
 use super::*;
-use clap::Parser;
+use clap::{Parser, error::ErrorKind};
 
 #[test]
 fn page_create_accepts_markdown_mention_options() {
@@ -148,6 +148,52 @@ fn page_comment_add_accepts_attachment_options() {
     };
     assert_eq!(attachments, vec![PathBuf::from("report.pdf")]);
     assert_eq!(attachment_mode, AttachmentMode::Embed);
+}
+
+#[test]
+fn comments_require_a_body_source_before_dispatch() {
+    let commands: &[&[&str]] = &[
+        &[
+            "atla",
+            "jira",
+            "issue",
+            "comment",
+            "add",
+            "PROJ-123",
+            "--attachment",
+            "error.log",
+        ],
+        &[
+            "atla", "jira", "issue", "comment", "update", "PROJ-123", "10001",
+        ],
+        &[
+            "atla",
+            "confluence",
+            "page",
+            "comment",
+            "add",
+            "123456",
+            "--attachment",
+            "report.pdf",
+        ],
+        &["atla", "confluence", "blog", "comment", "add", "234567"],
+    ];
+
+    for args in commands {
+        let error = Cli::try_parse_from(args.iter().copied()).expect_err("body must be required");
+        assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument, "{args:?}");
+    }
+}
+
+#[test]
+fn space_create_and_update_require_semantic_inputs() {
+    for args in [
+        ["atla", "confluence", "space", "create", "Engineering"].as_slice(),
+        ["atla", "confluence", "space", "update", "ENG"].as_slice(),
+    ] {
+        let error = Cli::try_parse_from(args.iter().copied()).expect_err("input must be required");
+        assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument, "{args:?}");
+    }
 }
 
 #[test]
