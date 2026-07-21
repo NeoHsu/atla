@@ -105,6 +105,7 @@ dependencies = [
  "comfy-table",
  "dialoguer",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

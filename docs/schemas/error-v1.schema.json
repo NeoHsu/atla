@@ -11,7 +11,15 @@
       "required": ["kind", "message", "status", "retryable"],
       "properties": {
         "kind": {
-          "enum": ["usage", "auth", "not_found", "retryable", "ambiguous_mutation", "other"]
+          "enum": [
+            "usage",
+            "version_mismatch",
+            "auth",
+            "not_found",
+            "retryable",
+            "ambiguous_mutation",
+            "other"
+          ]
         },
         "message": { "type": "string" },
         "status": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },

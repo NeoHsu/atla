@@ -37,6 +37,12 @@ atla schema print operation-list-v1 --output json
 `schema print` emits the bundled schema itself and does not inject an output `schemaVersion` field
 into the schema document.
 
+`doctor-v1` includes the running `cliVersion` and optional `skillCompatibility`. With
+`--skill-version`, the nested object reports exact compatibility, the target version,
+`recommendedAction`, and a nullable `updateCommand`. A mismatch still emits this report on stdout,
+then exits `2` with a `version_mismatch` error object on stderr; no config, credential, or network
+check runs.
+
 ## Lists
 
 List/search objects retain their command-specific item key (`issues`, `results`, `projects`, and

@@ -6,7 +6,37 @@
   "required": ["schemaVersion", "healthy", "checks"],
   "properties": {
     "schemaVersion": { "const": 1 },
+    "cliVersion": { "type": "string" },
     "healthy": { "type": "boolean" },
+    "skillCompatibility": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": [
+            "cliVersion",
+            "skillVersion",
+            "compatible",
+            "recommendedAction",
+            "targetVersion",
+            "updateCommand"
+          ],
+          "properties": {
+            "cliVersion": { "type": "string" },
+            "skillVersion": { "type": "string" },
+            "compatible": { "type": "boolean" },
+            "recommendedAction": {
+              "enum": ["none", "update-skill", "update-cli"]
+            },
+            "targetVersion": { "type": "string" },
+            "updateCommand": {
+              "type": ["string", "null"]
+            }
+          },
+          "additionalProperties": true
+        }
+      ]
+    },
     "checks": {
       "type": "array",
       "items": {

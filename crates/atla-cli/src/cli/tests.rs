@@ -332,3 +332,26 @@ fn attachment_download_accepts_short_file_flag() {
         Some(std::path::Path::new("download.txt"))
     );
 }
+
+#[test]
+fn doctor_accepts_only_semver_skill_versions() -> Result<(), clap::Error> {
+    let cli = Cli::try_parse_from([
+        "atla",
+        "doctor",
+        "--skill-version",
+        "0.6.0",
+        "--output",
+        "json",
+    ])?;
+    let Command::Doctor(args) = cli.command else {
+        panic!("expected doctor command");
+    };
+    assert_eq!(args.skill_version, Some(semver::Version::new(0, 6, 0)));
+
+    let result = Cli::try_parse_from(["atla", "doctor", "--skill-version", "latest"]);
+    let Err(error) = result else {
+        panic!("non-semver skill version must fail");
+    };
+    assert_eq!(error.kind(), ErrorKind::ValueValidation);
+    Ok(())
+}

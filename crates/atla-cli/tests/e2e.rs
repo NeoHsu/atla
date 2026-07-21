@@ -332,6 +332,102 @@ async fn local_discovery_commands_emit_versioned_json_without_network() {
 }
 
 #[tokio::test]
+async fn doctor_accepts_matching_skill_version_without_network() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+    let output = atla(
+        &config,
+        &[
+            "doctor",
+            "--skill-version",
+            env!("CARGO_PKG_VERSION"),
+            "--output",
+            "json",
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("doctor compatibility JSON");
+    assert_eq!(report["cliVersion"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(report["skillCompatibility"]["compatible"], true);
+    assert_eq!(report["skillCompatibility"]["recommendedAction"], "none");
+    assert!(report["skillCompatibility"]["updateCommand"].is_null());
+    assert!(report["checks"].as_array().is_some_and(|checks| {
+        checks
+            .iter()
+            .any(|check| check["name"] == "skill-version" && check["status"] == "ok")
+    }));
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("received requests")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn doctor_fails_closed_with_actionable_version_mismatch() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+    std::fs::write(&config, "this is not valid TOML = [").expect("write invalid config");
+    let version_output = atla(&config, &["--version"]);
+    assert_eq!(
+        version_output.status.code(),
+        Some(0),
+        "{}",
+        stderr(&version_output)
+    );
+    assert!(stdout(&version_output).contains(env!("CARGO_PKG_VERSION")));
+
+    let current_skill_tag = format!("/tree/v{}", env!("CARGO_PKG_VERSION"));
+    for (skill_version, action, command_fragment) in [
+        ("0.0.0", "update-skill", current_skill_tag),
+        ("999.0.0", "update-cli", "--tag v999.0.0".to_owned()),
+    ] {
+        let output = atla(
+            &config,
+            &[
+                "doctor",
+                "--skill-version",
+                skill_version,
+                "--output",
+                "json",
+                "--network",
+            ],
+        );
+
+        assert_eq!(output.status.code(), Some(2), "{}", stderr(&output));
+        let report: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("mismatch doctor JSON");
+        assert_eq!(report["healthy"], false);
+        assert_eq!(report["skillCompatibility"]["compatible"], false);
+        assert_eq!(report["skillCompatibility"]["recommendedAction"], action);
+        assert!(
+            report["skillCompatibility"]["updateCommand"]
+                .as_str()
+                .is_some_and(|command| command.contains(&command_fragment))
+        );
+        assert_eq!(report["checks"].as_array().map(Vec::len), Some(1));
+        assert_eq!(report["checks"][0]["name"], "skill-version");
+
+        let error: serde_json::Value =
+            serde_json::from_str(stderr(&output).trim()).expect("mismatch error JSON");
+        assert_eq!(error["error"]["kind"], "version_mismatch");
+        assert_eq!(error["error"]["retryable"], false);
+    }
+
+    assert!(
+        server
+            .received_requests()
+            .await
+            .expect("received requests")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn explain_policy_reports_deny_allow_mode_and_global_read_only() {
     let server = MockServer::start().await;
     let (_dir, config) = setup(&server.uri()).await;

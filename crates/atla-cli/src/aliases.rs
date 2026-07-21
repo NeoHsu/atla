@@ -4,7 +4,11 @@ use atla_core::{AtlaConfig, ConfigStore};
 const MAX_ALIAS_EXPANSIONS: usize = 8;
 
 pub fn expand_args(args: Vec<String>) -> anyhow::Result<Vec<String>> {
-    if args.iter().any(|arg| arg == "-h" || arg == "--help") {
+    if args
+        .iter()
+        .any(|arg| matches!(arg.as_str(), "-h" | "--help" | "-V" | "--version"))
+        || is_skill_version_gate(&args)
+    {
         return Ok(args);
     }
 
@@ -44,6 +48,15 @@ fn expand_args_with_config(
     }
 
     anyhow::bail!("alias expansion exceeded {MAX_ALIAS_EXPANSIONS} steps")
+}
+
+fn is_skill_version_gate(args: &[String]) -> bool {
+    command_index(args).is_some_and(|index| {
+        args[index] == "doctor"
+            && args[index + 1..].iter().any(|argument| {
+                argument == "--skill-version" || argument.starts_with("--skill-version=")
+            })
+    })
 }
 
 fn command_index(args: &[String]) -> Option<usize> {
@@ -120,6 +133,28 @@ mod tests {
     #[test]
     fn command_index_basic() {
         assert_eq!(command_index(&args(&["atla", "jira", "list"])), Some(1));
+    }
+
+    #[test]
+    fn skill_version_gate_bypasses_config_backed_alias_expansion() {
+        assert!(is_skill_version_gate(&args(&[
+            "atla",
+            "--output",
+            "json",
+            "doctor",
+            "--skill-version",
+            "0.6.0",
+        ])));
+        assert!(is_skill_version_gate(&args(&[
+            "atla",
+            "doctor",
+            "--skill-version=0.6.0",
+        ])));
+        assert!(!is_skill_version_gate(&args(&[
+            "atla",
+            "doctor",
+            "--network",
+        ])));
     }
 
     #[test]

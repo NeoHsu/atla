@@ -103,7 +103,7 @@ atla confluence attachment view <ATTACHMENT_ID>
 atla confluence attachment upload <PAGE_ID> <FILE> --comment --minor-edit
 atla confluence attachment download <ATTACHMENT_ID> --save-to/-f
 atla confluence attachment delete <ATTACHMENT_ID> --purge --yes
-atla doctor --network
+atla doctor --network --skill-version
 atla explain-policy <OPERATION_ID>
 atla operation
 atla operation list

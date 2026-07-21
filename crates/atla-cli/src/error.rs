@@ -6,7 +6,7 @@
 //! | Code | Kind        | Meaning                                              |
 //! |------|-------------|------------------------------------------------------|
 //! | 1    | `other`     | Any other failure (4xx business errors, IO, bugs)    |
-//! | 2    | `usage`     | Invalid arguments (emitted by clap)                  |
+//! | 2    | `usage` / `version_mismatch` | Invalid arguments, policy, or CLI/skill mismatch |
 //! | 3    | `auth`      | Missing/invalid credentials or profile (401/403)     |
 //! | 4    | `not_found` | Resource does not exist (404)                        |
 //! | 5    | `retryable` | Transient: network failure, 429, or 5xx              |
@@ -24,6 +24,11 @@ pub struct AuthSetupError(pub String);
 #[derive(Debug, thiserror::Error)]
 #[error("{0}")]
 pub struct UsageError(pub String);
+
+/// Marker for a fail-closed CLI/skill compatibility mismatch.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub struct VersionMismatchError(pub String);
 
 pub struct Classification {
     pub exit_code: i32,
@@ -45,6 +50,9 @@ impl Classification {
 
 pub fn classify(err: &anyhow::Error) -> Classification {
     for cause in err.chain() {
+        if cause.downcast_ref::<VersionMismatchError>().is_some() {
+            return Classification::new(2, "version_mismatch");
+        }
         if cause.downcast_ref::<UsageError>().is_some() {
             return Classification::new(2, "usage");
         }
@@ -127,6 +135,15 @@ mod tests {
         let classification = classify(&err);
         assert_eq!(classification.exit_code, 2);
         assert_eq!(classification.kind, "usage");
+    }
+
+    #[test]
+    fn classifies_version_mismatches() {
+        let err = anyhow::Error::new(VersionMismatchError("update required".to_owned()));
+        let classification = classify(&err);
+        assert_eq!(classification.exit_code, 2);
+        assert_eq!(classification.kind, "version_mismatch");
+        assert!(!classification.retryable);
     }
 
     #[test]

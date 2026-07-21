@@ -5,6 +5,9 @@ pub struct DoctorArgs {
     /// Also test unauthenticated site reachability and cloud-ID discovery
     #[arg(long)]
     pub network: bool,
+    /// Exact atla-cli skill version to compare with this binary
+    #[arg(long, value_name = "VERSION")]
+    pub skill_version: Option<semver::Version>,
 }
 
 #[derive(Debug, Args)]

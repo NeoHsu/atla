@@ -22,6 +22,7 @@ clap_complete.workspace = true
 comfy-table.workspace = true
 dialoguer.workspace = true
 reqwest.workspace = true
+semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
