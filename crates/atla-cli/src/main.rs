@@ -132,31 +132,38 @@ async fn main() {
         exit_with(error, output, Some(operation));
     }
 
-    let result = match cli.command {
-        Command::Auth(command) => commands::auth::run(command, &cli.global).await,
-        Command::Config(command) => commands::config::run(command, &cli.global).await,
-        Command::Jira(command) => commands::jira::run(command, &cli.global).await,
-        Command::Confluence(command) => commands::confluence::run(command, &cli.global).await,
-        Command::Doctor(args) => commands::discovery::doctor(args, &cli.global).await,
-        Command::ExplainPolicy(args) => commands::discovery::explain_policy(args, &cli.global),
-        Command::Operation(command) => commands::discovery::operation(command, &cli.global),
-        Command::Schema(command) => commands::discovery::schema(command, &cli.global),
+    if let Err(err) = run_command(cli.command, &cli.global).await {
+        exit_with(err, output, Some(operation));
+    }
+}
+
+/// Dispatch one parsed command while keeping handler futures off the main
+/// thread's stack. Storing every handler future inline here overflows the
+/// smaller default stack used by Windows binaries.
+async fn run_command(command: Command, global: &cli::GlobalArgs) -> anyhow::Result<()> {
+    match command {
+        Command::Auth(command) => Box::pin(commands::auth::run(command, global)).await,
+        Command::Config(command) => Box::pin(commands::config::run(command, global)).await,
+        Command::Jira(command) => Box::pin(commands::jira::run(command, global)).await,
+        Command::Confluence(command) => Box::pin(commands::confluence::run(command, global)).await,
+        Command::Doctor(args) => Box::pin(commands::discovery::doctor(args, global)).await,
+        Command::ExplainPolicy(args) => commands::discovery::explain_policy(args, global),
+        Command::Operation(command) => commands::discovery::operation(command, global),
+        Command::Schema(command) => commands::discovery::schema(command, global),
         Command::Plan { command, .. } => match command.into_command() {
-            Command::Jira(command) => commands::jira::run(command, &cli.global).await,
-            Command::Confluence(command) => commands::confluence::run(command, &cli.global).await,
+            Command::Jira(command) => Box::pin(commands::jira::run(command, global)).await,
+            Command::Confluence(command) => {
+                Box::pin(commands::confluence::run(command, global)).await
+            }
             _ => unreachable!("plannable commands convert only to product commands"),
         },
-        Command::Apply { plan, yes } => commands::plan::apply(&plan, yes, &cli.global).await,
+        Command::Apply { plan, yes } => Box::pin(commands::plan::apply(&plan, yes, global)).await,
         Command::Completion { shell } => {
             let mut command = Cli::command();
             let name = command.get_name().to_owned();
             clap_complete::generate(shell, &mut command, name, &mut std::io::stdout());
             Ok(())
         }
-    };
-
-    if let Err(err) = result {
-        exit_with(err, output, Some(operation));
     }
 }
 
@@ -196,4 +203,22 @@ fn exit_with(
         eprintln!("Error: {err:?}");
     }
     std::process::exit(classification.exit_code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_dispatch_future_stays_small() {
+        let Cli { global, command } = Cli::try_parse_from(["atla", "schema", "list"])
+            .expect("representative command should parse");
+        let future = run_command(command, &global);
+
+        assert!(
+            std::mem::size_of_val(&future) <= 4 * 1024,
+            "command dispatch future grew to {} bytes; box handler futures to protect the Windows main stack",
+            std::mem::size_of_val(&future)
+        );
+    }
 }
