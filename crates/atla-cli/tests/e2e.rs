@@ -201,6 +201,40 @@ async fn missing_profile_exits_auth_code() {
     assert!(stderr(&output).contains("atla auth login --profile ghost"));
 }
 
+#[test]
+fn auth_status_without_a_profile_remains_machine_readable() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let config = directory.path().join("missing-config.toml");
+
+    let output = atla_with_stdin(&config, &["--output", "json", "auth", "status"], b"");
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    assert!(stderr(&output).is_empty());
+    let status: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("auth status JSON");
+    assert_eq!(status["schemaVersion"], 1);
+    assert_eq!(status["configured"], false);
+    assert_eq!(status["profile"], serde_json::Value::Null);
+    assert_eq!(status["token"], "missing");
+}
+
+#[tokio::test]
+async fn auth_status_with_a_profile_reports_configuration_and_token_source() {
+    let server = MockServer::start().await;
+    let (_directory, config) = setup(&server.uri()).await;
+
+    let output = atla(&config, &["--output", "json", "auth", "status"]);
+
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let status: serde_json::Value =
+        serde_json::from_str(&stdout(&output)).expect("auth status JSON");
+    assert_eq!(status["schemaVersion"], 1);
+    assert_eq!(status["configured"], true);
+    assert_eq!(status["profile"], "e2e");
+    assert_eq!(status["token"], "provided by environment");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn auth_discover_prints_cloud_id_and_product_endpoints() {
     let server = MockServer::start().await;
@@ -1041,6 +1075,45 @@ async fn json_dry_run_emits_versioned_operation_plan() {
     assert_eq!(plan["mutating"], true);
     assert_eq!(plan["requests"][0]["method"], "POST");
     assert_eq!(plan["requests"][0]["body"]["fields"]["summary"], "Planned");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn oversized_saved_plan_is_rejected_before_write() {
+    let server = MockServer::start().await;
+    let (directory, config) = setup(&server.uri()).await;
+    let body_path = directory.path().join("oversized-body.txt");
+    let plan_path = directory.path().join("oversized-plan.json");
+    std::fs::write(&body_path, vec![b'x'; 1024 * 1024 + 16 * 1024]).expect("write body");
+
+    let output = atla(
+        &config,
+        &[
+            "plan",
+            "confluence",
+            "page",
+            "create",
+            "--space-id",
+            "123",
+            "--title",
+            "Oversized",
+            "--body-file",
+            body_path.to_str().expect("body path"),
+            "--out",
+            plan_path.to_str().expect("plan path"),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(!plan_path.exists(), "oversized plan must not be written");
+    let error: serde_json::Value =
+        serde_json::from_str(&stderr(&output)).expect("structured usage error");
+    assert_eq!(error["error"]["kind"], "usage");
+    assert!(
+        error["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("maximum is 1048576"))
+    );
     assert!(server.received_requests().await.unwrap().is_empty());
 }
 

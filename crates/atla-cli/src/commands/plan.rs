@@ -14,8 +14,6 @@ use crate::error::UsageError;
 use crate::output;
 use crate::output::schema::{OperationPlan, PlannedRequest};
 
-const MAX_PLAN_BYTES: u64 = 1024 * 1024;
-
 pub async fn apply(path: &Path, yes: bool, global: &GlobalArgs) -> anyhow::Result<()> {
     if !yes {
         return usage("refusing to apply a mutation plan without --yes");
@@ -87,10 +85,11 @@ pub async fn apply(path: &Path, yes: bool, global: &GlobalArgs) -> anyhow::Resul
 fn load_and_verify(path: &Path) -> anyhow::Result<OperationPlan> {
     let metadata = std::fs::metadata(path)
         .with_context(|| format!("failed to inspect plan `{}`", path.display()))?;
-    if metadata.len() > MAX_PLAN_BYTES {
+    if metadata.len() > output::MAX_PLAN_BYTES {
         return usage(format!(
-            "plan is {} bytes; maximum is {MAX_PLAN_BYTES}",
-            metadata.len()
+            "plan is {} bytes; maximum is {}",
+            metadata.len(),
+            output::MAX_PLAN_BYTES
         ));
     }
     let bytes =

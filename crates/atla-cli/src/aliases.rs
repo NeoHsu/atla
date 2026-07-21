@@ -36,6 +36,13 @@ fn expand_args_with_config(
         args.splice(command_index..=command_index, expanded);
     }
 
+    let Some(command_index) = command_index(&args) else {
+        return Ok(args);
+    };
+    if !config.aliases.contains_key(&args[command_index]) {
+        return Ok(args);
+    }
+
     anyhow::bail!("alias expansion exceeded {MAX_ALIAS_EXPANSIONS} steps")
 }
 
@@ -343,6 +350,22 @@ mod tests {
         let expanded = expand_args_with_config(args(&["atla", "ls"]), &config).expect("expand");
 
         assert_eq!(expanded, args(&["atla", "jira", "project", "list"]));
+    }
+
+    #[test]
+    fn alias_chain_allows_exact_expansion_limit() {
+        let mut config = AtlaConfig::default();
+        for i in 1..8 {
+            config
+                .aliases
+                .insert(format!("a{i}"), format!("a{}", i + 1));
+        }
+        config
+            .aliases
+            .insert("a8".to_owned(), "operation list".to_owned());
+
+        let expanded = expand_args_with_config(args(&["atla", "a1"]), &config).expect("expand");
+        assert_eq!(expanded, args(&["atla", "operation", "list"]));
     }
 
     #[test]

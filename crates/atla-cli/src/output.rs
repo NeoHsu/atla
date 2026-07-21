@@ -11,6 +11,8 @@ use crate::error::UsageError;
 
 pub mod schema;
 
+pub(crate) const MAX_PLAN_BYTES: u64 = 1024 * 1024;
+
 /// Zero means unlimited. The CLI configures this once before dispatch.
 static MAX_OUTPUT_BYTES: AtomicU64 = AtomicU64::new(0);
 static EXECUTION_CONTEXT: OnceLock<Mutex<ExecutionContext>> = OnceLock::new();
@@ -225,6 +227,12 @@ pub fn print_operation_plan(
             ))));
         }
         let rendered = serde_json::to_string_pretty(&plan)?;
+        let plan_bytes = rendered.len() as u64;
+        if plan_bytes > MAX_PLAN_BYTES {
+            return Err(anyhow::Error::new(UsageError(format!(
+                "plan is {plan_bytes} bytes; maximum is {MAX_PLAN_BYTES}"
+            ))));
+        }
         ensure_within_byte_budget(&rendered)?;
         atla_core::secure_file::atomic_write(&output.path, rendered.as_bytes())?;
         print_json(&serde_json::json!({

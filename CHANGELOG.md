@@ -39,6 +39,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Required comment bodies and Confluence space inputs during argument parsing so invalid commands
+  fail before credentials, network access, or attachment uploads.
+- Rejected saved plans larger than 1 MiB before writing them, kept unauthenticated `auth status`
+  JSON machine-readable, and allowed exactly eight chained alias expansions as documented.
 - Normalized upstream Confluence OpenAPI regressions so scheduled spec refreshes remain buildable,
   while keeping unsupported generated multipart upload operations excluded.
 

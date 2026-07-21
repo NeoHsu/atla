@@ -16,6 +16,7 @@ use crate::output;
 
 #[derive(serde::Serialize)]
 struct AuthStatusOutput<'a> {
+    configured: bool,
     profile: &'a str,
     instance: &'a str,
     email: &'a str,
@@ -167,12 +168,50 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
             let Some((profile_name, profile)) =
                 atla_config.active_profile(config::active_profile(global))
             else {
-                println!("Not logged in");
+                let token = if env_token().is_some() {
+                    "provided by environment"
+                } else {
+                    "missing"
+                };
+                let status = serde_json::json!({
+                    "configured": false,
+                    "profile": serde_json::Value::Null,
+                    "instance": serde_json::Value::Null,
+                    "email": serde_json::Value::Null,
+                    "credential_store": serde_json::Value::Null,
+                    "api_target": serde_json::Value::Null,
+                    "cloud_id": serde_json::Value::Null,
+                    "policy_mode": serde_json::Value::Null,
+                    "token": token,
+                });
+                match global.output {
+                    Some(OutputFormat::Json) => output::print_json(&status)?,
+                    Some(
+                        format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys),
+                    ) => {
+                        output::print_records(
+                            format,
+                            &status,
+                            Vec::new(),
+                            &["configured", "profile", "instance", "api_target", "token"],
+                            vec![vec![
+                                "false".to_owned(),
+                                "<none>".to_owned(),
+                                "<none>".to_owned(),
+                                "<none>".to_owned(),
+                                token.to_owned(),
+                            ]],
+                            None,
+                        )?;
+                    }
+                    None => println!("Not logged in"),
+                }
                 return Ok(());
             };
             let credential = profile.credential_ref(profile_name);
             let token_status = token_status(profile.credential_store, &credential);
             let status = AuthStatusOutput {
+                configured: true,
                 profile: profile_name,
                 instance: &profile.instance,
                 email: &profile.email,
@@ -195,6 +234,7 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                         &status,
                         vec![status.profile.to_owned()],
                         &[
+                            "configured",
                             "profile",
                             "instance",
                             "email",
@@ -205,6 +245,7 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                             "token",
                         ],
                         vec![vec![
+                            status.configured.to_string(),
                             status.profile.to_owned(),
                             status.instance.to_owned(),
                             status.email.to_owned(),
@@ -218,6 +259,7 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                     )?
                 }
                 None => {
+                    println!("Configured: {}", status.configured);
                     println!("Profile: {}", status.profile);
                     println!("Instance: {}", status.instance);
                     println!("Email: {}", status.email);
