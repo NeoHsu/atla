@@ -189,7 +189,9 @@ Aliases expand to full atla commands before argument parsing. They let you creat
 
 ### Expansion order
 
-Alias expansion happens **once** at the top level before command parsing. Aliases cannot reference other aliases (no recursive expansion).
+Aliases expand at the top-level command position before argument parsing and may reference other
+aliases. A chain may perform at most eight expansions; cycles or a ninth unresolved alias fail
+instead of recursing indefinitely.
 
 ### Creating aliases
 

@@ -272,11 +272,11 @@ mismatch is the exception: it exits `2` with `kind=version_mismatch`, emits stru
 
 | Command | Args | Flags | Description | Example |
 | --- | --- | --- | --- | --- |
-| `jira project list` | none | `--query`, `--limit`, `--page-token` | List projects, optionally filtered by name/key text. | `atla jira project list --query platform --limit 25` |
+| `jira project list` | none | `--query`, `--limit`, `--page-token`, `--all` | List projects, optionally filtered by name/key text. | `atla jira project list --query platform --limit 25` |
 | `jira project view` | `<KEY>` | none | Show project metadata. | `atla jira project view PROJ` |
 | `jira project issue-types` | `<KEY>` | none | List issue types valid for project create flows. | `atla jira project issue-types PROJ` |
-| `jira search` | `<JQL>` | `--limit`, `--page-token`, `--fields` | Run JQL search directly. | `atla jira search 'project = PROJ ORDER BY updated DESC' --fields summary,status` |
-| `jira issue list` | none | `--project`, `--status`, `--type`, `--assignee`, `--jql`, `--limit`, `--page-token`, `--fields` | List issues by filters or custom JQL. | `atla jira issue list --project PROJ --status 'In Progress'` |
+| `jira search` | `<JQL>` | `--limit`, `--page-token`, `--fields`, `--all` | Run JQL search directly. | `atla jira search 'project = PROJ ORDER BY updated DESC' --fields summary,status` |
+| `jira issue list` | none | `--project`, `--status`, `--type`, `--assignee`, `--jql`, `--limit`, `--page-token`, `--fields`, `--all` | List issues by filters or custom JQL. | `atla jira issue list --project PROJ --status 'In Progress'` |
 | `jira issue create` | none | `--project`, `--type`, `--summary`, `--description`, `--description-file`, `--field`, `--labels` | Create an issue. | `atla jira issue create --project PROJ --type Task --summary 'Fix login'` |
 | `jira issue update` | `<KEY>` | `--summary`, `--description`, `--description-file`, `--field`, `--labels` | Update an issue. Alias: `edit`. | `atla jira issue update PROJ-123 --labels add:urgent` |
 | `jira issue fields` | none | `--project`, `--type`, `--required-only` | List create-meta fields (ID, type, allowed values) for `issue create`. | `atla jira issue fields --project PROJ --type Bug --required-only` |
@@ -285,7 +285,7 @@ mismatch is the exception: it exits `2` with `kind=version_mismatch`, emits stru
 | `jira issue assign` | `<KEY>` | `--to`, `--account-id`, `--unassign` | Assign or clear assignee. | `atla jira issue assign PROJ-123 --to me` |
 | `jira issue transition` | `<KEY>` | `--to`, `--field` | Apply workflow transition; can prompt unless `--no-input`. | `atla jira issue transition PROJ-123 --to Done` |
 | `jira issue comment add` | `<KEY>` | `BODY`, `--body`, `--body-file`, `--attachment`, `--attachment-mode` | Add a comment; exactly one body source is required. | `atla jira issue comment add PROJ-123 --body 'Ready for review'` |
-| `jira issue comment list` | `<KEY>` | `--limit`, `--page-token` | List comments. | `atla jira issue comment list PROJ-123 --limit 10` |
+| `jira issue comment list` | `<KEY>` | `--limit`, `--page-token`, `--all` | List comments. | `atla jira issue comment list PROJ-123 --limit 10` |
 | `jira issue comment update` | `<KEY> <COMMENT_ID>` | `--body`, `--body-file` | Update a comment; exactly one body source is required. | `atla jira issue comment update PROJ-123 10001 --body 'Merged'` |
 | `jira issue comment delete` | `<KEY> <COMMENT_ID>` | `--yes` | Delete a comment. | `atla jira issue comment delete PROJ-123 10001 --yes` |
 | `jira issue attachment upload` | `<KEY>` | `--file` | Upload attachment. | `atla jira issue attachment upload PROJ-123 --file ./bug.png` |
@@ -298,55 +298,55 @@ mismatch is the exception: it exits `2` with `kind=version_mismatch`, emits stru
 | `jira issue link github-links` | `<KEY>` | none | List GitHub PRs from the Jira development panel. | `atla jira issue link github-links PROJ-123` |
 | `jira issue link github-commits` | `<KEY>` | none | List GitHub commits from the Jira development panel. | `atla jira issue link github-commits PROJ-123` |
 | `jira issue worklog add` | `<KEY>` | `--time`, `--comment`, `--started` | Add time spent entry. | `atla jira issue worklog add PROJ-123 --time 45m --comment 'Debugged callback'` |
-| `jira issue worklog list` | `<KEY>` | `--limit`, `--page-token` | List worklogs. | `atla jira issue worklog list PROJ-123 --limit 10` |
-| `jira board list` | none | `--project`, `--type`, `--name`, `--limit`, `--page-token` | List Jira Software boards. | `atla jira board list --project PROJ --type scrum` |
+| `jira issue worklog list` | `<KEY>` | `--limit`, `--page-token`, `--all` | List worklogs. | `atla jira issue worklog list PROJ-123 --limit 10` |
+| `jira board list` | none | `--project`, `--type`, `--name`, `--limit`, `--page-token`, `--all` | List Jira Software boards. | `atla jira board list --project PROJ --type scrum` |
 | `jira board view` | `<ID>` | none | Show one board. | `atla jira board view 84` |
-| `jira sprint list` | none | `--board`, `--state`, `--limit`, `--page-token` | List sprints for a board. | `atla jira sprint list --board 84 --state active` |
-| `jira sprint active` | none | `--board`, `--limit`, `--page-token` | Show active sprints for a board. | `atla jira sprint active --board 84` |
+| `jira sprint list` | none | `--board`, `--state`, `--limit`, `--page-token`, `--all` | List sprints for a board. | `atla jira sprint list --board 84 --state active` |
+| `jira sprint active` | none | `--board`, `--limit`, `--page-token`, `--all` | Show active sprints for a board. | `atla jira sprint active --board 84` |
 | `jira sprint view` | `<ID>` | none | Show one sprint. | `atla jira sprint view 221` |
 | `jira sprint create` | none | `--board`, `--name`, `--start`, `--end`, `--goal` | Create a sprint. | `atla jira sprint create --board 84 --name 'Sprint 42'` |
 | `jira sprint start` | `<ID>` | `--start`, `--end` | Start a sprint. | `atla jira sprint start 221 --start 2026-05-20 --end 2026-06-02` |
 | `jira sprint close` | `<ID>` | none | Close a sprint. | `atla jira sprint close 221` |
 | `jira sprint add` | `<ID>` | `--issues` / `--issue` | Add issues to sprint. | `atla jira sprint add 221 --issues PROJ-123,PROJ-124` |
 | `jira sprint remove` | `<ID>` | `--issues` / `--issue` | Remove issues from sprint back to backlog. | `atla jira sprint remove 221 --issues PROJ-124` |
-| `jira sprint issues` | `<ID>` | `--limit`, `--page-token`, `--fields` | List issues in a sprint. | `atla jira sprint issues 221 --fields summary,status,assignee` |
+| `jira sprint issues` | `<ID>` | `--limit`, `--page-token`, `--fields`, `--all` | List issues in a sprint. | `atla jira sprint issues 221 --fields summary,status,assignee` |
 
 ## 5. Confluence Commands
 
 | Command | Args | Flags | Description | Example |
 | --- | --- | --- | --- | --- |
-| `confluence space list` | none | `--key`, `--limit`, `--page-token` | List spaces. | `atla confluence space list --key ENG --limit 10` |
+| `confluence space list` | none | `--key`, `--limit`, `--page-token`, `--all` | List spaces. | `atla confluence space list --key ENG --limit 10` |
 | `confluence space view` | `<KEY>` | none | Show one space; JSON includes optional `spaceOwnerId`. | `atla confluence space view ENG --output json` |
 | `confluence space create` | `<NAME>` | `--key`, `--alias`, `--description`, `--description-file`, `--private` | Create a space; exactly one of `--key`/`--alias` is required. | `atla confluence space create 'Engineering Docs' --key ENG` |
 | `confluence space update` | `<KEY>` | `--name`, `--description`, `--description-file` | Update space metadata; at least one update field is required. | `atla confluence space update ENG --name 'Engineering Knowledge Base'` |
 | `confluence space delete` | `<KEY>` | `--yes` | Delete a space. | `atla confluence space delete ENG --yes` |
-| `confluence page list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List pages. | `atla confluence page list --space ENG --title Runbook` |
+| `confluence page list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token`, `--all` | List pages. | `atla confluence page list --space ENG --title Runbook` |
 | `confluence page view` | `<ID>` | `--web`, `--format`, `--metadata-only`, `--fields`, `--max-chars`, `--preserve-table-options`, `--with-attachments` | Metadata is the bounded default and includes `bodyCommand`; `--format` fetches the body. JSON projection uses `--fields`; `--max-chars` bounds body text. | `atla confluence page view 123456 --format markdown --max-chars 50000` |
-| `confluence page children` | `<ID>` | `--depth`, `--limit`, `--page-token` | List page children or descendants. | `atla confluence page children 123456 --depth 2` |
+| `confluence page children` | `<ID>` | `--depth`, `--limit`, `--page-token`, `--all` | List page children or descendants. | `atla confluence page children 123456 --depth 2` |
 | `confluence page copy` | `<SOURCE_ID>` | `--title`, `-s/--space`, `--space-id`, `--parent`, `--root-level` | Copy a page. | `atla confluence page copy 123456 --title 'Template Copy' --space ENG` |
 | `confluence page create` | none | `-s/--space`, `--space-id`, `--title`, `--parent`, `--root-level`, `--body`, `--body-file`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--draft`, `--private` | Create a page. | `atla confluence page create --space ENG --title 'Checklist' --body-file docs/checklist.md --representation markdown` |
 | `confluence page update` | `<ID>` | `--title`, `--parent`, `--body`, `--body-file`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--version`, `--message`, `--draft` | Update page title/body/version. | `atla confluence page update 123456 --title 'Checklist v2'` |
 | `confluence page delete` | `<ID>` | `--purge`, `--draft`, `--yes` | Delete page. | `atla confluence page delete 123456 --yes` |
 | `confluence page move` | `<ID>` | `--parent` | Move page under a new parent. | `atla confluence page move 123456 --parent 654321` |
-| `confluence page label list` | `<PAGE_ID>` | `--prefix`, `--limit`, `--page-token` | List page labels. | `atla confluence page label list 123456 --limit 20` |
+| `confluence page label list` | `<PAGE_ID>` | `--prefix`, `--limit`, `--page-token`, `--all` | List page labels. | `atla confluence page label list 123456 --limit 20` |
 | `confluence page label add` | `<PAGE_ID> LABEL...` | none | Add page labels. | `atla confluence page label add 123456 runbook urgent` |
 | `confluence page label remove` | `<PAGE_ID> <LABEL>` | `--yes` | Remove page label. | `atla confluence page label remove 123456 urgent --yes` |
-| `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
+| `confluence page comment list` | `<PAGE_ID>` | `--limit`, `--page-token`, `--all` | List page comments. | `atla confluence page comment list 123456 --limit 10` |
 | `confluence page comment add` | `<PAGE_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation`, `--numbered-table-rows`, `--mention`, `--resolve-mentions`, `--attachment`, `--attachment-mode` | Add page comment; exactly one body source is required. | `atla confluence page comment add 123456 'Looks good'` |
 | `confluence page comment delete` | `<PAGE_ID> <COMMENT_ID>` | `--yes` | Delete page comment. | `atla confluence page comment delete 123456 78910 --yes` |
-| `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
+| `confluence blog list` | none | `-s/--space`, `--space-id`, `--title`, `--limit`, `--page-token`, `--all` | List blog posts. | `atla confluence blog list --space ENG --limit 10` |
 | `confluence blog view` | `<ID>` | `--format`, `--metadata-only`, `--fields`, `--max-chars` | Metadata is the bounded default; body views support JSON projection and truncation. | `atla confluence blog view 234567 --format markdown --max-chars 50000` |
 | `confluence blog create` | none | `-s/--space`, `--space-id`, `--title`, `--body`, `--body-file`, `--representation`, `--draft`, `--private` | Create a blog post. | `atla confluence blog create --space ENG --title 'Release Notes' --body-file docs/release.md --representation markdown` |
 | `confluence blog update` | `<ID>` | `--title`, `--body`, `--body-file`, `--representation`, `--version`, `--message`, `--draft` | Update a blog post. | `atla confluence blog update 234567 --message 'Add known issues'` |
 | `confluence blog delete` | `<ID>` | `--purge`, `--draft`, `--yes` | Delete a blog post. | `atla confluence blog delete 234567 --yes` |
-| `confluence blog label list` | `<BLOG_ID>` | `--prefix`, `--limit`, `--page-token` | List blog labels. | `atla confluence blog label list 234567 --limit 20` |
+| `confluence blog label list` | `<BLOG_ID>` | `--prefix`, `--limit`, `--page-token`, `--all` | List blog labels. | `atla confluence blog label list 234567 --limit 20` |
 | `confluence blog label add` | `<BLOG_ID> LABEL...` | none | Add blog labels. | `atla confluence blog label add 234567 release-notes engineering` |
 | `confluence blog label remove` | `<BLOG_ID> <LABEL>` | `--yes` | Remove blog label. | `atla confluence blog label remove 234567 engineering --yes` |
-| `confluence blog comment list` | `<BLOG_ID>` | `--limit`, `--page-token` | List blog comments. | `atla confluence blog comment list 234567 --limit 10` |
+| `confluence blog comment list` | `<BLOG_ID>` | `--limit`, `--page-token`, `--all` | List blog comments. | `atla confluence blog comment list 234567 --limit 10` |
 | `confluence blog comment add` | `<BLOG_ID>` | `BODY`, `--body`, `--body-file`, `--parent`, `--representation` | Add blog comment; exactly one body source is required. | `atla confluence blog comment add 234567 'Ship after QA sign-off'` |
 | `confluence blog comment delete` | `<BLOG_ID> <COMMENT_ID>` | `--yes` | Delete blog comment. | `atla confluence blog comment delete 234567 78910 --yes` |
-| `confluence search` | `<CQL>` | `--limit`, `--page-token` | Run CQL search. | `atla confluence search 'type = page AND space = ENG' --limit 25` |
-| `confluence attachment list` | `<PAGE_ID>` | `--filename`, `--limit`, `--page-token` | List page attachments. | `atla confluence attachment list 123456 --filename diagram` |
+| `confluence search` | `<CQL>` | `--limit`, `--page-token`, `--all` | Run CQL search. | `atla confluence search 'type = page AND space = ENG' --limit 25` |
+| `confluence attachment list` | `<PAGE_ID>` | `--filename`, `--limit`, `--page-token`, `--all` | List page attachments. | `atla confluence attachment list 123456 --filename diagram` |
 | `confluence attachment view` | `<ATTACHMENT_ID>` | none | Show attachment metadata. | `atla confluence attachment view 987654` |
 | `confluence attachment upload` | `<PAGE_ID> <FILE>` | `--comment`, `--minor-edit` | Upload attachment to page. | `atla confluence attachment upload 123456 ./diagram.png --minor-edit` |
 | `confluence attachment download` | `<ATTACHMENT_ID>` | `--save-to`/`-f` | Download attachment. | `atla confluence attachment download 987654 --save-to ./downloads/diagram.png` |

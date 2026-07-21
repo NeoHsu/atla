@@ -31,6 +31,7 @@ In JSON output, pagination metadata is included alongside the records:
 
 ```json
 {
+  "schemaVersion": 1,
   "issues": [],
   "pagination": {
     "isLast": false,
@@ -73,7 +74,7 @@ and `jira sprint issues`.
 **Syntax**
 
 ```bash
-atla jira project list [--query TEXT] [--limit N=50] [--page-token TOKEN]
+atla jira project list [--query TEXT] [--limit N=50] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -117,7 +118,7 @@ atla jira project issue-types PROJ
 **Syntax**
 
 ```bash
-atla jira search <JQL> [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
+atla jira search <JQL> [--limit N=50] [--page-token TOKEN] [--fields FIELDS] [--all]
 ```
 
 **Example**
@@ -133,7 +134,7 @@ atla jira search 'project = PROJ AND statusCategory != Done ORDER BY updated DES
 **Syntax**
 
 ```bash
-atla jira issue list [--project KEY] [--status STATUS] [--type TYPE] [--assignee USER]                      [--jql JQL] [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
+atla jira issue list [--project KEY] [--status STATUS] [--type TYPE] [--assignee USER]                      [--jql JQL] [--limit N=50] [--page-token TOKEN] [--fields FIELDS] [--all]
 ```
 
 **Example**
@@ -266,7 +267,7 @@ When `--attachment` is used, `atla` uploads each file to the issue first, then a
 **Syntax**
 
 ```bash
-atla jira issue comment list <KEY> [--limit N=25] [--page-token TOKEN]
+atla jira issue comment list <KEY> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -533,7 +534,7 @@ atla jira issue worklog add PROJ-123 --time 1h30m   --comment 'Investigated SSO 
 **Syntax**
 
 ```bash
-atla jira issue worklog list <KEY> [--limit N=25] [--page-token TOKEN]
+atla jira issue worklog list <KEY> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -549,7 +550,7 @@ atla jira issue worklog list PROJ-123 --limit 10
 **Syntax**
 
 ```bash
-atla jira board list [--project KEY] [--type TYPE] [--name NAME] [--limit N=50] [--page-token TOKEN]
+atla jira board list [--project KEY] [--type TYPE] [--name NAME] [--limit N=50] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -579,7 +580,7 @@ atla jira board view 84
 **Syntax**
 
 ```bash
-atla jira sprint list --board ID [--state STATE] [--limit N=50] [--page-token TOKEN]
+atla jira sprint list --board ID [--state STATE] [--limit N=50] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -593,7 +594,7 @@ atla jira sprint list --board 84 --state active --limit 10
 **Syntax**
 
 ```bash
-atla jira sprint active --board ID [--limit N=50] [--page-token TOKEN]
+atla jira sprint active --board ID [--limit N=50] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -695,7 +696,7 @@ atla jira sprint remove 221 --issues PROJ-130
 **Syntax**
 
 ```bash
-atla jira sprint issues <ID> [--limit N=50] [--page-token TOKEN] [--fields FIELDS]
+atla jira sprint issues <ID> [--limit N=50] [--page-token TOKEN] [--fields FIELDS] [--all]
 ```
 
 **Example**

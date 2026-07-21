@@ -31,6 +31,7 @@ In JSON output, pagination metadata is included alongside the records:
 
 ```json
 {
+  "schemaVersion": 1,
   "results": [],
   "pagination": {
     "isLast": false,
@@ -74,7 +75,7 @@ and `confluence search`.
 **Syntax**
 
 ```bash
-atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN]
+atla confluence space list [--key KEY] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -155,7 +156,7 @@ atla confluence space delete ENGOPS --yes
 **Syntax**
 
 ```bash
-atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
+atla confluence page list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -205,7 +206,7 @@ output flags.
 **Syntax**
 
 ```bash
-atla confluence page children <ID> [--depth N] [--limit N=25] [--page-token TOKEN]
+atla confluence page children <ID> [--depth N] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -330,7 +331,7 @@ atla confluence page move 123456 --parent 654321
 **Syntax**
 
 ```bash
-atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
+atla confluence page label list <PAGE_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -374,7 +375,7 @@ atla confluence page label remove 123456 urgent --yes
 **Syntax**
 
 ```bash
-atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN]
+atla confluence page comment list <PAGE_ID> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -427,7 +428,7 @@ atla confluence page comment delete 123456 78910 --yes
 **Syntax**
 
 ```bash
-atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN]
+atla confluence blog list [-s SPACE | --space-id ID] [--title TEXT] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -516,7 +517,7 @@ its space. Draft deletion uses `--draft` and is permanent.
 **Syntax**
 
 ```bash
-atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN]
+atla confluence blog label list <BLOG_ID> [--prefix PREFIX] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -560,7 +561,7 @@ atla confluence blog label remove 234567 engineering --yes
 **Syntax**
 
 ```bash
-atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN]
+atla confluence blog comment list <BLOG_ID> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -606,7 +607,7 @@ atla confluence blog comment delete 234567 78910 --yes
 **Syntax**
 
 ```bash
-atla confluence search <CQL> [--limit N=25] [--page-token TOKEN]
+atla confluence search <CQL> [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**
@@ -622,7 +623,7 @@ atla confluence search 'type = page AND space = ENG AND title ~ "Runbook"' --lim
 **Syntax**
 
 ```bash
-atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25] [--page-token TOKEN]
+atla confluence attachment list <PAGE_ID> [--filename NAME] [--limit N=25] [--page-token TOKEN] [--all]
 ```
 
 **Example**

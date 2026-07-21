@@ -143,9 +143,11 @@ back to the repo checkout.
 
 | Product | Resource | Commands |
 | --- | --- | --- |
-| Core | Auth | `login`, `logout`, `status`, `switch` |
+| Core | Auth | `login`, `discover`, `logout`, `status`, `switch` |
 | Core | Config | `set`, `get`, `list` |
 | Core | Discovery | `doctor`, `explain-policy`, `operation list`, `schema list`, `schema print` |
+| Core | Saved plans | `plan jira`, `plan confluence`, `apply` |
+| Core | Shell integration | `completion` |
 | Jira | Projects | `list`, `view`, `issue-types` |
 | Jira | Search | JQL search with table, JSON, CSV, and key output |
 | Jira | Issues | `list`, `create`, `view`, `update`, `edit`, `delete` |
@@ -160,7 +162,7 @@ back to the repo checkout.
 | Jira | Sprints | `sprint list`, `sprint active`, `sprint view`, `sprint create`, `sprint start`, `sprint close`, `sprint add`, `sprint remove`, `sprint issues` |
 | Confluence | Spaces | `list`, `view`, `create`, `update`, `delete` |
 | Confluence | Pages | `list`, `view`, `create`, `update`, `move`, `delete`, `children`, `copy` |
-| Confluence | Page content | Storage, wiki, Atlas Doc Format input; storage, ADF, markdown view output |
+| Confluence | Page content | Storage, wiki, Atlas Doc Format, and Markdown input; storage, ADF, and Markdown view output |
 | Confluence | Page labels | `label list`, `label add`, `label remove` |
 | Confluence | Page comments | `comment add`, `comment list`, `comment delete` |
 | Confluence | Blogs | `list`, `view`, `create`, `update`, `delete` |

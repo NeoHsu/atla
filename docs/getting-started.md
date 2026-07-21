@@ -18,16 +18,26 @@ Key features:
 
 ## Installation
 
-### Installer script (macOS / Linux)
+### Verified installer script (macOS / Linux)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/NeoHsu/atla/releases/latest/download/atla-installer.sh | sh
+base=https://github.com/NeoHsu/atla/releases/latest/download
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/atla-installer.sh"
+curl --proto '=https' --tlsv1.2 -LsSfO "$base/atla-installer.sh.sha256"
+shasum -a 256 -c atla-installer.sh.sha256
+sh atla-installer.sh
 ```
 
-### Windows (PowerShell)
+### Verified Windows installer (PowerShell)
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/NeoHsu/atla/releases/latest/download/atla-installer.ps1 | iex"
+$base = "https://github.com/NeoHsu/atla/releases/latest/download"
+Invoke-WebRequest "$base/atla-installer.ps1" -OutFile atla-installer.ps1
+Invoke-WebRequest "$base/atla-installer.ps1.sha256" -OutFile atla-installer.ps1.sha256
+$expected = ((Get-Content -Raw atla-installer.ps1.sha256).Trim() -split '\s+')[0]
+$actual = (Get-FileHash -Algorithm SHA256 atla-installer.ps1).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw "installer checksum verification failed" }
+& .\atla-installer.ps1
 ```
 
 ### mise
@@ -117,13 +127,13 @@ Add `--network` only when you also want to call the unauthenticated tenant-info 
 ### 3. Set a default Jira project
 
 ```bash
-atla config set profiles.work.default-project PROJ
+atla config set default-project PROJ
 ```
 
 ### 4. Set a default Confluence space
 
 ```bash
-atla config set profiles.work.default-space DEV
+atla config set default-space DEV
 ```
 
 ### 5. Install the bundled agent skill

@@ -1,7 +1,7 @@
-//! Doc-drift protection: every runnable `atla` example in docs/ and skills/
-//! must parse against the real clap definition, and the full CLI surface is
-//! snapshotted to docs/cli-surface.txt so interface changes fail CI until the
-//! docs and skill references are updated (see CLAUDE.md checklist).
+//! Doc-drift protection: every runnable `atla` example in current-contract
+//! user, maintainer, spec, ADR, and skill Markdown must parse against the real
+//! clap definition. Exact Jira/Confluence references and the full CLI surface
+//! are also checked so interface changes fail CI until docs stay synchronized.
 
 use std::path::{Path, PathBuf};
 
@@ -16,21 +16,37 @@ fn repo_root() -> PathBuf {
         .expect("repo root")
 }
 
-fn doc_files() -> Vec<PathBuf> {
-    let root = repo_root();
-    let mut files = vec![root.join("README.md")];
-    for dir in ["docs", "skills/atla-cli", "skills/atla-cli/references"] {
-        let Ok(entries) = std::fs::read_dir(root.join(dir)) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().is_some_and(|ext| ext == "md") {
-                files.push(path);
-            }
+fn collect_markdown_files(directory: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_markdown_files(&path, files);
+        } else if path.extension().is_some_and(|ext| ext == "md") {
+            files.push(path);
         }
     }
+}
+
+fn doc_files() -> Vec<PathBuf> {
+    let root = repo_root();
+    let mut files = vec![
+        root.join("README.md"),
+        root.join("CLAUDE.md"),
+        root.join("CONTRIBUTING.md"),
+        root.join("specs/README.md"),
+        root.join("specs/PATCHES.md"),
+        root.join("specs/improvement-roadmap.md"),
+    ];
+    // Design proposals under specs/ may intentionally describe future CLI syntax.
+    // Operational spec docs, maintainer docs, ADRs, and runtime references are contracts.
+    for directory in ["docs", "skills/atla-cli"] {
+        collect_markdown_files(&root.join(directory), &mut files);
+    }
     files.sort();
+    files.dedup();
     files
 }
 
@@ -277,7 +293,10 @@ fn fenced_commands(content: &str) -> Vec<(usize, String)> {
     commands
 }
 
-fn documented_command<'a>(root: &'a clap::Command, line: &str) -> Option<&'a clap::Command> {
+fn documented_command_and_path<'a>(
+    root: &'a clap::Command,
+    line: &str,
+) -> Option<(&'a clap::Command, String)> {
     let tokens = shell_lex(line)?;
     if tokens.first().map(String::as_str) != Some("atla")
         || tokens.get(1).is_none_or(|token| token.starts_with('-'))
@@ -286,7 +305,7 @@ fn documented_command<'a>(root: &'a clap::Command, line: &str) -> Option<&'a cla
     }
 
     let mut command = root;
-    let mut descended = false;
+    let mut path = vec![root.get_name().to_owned()];
     for token in &tokens[1..] {
         let token = token.trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | '<' | '>'));
         let Some(subcommand) = command.get_subcommands().find(|subcommand| {
@@ -295,10 +314,51 @@ fn documented_command<'a>(root: &'a clap::Command, line: &str) -> Option<&'a cla
         }) else {
             break;
         };
+        path.push(subcommand.get_name().to_owned());
         command = subcommand;
-        descended = true;
     }
-    descended.then_some(command)
+    (path.len() > 1).then(|| (command, path.join(" ")))
+}
+
+fn documented_command<'a>(root: &'a clap::Command, line: &str) -> Option<&'a clap::Command> {
+    documented_command_and_path(root, line).map(|(command, _)| command)
+}
+
+fn documented_command_path(root: &clap::Command, line: &str) -> Option<String> {
+    documented_command_and_path(root, line).map(|(_, path)| path)
+}
+
+fn leaf_command_paths(
+    command: &clap::Command,
+    path: &str,
+    paths: &mut std::collections::BTreeSet<String>,
+) {
+    let mut has_subcommands = false;
+    for subcommand in command
+        .get_subcommands()
+        .filter(|subcommand| subcommand.get_name() != "help")
+    {
+        has_subcommands = true;
+        let subcommand_path = format!("{path} {}", subcommand.get_name());
+        leaf_command_paths(subcommand, &subcommand_path, paths);
+    }
+    if !has_subcommands {
+        paths.insert(path.to_owned());
+    }
+}
+
+fn product_leaf_command_paths(
+    root: &clap::Command,
+    product: &str,
+) -> std::collections::BTreeSet<String> {
+    let mut paths = std::collections::BTreeSet::new();
+    if let Some(command) = root
+        .get_subcommands()
+        .find(|command| command.get_name() == product)
+    {
+        leaf_command_paths(command, &format!("atla {product}"), &mut paths);
+    }
+    paths
 }
 
 fn documented_flags(line: &str) -> Vec<String> {
@@ -312,27 +372,28 @@ fn documented_flags(line: &str) -> Vec<String> {
     shell_lex(line)
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|token| {
+        .flat_map(|token| {
             let token = token
                 .trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | '<' | '>' | ',' | '|'));
-            if token.starts_with("--") {
-                Some(
-                    token
-                        .chars()
-                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
-                        .collect(),
-                )
-            } else if token.starts_with('-')
-                && token.len() == 2
-                && token
-                    .chars()
-                    .nth(1)
-                    .is_some_and(|c| c.is_ascii_alphabetic())
-            {
-                Some(token.to_owned())
-            } else {
-                None
-            }
+            token
+                .split('/')
+                .filter_map(|part| {
+                    if part.starts_with("--") {
+                        Some(
+                            part.chars()
+                                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-')
+                                .collect(),
+                        )
+                    } else if part.starts_with('-')
+                        && part.len() == 2
+                        && part.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic())
+                    {
+                        Some(part.to_owned())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -343,11 +404,99 @@ fn command_flags(command: &clap::Command) -> std::collections::BTreeSet<String> 
         if let Some(long) = arg.get_long() {
             flags.insert(format!("--{long}"));
         }
+        if let Some(aliases) = arg.get_all_aliases() {
+            flags.extend(aliases.into_iter().map(|alias| format!("--{alias}")));
+        }
         if let Some(short) = arg.get_short() {
             flags.insert(format!("-{short}"));
         }
+        if let Some(aliases) = arg.get_all_short_aliases() {
+            flags.extend(aliases.into_iter().map(|alias| format!("-{alias}")));
+        }
     }
     flags
+}
+
+fn unknown_flags(command: &clap::Command, summary: &str) -> Vec<String> {
+    let allowed = command_flags(command);
+    documented_flags(summary)
+        .into_iter()
+        .filter(|flag| !allowed.contains(flag))
+        .collect()
+}
+
+fn missing_local_flags(command: &clap::Command, summary: &str) -> Vec<String> {
+    let documented: std::collections::BTreeSet<_> = documented_flags(summary).into_iter().collect();
+    command
+        .get_arguments()
+        .filter(|arg| {
+            !arg.is_positional()
+                && !arg.is_global_set()
+                && !matches!(arg.get_id().as_str(), "help" | "version")
+        })
+        .filter_map(|arg| {
+            let long = arg.get_long().map(|flag| format!("--{flag}"));
+            let short = arg.get_short().map(|flag| format!("-{flag}"));
+            let present = long.as_ref().is_some_and(|flag| documented.contains(flag))
+                || short.as_ref().is_some_and(|flag| documented.contains(flag));
+            (!present).then_some(long.or(short)).flatten()
+        })
+        .collect()
+}
+
+fn syntax_summaries(content: &str) -> Vec<(usize, String)> {
+    let lines: Vec<_> = content.lines().collect();
+    let mut summaries = Vec::new();
+    let mut index = 0;
+    while index < lines.len() {
+        if lines[index].trim() != "**Syntax**" {
+            index += 1;
+            continue;
+        }
+        index += 1;
+        while index < lines.len() && !lines[index].trim().starts_with("```") {
+            index += 1;
+        }
+        if index == lines.len() {
+            break;
+        }
+        index += 1;
+        let line_number = index + 1;
+        let mut summary = String::new();
+        while index < lines.len() && !lines[index].trim().starts_with("```") {
+            let fragment = lines[index].trim().trim_end_matches('\\').trim();
+            if !fragment.is_empty() {
+                if !summary.is_empty() {
+                    summary.push(' ');
+                }
+                summary.push_str(fragment);
+            }
+            index += 1;
+        }
+        if summary.starts_with("atla ") {
+            summaries.push((line_number, summary));
+        }
+    }
+    summaries
+}
+
+fn command_table_rows(content: &str) -> Vec<(usize, String)> {
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            if !line.starts_with("| `") {
+                return None;
+            }
+            let cells: Vec<_> = line.trim_matches('|').split('|').map(str::trim).collect();
+            if cells.len() < 3 {
+                return None;
+            }
+            let command = cells[0].replace('`', "");
+            let flags = cells[2].replace('`', "");
+            Some((index + 1, format!("atla {command} {flags}")))
+        })
+        .collect()
 }
 
 #[test]
@@ -427,6 +576,105 @@ fn documented_fenced_flags_match_cli() {
     assert!(
         failures.is_empty(),
         "{} documented fenced flag(s) no longer exist in clap:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn exact_reference_summaries_match_cli() {
+    let mut cli = Cli::command();
+    cli.build();
+    let root = repo_root();
+    let mut checked = 0usize;
+    let mut failures = Vec::new();
+
+    for (product, relative) in [
+        ("jira", "docs/jira.md"),
+        ("confluence", "docs/confluence.md"),
+    ] {
+        let file = root.join(relative);
+        let content = std::fs::read_to_string(&file).expect("read topic reference");
+        let mut documented_paths = std::collections::BTreeSet::new();
+        for (line_number, summary) in syntax_summaries(&content) {
+            let Some(command) = documented_command(&cli, &summary) else {
+                continue;
+            };
+            checked += 1;
+            if let Some(path) = documented_command_path(&cli, &summary) {
+                documented_paths.insert(path);
+            }
+            let missing = missing_local_flags(command, &summary);
+            if !missing.is_empty() {
+                failures.push(format!(
+                    "{}:{line_number}: exact syntax omits {}\n    {summary}",
+                    file.display(),
+                    missing.join(", ")
+                ));
+            }
+            let unknown = unknown_flags(command, &summary);
+            if !unknown.is_empty() {
+                failures.push(format!(
+                    "{}:{line_number}: exact syntax contains unknown flags {}\n    {summary}",
+                    file.display(),
+                    unknown.join(", ")
+                ));
+            }
+        }
+        for missing in product_leaf_command_paths(&cli, product).difference(&documented_paths) {
+            failures.push(format!(
+                "{}: exact syntax section is missing `{missing}`",
+                file.display()
+            ));
+        }
+    }
+
+    let agent_reference = root.join("docs/agent-reference.md");
+    let content = std::fs::read_to_string(&agent_reference).expect("read agent reference");
+    let mut documented_paths = std::collections::BTreeSet::new();
+    for (line_number, summary) in command_table_rows(&content) {
+        let Some(command) = documented_command(&cli, &summary) else {
+            continue;
+        };
+        checked += 1;
+        if let Some(path) = documented_command_path(&cli, &summary) {
+            documented_paths.insert(path);
+        }
+        let missing = missing_local_flags(command, &summary);
+        if !missing.is_empty() {
+            failures.push(format!(
+                "{}:{line_number}: command table omits {}\n    {summary}",
+                agent_reference.display(),
+                missing.join(", ")
+            ));
+        }
+        let unknown = unknown_flags(command, &summary);
+        if !unknown.is_empty() {
+            failures.push(format!(
+                "{}:{line_number}: command table contains unknown flags {}\n    {summary}",
+                agent_reference.display(),
+                unknown.join(", ")
+            ));
+        }
+    }
+    let expected_agent_paths = product_leaf_command_paths(&cli, "jira")
+        .into_iter()
+        .chain(product_leaf_command_paths(&cli, "confluence"))
+        .collect::<std::collections::BTreeSet<_>>();
+    for missing in expected_agent_paths.difference(&documented_paths) {
+        failures.push(format!(
+            "{}: command table is missing `{missing}`",
+            agent_reference.display()
+        ));
+    }
+
+    assert!(
+        checked > 100,
+        "exact reference extraction broke: only {checked} commands found"
+    );
+    assert!(
+        failures.is_empty(),
+        "{} exact reference entries omit CLI commands or flags:\n{}",
         failures.len(),
         failures.join("\n")
     );
