@@ -48,6 +48,12 @@ class MiseTaskTests(unittest.TestCase):
     def test_spec_filter_runtime_is_pinned(self) -> None:
         self.assertEqual(self.config["tools"]["node"], "24")
 
+    def test_ci_msrv_job_pins_the_toolchain_as_an_input(self) -> None:
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        msrv_job = workflow.split("\n  coverage:", 1)[0].split("\n  msrv:", 1)[1]
+        self.assertIn("toolchain: 1.91.0", msrv_job)
+        self.assertIn("cargo check --workspace", msrv_job)
+
     def test_pr_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
         for command in (
