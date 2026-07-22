@@ -1,0 +1,76 @@
+name: Feature request
+description: Propose an improvement to atla
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user or agent problem before proposing a command or implementation. For CLI
+        changes, consider compatibility with scripts, versioned JSON, safety policy, and bounded
+        automation.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What workflow is difficult or impossible today, and who needs it?
+      placeholder: When an agent needs to ..., it currently has to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: Describe the desired behavior and, if useful, provide a concrete CLI example.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-area
+    attributes:
+      label: Affected areas
+      description: Select every public surface that may be affected.
+      multiple: true
+      options:
+        - CLI commands or flags
+        - JSON output or schemas
+        - Jira behavior
+        - Confluence behavior
+        - Authentication or profiles
+        - Safety policy, plans, or dry-run
+        - Agent skill or documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility-safety
+    attributes:
+      label: Compatibility and safety considerations
+      description: Note effects on existing scripts, schemas, pagination, confirmation, retry behavior, or read-only mode.
+      placeholder: No existing fields would change; the response would add ...
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe current workarounds or other approaches you considered.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add examples, links, mock output, or other relevant context without private tenant data.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues and documentation for this request.
+          required: true
+        - label: I removed credentials, tenant identifiers, and private Jira or Confluence content.
+          required: true

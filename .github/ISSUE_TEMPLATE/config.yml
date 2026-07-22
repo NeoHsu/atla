@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/NeoHsu/atla/security/advisories/new
+    about: Report vulnerabilities privately; never include credentials or private tenant data in a public issue.

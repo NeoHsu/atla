@@ -1,0 +1,108 @@
+name: Bug report
+description: Report a reproducible problem with atla
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve atla.
+
+        Do not include Atlassian API tokens, OAuth credentials, private Jira or Confluence
+        content, tenant identifiers, or working exploits. Report suspected vulnerabilities
+        through the private security advisory link in the issue chooser.
+
+  - type: input
+    id: atla-version
+    attributes:
+      label: atla version
+      description: Paste the output of `atla --version`.
+      placeholder: atla 0.6.0
+    validations:
+      required: true
+
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      description: Include the OS name, version, and architecture.
+      placeholder: macOS 15.5 (arm64)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - Release installer
+        - mise
+        - cargo install
+        - Built from source
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: Show the command that triggered the problem, with all sensitive values redacted.
+      placeholder: atla --no-input --output json jira issue view PROJ-123
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest deterministic sequence that reproduces the problem.
+      placeholder: |
+        1. Configure a profile using synthetic or redacted values.
+        2. Run the command above.
+        3. Observe the reported behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include the exit code when relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Redacted output or logs
+      description: Include stdout and stderr only after removing credentials and private tenant data.
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add anything else that may help diagnose the problem.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission checklist
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed credentials, tenant identifiers, and private Jira or Confluence content.
+          required: true
+        - label: This report does not describe a security vulnerability or include a working exploit.
+          required: true
