@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-21T17:00:39.098979Z",
+  "generated_at": "2026-07-31T04:42:24.467867Z",
   "generator": {
     "tool": "progenitor",
     "version": "progenitor-0.14"
@@ -7,10 +7,10 @@
   "specs": {
     "jira": {
       "source_file": "specs/jira-v3-partial.json",
-      "source_sha256": "e035f25521ce53d330549cbeb90f917ab162ffa0540c484ae50100b02181dd5e",
+      "source_sha256": "09743254b0de2db89a17e6a13360701e432e4d282bf10b60effd1a7e3786fcd1",
       "upstream_source_file": "specs/jira-v3.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
-      "upstream_sha256": "b9e7f99b7fb1bfeab2badb10ae14670118ca70b2e02e0d73c81d94124a585f26",
+      "upstream_sha256": "2a694bebbad5b7b4444337482f20243eed0c53ac96267ce86fcaeaa231320ee2",
       "partial_spec_script": "scripts/jira-v3-partial-spec.js",
       "description": "Jira REST API v3 (partial, filtered to used endpoints)"
     },
