@@ -36,7 +36,6 @@ reqwest = { version = "0.13", default-features = false, features = [
   "json",
   "multipart",
   "rustls",
-  "stream",
 ] }
 base64 = "0.22"
 libc = "0.2"
@@ -46,7 +45,7 @@ semver = "1"
 sha2 = "0.11"
 shell-words = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 toml = "1.1"
 tempfile = "3"
 wiremock = "0.6"

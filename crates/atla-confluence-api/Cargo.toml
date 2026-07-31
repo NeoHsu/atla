@@ -17,12 +17,8 @@ prettyplease = "0.2"
 
 [dependencies]
 progenitor-client = "0.14"
-reqwest = { workspace = true, features = ["json", "rustls"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_repr = "0.1"
-chrono = { workspace = true }
-uuid = { version = "1", features = ["serde"] }
-url = "2"
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
 regress = "0.11"
-bytes = "1"
