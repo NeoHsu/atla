@@ -104,7 +104,7 @@ mise use -g github:NeoHsu/atla
 From source:
 
 ```bash
-cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.0 atla
+cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.1 atla
 ```
 
 For direct downloads and platform-specific instructions, see
@@ -132,8 +132,8 @@ headless environments, and per-operation allow/deny policy. See
 Install the `atla-cli` skill from the release tag that exactly matches the CLI:
 
 ```bash
-npx skills add https://github.com/NeoHsu/atla/tree/v0.6.0 --skill atla-cli
-atla doctor --skill-version 0.6.0 --output json
+npx skills add https://github.com/NeoHsu/atla/tree/v0.6.1 --skill atla-cli
+atla doctor --skill-version 0.6.1 --output json
 ```
 
 The skill fails closed on version mismatch and provides an explicit tagged update command; it does

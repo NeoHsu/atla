@@ -18,7 +18,7 @@ body:
     attributes:
       label: atla version
       description: Paste the output of `atla --version`.
-      placeholder: atla 0.6.0
+      placeholder: atla 0.6.1
     validations:
       required: true
 

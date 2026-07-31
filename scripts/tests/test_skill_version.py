@@ -43,8 +43,8 @@ class SkillVersionTests(unittest.TestCase):
             shutil.copy2(ROOT / relative_path, target)
 
     def test_current_tree_is_in_exact_lockstep(self) -> None:
-        result = self.run_check(ROOT, "--tag", "v0.6.0")
-        self.assertIn("exact lockstep at 0.6.0", result.stdout)
+        result = self.run_check(ROOT, "--tag", "v0.6.1")
+        self.assertIn("exact lockstep at 0.6.1", result.stdout)
 
     def test_mismatched_skill_version_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -60,12 +60,12 @@ class SkillVersionTests(unittest.TestCase):
 
             result = self.run_check(repo, expected=1)
             self.assertIn(
-                "skillVersion '0.5.1' does not match CLI '0.6.0'", result.stderr
+                "skillVersion '0.5.1' does not match CLI '0.6.1'", result.stderr
             )
 
     def test_mismatched_release_tag_fails(self) -> None:
         result = self.run_check(ROOT, "--tag", "v0.5.1", expected=1)
-        self.assertIn("release tag 'v0.5.1' does not match 'v0.6.0'", result.stderr)
+        self.assertIn("release tag 'v0.5.1' does not match 'v0.6.1'", result.stderr)
 
 
 if __name__ == "__main__":
