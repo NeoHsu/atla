@@ -49,6 +49,7 @@ class MiseTaskTests(unittest.TestCase):
         tools = self.config["tools"]
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn(f"sccache@{tools['sccache']}", workflow)
+        self.assertIn(f"cargo-audit@{tools['cargo:cargo-audit']}", workflow)
         self.assertIn(f"cargo-deny@{tools['cargo:cargo-deny']}", workflow)
         self.assertIn(f"cargo-llvm-cov@{tools['cargo:cargo-llvm-cov']}", workflow)
         self.assertIn(f"cargo-nextest@{tools['cargo:cargo-nextest']}", workflow)

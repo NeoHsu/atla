@@ -49,6 +49,9 @@ jobs:
           tool: cargo-nextest@0.9.4
       - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
         with:
+          tool: cargo-audit@0.22.1
+      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+        with:
           tool: cargo-deny@0.20.2
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
       - name: Scan the source tree for secrets
