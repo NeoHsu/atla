@@ -11,7 +11,7 @@
     },
     "termsOfService": "https://developer.atlassian.com/platform/marketplace/atlassian-developer-terms/",
     "title": "The Jira Cloud platform REST API - Atla partial",
-    "version": "1001.0.0-SNAPSHOT-532ed230ff9aa83f9c3039b776559e831302b5dd"
+    "version": "1001.0.0-SNAPSHOT-8269c6f70784b362be829eee45ed6fd183aa9e20"
   },
   "servers": [
     {
