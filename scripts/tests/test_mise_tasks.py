@@ -48,7 +48,11 @@ class MiseTaskTests(unittest.TestCase):
     def test_ci_tool_versions_match_mise(self) -> None:
         tools = self.config["tools"]
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn(f"sccache@{tools['sccache']}", workflow)
+        self.assertIn(
+            "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba",
+            workflow,
+        )
+        self.assertIn(f'version: "v{tools["sccache"]}"', workflow)
         self.assertIn(f"cargo-audit@{tools['cargo:cargo-audit']}", workflow)
         self.assertIn(f"cargo-deny@{tools['cargo:cargo-deny']}", workflow)
         self.assertIn(f"cargo-llvm-cov@{tools['cargo:cargo-llvm-cov']}", workflow)

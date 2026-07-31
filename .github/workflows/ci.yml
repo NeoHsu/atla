@@ -30,9 +30,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: clippy, rustfmt
-      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
-          tool: sccache@0.17.0
+          version: "v0.17.0"
       - name: Install verified gitleaks
         env:
           GITLEAKS_VERSION: "8.30.1"
@@ -44,13 +44,13 @@ jobs:
           printf '%s  %s\n' "$GITLEAKS_SHA256" "$archive" | sha256sum --check --strict
           tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
           install -m 0755 "$RUNNER_TEMP/gitleaks" "$HOME/.cargo/bin/gitleaks"
-      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+      - uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
         with:
           tool: cargo-nextest@0.9.4
-      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+      - uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
         with:
           tool: cargo-audit@0.22.1
-      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+      - uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
         with:
           tool: cargo-deny@0.20.2
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
@@ -70,9 +70,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
       - run: cargo nextest run --workspace --status-level all
       - run: cargo test --doc -p atla-core -p atla-jira-api
-      - name: Show sccache statistics
-        if: always()
-        run: sccache --show-stats
 
   msrv:
     runs-on: ubuntu-latest
@@ -99,7 +96,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: llvm-tools-preview
-      - uses: taiki-e/install-action@ed67fa35ac944f3a9b33f12c4dd43b6f31a47e20 # v2.83.3
+      - uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
         with:
           tool: cargo-llvm-cov@0.8.7
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
