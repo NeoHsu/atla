@@ -5,7 +5,7 @@ behavior and machine-readable contracts are part of the public API.
 
 ## Development setup
 
-Install Rust 1.91 or newer, then run:
+Install Rust 1.91 or newer. The portable Rust baseline is:
 
 ```bash
 cargo test --workspace
@@ -16,9 +16,10 @@ cargo audit
 cargo deny check
 ```
 
-These explicit commands remain the portable baseline. CI runs the same workspace unit and
+These explicit commands remain the portable Rust baseline. CI runs the same workspace unit and
 integration tests with `cargo-nextest`, then runs doctests separately so test coverage is not lost.
-Contributors using `mise` can run the common workflows through discoverable convenience tasks:
+It also scans the source tree with gitleaks. Contributors using `mise` can run the common workflows
+through discoverable convenience tasks:
 
 | Task | Purpose |
 | --- | --- |
@@ -26,22 +27,20 @@ Contributors using `mise` can run the common workflows through discoverable conv
 | `mise run lint` | Formatting check plus the CI Clippy policy |
 | `mise run test`, `mise run test:cli`, `mise run test:core`, or `mise run test:e2e` | Workspace or focused test suites |
 | `mise run test:nextest` | Parallel workspace unit and integration tests with detailed failure reporting |
-| `mise run chef:prepare`, then `mise run chef:cook` | Prepare and safely cook a `cargo-chef` dependency recipe |
 | `mise run sccache:stats` | Show cache statistics after opting in with `RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0` |
 | `mise run contract:check` | CLI surface, docs, schemas, and operation-catalog contracts |
 | `mise run contract:update` | Regenerate `docs/cli-surface.txt` after a CLI change |
 | `mise run tooling:test` | Python maintenance-tool tests |
 | `mise run skill:version` | Exact CLI/skill/Cargo/docs release-version lockstep |
-| `mise run deny`, `mise run audit`, or `mise run security` | Dependency policy and RustSec checks |
+| `mise run security:secrets` | Scan committed and uncommitted source files for secrets |
+| `mise run deny`, `mise run audit`, or `mise run security` | Dependency policy, RustSec, and combined security checks |
 | `mise run coverage` | LCOV generation and the current coverage floor |
-| `mise run check:pr` | Sequential local PR gate: lint, tests, tooling, MSRV, deny, and audit |
+| `mise run check:pr` | Sequential local PR gate: secret scan, lint, tests, tooling, MSRV, deny, and audit |
 
 After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
 project toolchain. The config pins Node.js for partial-spec filters, Python for maintenance tools,
-and the Cargo security, coverage, cache, recipe, and test tools to versions matching CI.
-`cargo chef cook` rehydrates placeholder manifests and sources, so never run it directly from the
-source worktree; `mise run chef:cook` uses an isolated temporary workspace while sharing `target/`.
-`deny.toml`
+gitleaks for secret scanning, and the Cargo security, coverage, cache, and test tools to versions
+matching CI. `.gitleaks.toml` carries the repository-specific false-positive policy. `deny.toml`
 rejects unknown registries, Git dependencies, wildcard dependency versions, unknown licenses,
 advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades can
 remove them incrementally; do not suppress one without a documented reason. CI also publishes LCOV and fails
@@ -57,7 +56,7 @@ Keep changes focused, explain user-visible behavior, and add tests for success a
 Fill every applicable section of `.github/pull_request_template.md`; explain why any contract or
 security checklist item is not applicable. Before opening a PR:
 
-1. run fmt, Clippy, workspace tests, RustSec audit, and `cargo deny check`;
+1. run the gitleaks scan, fmt, Clippy, workspace tests, RustSec audit, and `cargo deny check`;
 2. run `cargo +1.91 check --workspace` for changes affecting dependencies/language features;
 3. update `CHANGELOG.md` under Unreleased;
 4. update every affected document and the agent skill;
