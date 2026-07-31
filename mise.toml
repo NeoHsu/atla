@@ -1,12 +1,10 @@
 [tools]
-java = "21.0.2"
 node = "24"
 python = "3.12.13"
 rust = "stable"
-zig = "latest"
+gitleaks = "8.30.1"
 sccache = "0.17.0"
 "cargo:cargo-audit" = "0.22.1"
-"cargo:cargo-chef" = "0.1.77"
 "cargo:cargo-deny" = "0.20.2"
 "cargo:cargo-llvm-cov" = "0.8.7"
 "cargo:cargo-nextest" = "0.9.4"
@@ -64,14 +62,6 @@ run = "cargo test -p atla cli_surface"
 description = "Run repository Python tooling tests"
 run = "python -m unittest discover -s scripts/tests -p \"test_*.py\""
 
-[tasks."chef:prepare"]
-description = "Prepare a cargo-chef recipe for dependency-layer caching"
-run = "cargo chef prepare --recipe-path .mise-recipe.json"
-
-[tasks."chef:cook"]
-description = "Build dependencies from the cargo-chef recipe without modifying the worktree"
-run = "python scripts/cargo-chef-cook.py --recipe-path .mise-recipe.json"
-
 [tasks."sccache:stats"]
 description = "Show current sccache cache statistics"
 run = "sccache --show-stats"
@@ -92,9 +82,17 @@ run = "cargo deny check"
 description = "Audit Cargo.lock against the RustSec advisory database"
 run = "cargo audit"
 
+[tasks."security:secrets"]
+description = "Scan the source tree for committed or uncommitted secrets"
+run = "gitleaks dir --redact --no-banner ."
+
 [tasks.security]
-description = "Run dependency policy and RustSec checks"
-run = ["cargo deny check", "cargo audit"]
+description = "Run secret, dependency-policy, and RustSec checks"
+run = [
+  "gitleaks dir --redact --no-banner .",
+  "cargo deny check",
+  "cargo audit",
+]
 
 [tasks.coverage]
 description = "Generate LCOV and enforce the 53 percent line-coverage floor"
@@ -107,11 +105,10 @@ run = [
 description = "Run the deterministic local checks required before opening a PR"
 run = [
   "git diff --check",
+  "gitleaks dir --redact --no-banner .",
   "python scripts/check-skill-version.py",
   "cargo fmt --all -- --check",
   "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
-  "cargo chef prepare --recipe-path .mise-recipe.json",
-  "python scripts/cargo-chef-cook.py --recipe-path .mise-recipe.json",
   "cargo nextest run --workspace --status-level all",
   "cargo test --doc -p atla-core -p atla-jira-api",
   "python -m unittest discover -s scripts/tests -p \"test_*.py\"",

@@ -8,12 +8,12 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[2]
 MISE_CONFIG = ROOT / "mise.toml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+SPEC_REFRESH_WORKFLOW = ROOT / ".github" / "workflows" / "spec-refresh.yml"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 EXPECTED_TASKS = {
     "audit",
     "check:fast",
     "check:pr",
-    "chef:cook",
-    "chef:prepare",
     "contract:check",
     "contract:update",
     "coverage",
@@ -23,6 +23,7 @@ EXPECTED_TASKS = {
     "msrv",
     "sccache:stats",
     "security",
+    "security:secrets",
     "skill:version",
     "test",
     "test:cli",
@@ -50,13 +51,25 @@ class MiseTaskTests(unittest.TestCase):
         self.assertIn(f"sccache@{tools['sccache']}", workflow)
         self.assertIn(f"cargo-deny@{tools['cargo:cargo-deny']}", workflow)
         self.assertIn(f"cargo-llvm-cov@{tools['cargo:cargo-llvm-cov']}", workflow)
-        self.assertIn(f"cargo-chef@{tools['cargo:cargo-chef']}", workflow)
         self.assertIn(f"cargo-nextest@{tools['cargo:cargo-nextest']}", workflow)
+        self.assertIn(f'GITLEAKS_VERSION: "{tools["gitleaks"]}"', workflow)
         self.assertIn('CARGO_INCREMENTAL: "0"', workflow)
         self.assertIn("RUSTC_WRAPPER: sccache", workflow)
 
-    def test_spec_filter_runtime_is_pinned(self) -> None:
-        self.assertEqual(self.config["tools"]["node"], "24")
+    def test_script_runtimes_match_mise(self) -> None:
+        tools = self.config["tools"]
+        self.assertEqual(tools["node"], "24")
+        self.assertEqual(tools["python"], "3.12.13")
+
+        node_pin = f'node-version: "{tools["node"]}"'
+        python_pin = f'python-version: "{tools["python"]}"'
+        for workflow_path in (CI_WORKFLOW, SPEC_REFRESH_WORKFLOW):
+            workflow = workflow_path.read_text(encoding="utf-8")
+            self.assertIn(node_pin, workflow)
+            self.assertIn(python_pin, workflow)
+
+        release_workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(python_pin, release_workflow)
 
     def test_ci_msrv_job_pins_the_toolchain_as_an_input(self) -> None:
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
@@ -67,10 +80,9 @@ class MiseTaskTests(unittest.TestCase):
     def test_pr_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
         for command in (
+            "gitleaks dir --redact --no-banner .",
             "python scripts/check-skill-version.py",
             "cargo +1.91 check --workspace",
-            "cargo chef prepare --recipe-path .mise-recipe.json",
-            "python scripts/cargo-chef-cook.py --recipe-path .mise-recipe.json",
             "cargo nextest run --workspace --status-level all",
             "cargo test --doc -p atla-core -p atla-jira-api",
             "cargo audit",
@@ -79,14 +91,25 @@ class MiseTaskTests(unittest.TestCase):
         ):
             self.assertIn(command, commands)
 
-    def test_cargo_chef_cook_never_runs_in_the_source_worktree(self) -> None:
-        commands = self.config["tasks"]["check:pr"]["run"]
+    def test_secret_scan_is_part_of_local_and_ci_security_gates(self) -> None:
+        command = "gitleaks dir --redact --no-banner ."
+        tasks = self.config["tasks"]
+        self.assertEqual(tasks["security:secrets"]["run"], command)
+        self.assertIn(command, tasks["security"]["run"])
+        self.assertIn(command, tasks["check:pr"]["run"])
+        self.assertIn(command, CI_WORKFLOW.read_text(encoding="utf-8"))
+        self.assertTrue((ROOT / ".gitleaks.toml").is_file())
+
+    def test_retired_tooling_does_not_return(self) -> None:
+        tools = self.config["tools"]
+        tasks = self.config["tasks"]
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-        self.assertFalse(
-            any(command.startswith("cargo chef cook") for command in commands)
-        )
-        self.assertNotIn("- run: cargo chef cook", workflow)
-        self.assertIn("python3 scripts/cargo-chef-cook.py", workflow)
+        for retired_tool in ("java", "zig", "cargo:cargo-chef"):
+            self.assertNotIn(retired_tool, tools)
+        for retired_task in ("chef:cook", "chef:prepare"):
+            self.assertNotIn(retired_task, tasks)
+        self.assertNotIn("cargo-chef", workflow)
+        self.assertNotIn("cargo chef", workflow)
 
 
 if __name__ == "__main__":

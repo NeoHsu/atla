@@ -1,7 +1,6 @@
 /target/
 /.idea/
 /.vscode/
-.mise-recipe.json
 *.log
 __pycache__/
 *.py[cod]
