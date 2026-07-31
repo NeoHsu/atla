@@ -4,9 +4,12 @@ node = "24"
 python = "3.12.13"
 rust = "stable"
 zig = "latest"
+sccache = "0.17.0"
 "cargo:cargo-audit" = "0.22.1"
+"cargo:cargo-chef" = "0.1.77"
 "cargo:cargo-deny" = "0.20.2"
 "cargo:cargo-llvm-cov" = "0.8.7"
+"cargo:cargo-nextest" = "0.9.4"
 
 [tasks."check:fast"]
 description = "Run the fast atla package check with the shared worktree cache"
@@ -40,6 +43,10 @@ run = "cargo test -p atla-core"
 description = "Run the CLI end-to-end test suite"
 run = "cargo test -p atla --test e2e"
 
+[tasks."test:nextest"]
+description = "Run workspace tests with cargo-nextest (parallel + better failure reporting)"
+run = "cargo nextest run --workspace --status-level all"
+
 [tasks."contract:check"]
 description = "Check CLI, documentation, schema, and operation-catalog contracts"
 run = [
@@ -56,6 +63,18 @@ run = "cargo test -p atla cli_surface"
 [tasks."tooling:test"]
 description = "Run repository Python tooling tests"
 run = "python -m unittest discover -s scripts/tests -p \"test_*.py\""
+
+[tasks."chef:prepare"]
+description = "Prepare a cargo-chef recipe for dependency-layer caching"
+run = "cargo chef prepare --recipe-path .mise-recipe.json"
+
+[tasks."chef:cook"]
+description = "Build dependencies from the cargo-chef recipe without modifying the worktree"
+run = "python scripts/cargo-chef-cook.py --recipe-path .mise-recipe.json"
+
+[tasks."sccache:stats"]
+description = "Show current sccache cache statistics"
+run = "sccache --show-stats"
 
 [tasks."skill:version"]
 description = "Verify exact CLI, skill, lockfile, docs, and release-tag version lockstep"
@@ -91,7 +110,10 @@ run = [
   "python scripts/check-skill-version.py",
   "cargo fmt --all -- --check",
   "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
-  "cargo test --workspace",
+  "cargo chef prepare --recipe-path .mise-recipe.json",
+  "python scripts/cargo-chef-cook.py --recipe-path .mise-recipe.json",
+  "cargo nextest run --workspace --status-level all",
+  "cargo test --doc -p atla-core -p atla-jira-api",
   "python -m unittest discover -s scripts/tests -p \"test_*.py\"",
   "cargo +1.91 check --workspace",
   "cargo deny check",
