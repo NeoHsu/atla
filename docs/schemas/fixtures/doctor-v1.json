@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "cliVersion": "0.6.0",
+  "cliVersion": "0.6.1",
   "healthy": true,
   "skillCompatibility": {
-    "cliVersion": "0.6.0",
-    "skillVersion": "0.6.0",
+    "cliVersion": "0.6.1",
+    "skillVersion": "0.6.1",
     "compatible": true,
     "recommendedAction": "none",
-    "targetVersion": "0.6.0",
+    "targetVersion": "0.6.1",
     "updateCommand": null
   },
   "checks": [
     {
       "name": "skill-version",
       "status": "ok",
-      "detail": "CLI 0.6.0 matches skill 0.6.0"
+      "detail": "CLI 0.6.1 matches skill 0.6.1"
     }
   ]
 }

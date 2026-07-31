@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "atla"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "atla-core",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "atla-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "atla-confluence-api",
  "atla-confluence-v1-api",

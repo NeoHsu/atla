@@ -10,7 +10,7 @@ description: Versioning, cargo-dist artifacts, SBOM, provenance, and supply-chai
 1. Run `python3 scripts/check-skill-version.py`. It must confirm exact lockstep across the CLI,
    atla-core, Cargo.lock, `skills/atla-cli/compatibility.json`, SKILL.md gate, and tag-pinned install
    docs. The tag-triggered workflow repeats this check with `--tag "$GITHUB_REF_NAME"`.
-2. Rename the combined `[Unreleased]` section to `[0.6.0]` with the actual release date and restore
+2. Rename the combined `[Unreleased]` section to `[0.6.1]` with the actual release date and restore
    an empty `[Unreleased]` section plus compare links.
 3. Run the workspace test, fmt, Clippy, RustSec, MSRV, doc, and CLI-surface checks.
 4. Run cargo-dist plan/local/global artifact smoke tests.
@@ -51,12 +51,12 @@ additionally verify the attestation with GitHub CLI.
 Use a signed, SemVer-compatible tag only after the release commit is reviewed:
 
 ```bash
-git tag -s v0.6.0 -m 'atla v0.6.0'
-git push origin v0.6.0
+git tag -s v0.6.1 -m 'atla v0.6.1'
+git push origin v0.6.1
 ```
 
 Do not push a release tag from a dirty or unreviewed tree. After publishing, install from each
 supported channel and run `atla --version`, `atla completion bash`, and a JSON dry-run smoke test.
 Install the skill from the exact release tag, run
-`atla doctor --skill-version 0.6.0 --output json`, and require
+`atla doctor --skill-version 0.6.1 --output json`, and require
 `skillCompatibility.compatible: true` before completing the release.

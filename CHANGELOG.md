@@ -7,6 +7,33 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-31
+
+### Added
+
+- Added issue and feature request forms plus a contributor code of conduct.
+
+### Security
+
+- Added gitleaks secret scanning to local and CI gates, with a narrow allowlist for the pinned
+  upstream Atlassian specification.
+- Pinned the CI `cargo-audit` binary and kept release actions and downloaded tooling locked to
+  reviewed versions, commit SHAs, and checksums.
+
+### Changed
+
+- Replaced the ineffective cargo-chef step with cargo-nextest and a functional sccache GitHub cache
+  backend while retaining doctests, Clippy, MSRV, RustSec, and cross-platform coverage.
+- Removed unused generated-client dependencies, narrowed Reqwest and Tokio features, and reduced the
+  locked dependency graph without changing the CLI or JSON contracts.
+- Refreshed the Jira upstream and partial specifications with no operation, schema, or contract
+  changes.
+
+### Fixed
+
+- Fixed GitHub CI failures caused by enabling sccache's `ghac` backend without provisioning its
+  cache endpoint.
+
 ## [0.6.0] - 2026-07-22
 
 ### Added
@@ -135,7 +162,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Accepted numeric Jira attachment identifiers.
 
-[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/NeoHsu/atla/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/NeoHsu/atla/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/NeoHsu/atla/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/NeoHsu/atla/compare/v0.3.0...v0.5.0
