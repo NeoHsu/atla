@@ -16,14 +16,18 @@ cargo audit
 cargo deny check
 ```
 
-These explicit commands remain the CI authority. Contributors using `mise` can run the same common
-workflows through discoverable convenience tasks:
+These explicit commands remain the portable baseline. CI runs the same workspace unit and
+integration tests with `cargo-nextest`, then runs doctests separately so test coverage is not lost.
+Contributors using `mise` can run the common workflows through discoverable convenience tasks:
 
 | Task | Purpose |
 | --- | --- |
 | `mise run check:fast` | Fast `atla` package check for the inner development loop |
 | `mise run lint` | Formatting check plus the CI Clippy policy |
 | `mise run test`, `mise run test:cli`, `mise run test:core`, or `mise run test:e2e` | Workspace or focused test suites |
+| `mise run test:nextest` | Parallel workspace unit and integration tests with detailed failure reporting |
+| `mise run chef:prepare`, then `mise run chef:cook` | Prepare and safely cook a `cargo-chef` dependency recipe |
+| `mise run sccache:stats` | Show cache statistics after opting in with `RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0` |
 | `mise run contract:check` | CLI surface, docs, schemas, and operation-catalog contracts |
 | `mise run contract:update` | Regenerate `docs/cli-surface.txt` after a CLI change |
 | `mise run tooling:test` | Python maintenance-tool tests |
@@ -34,7 +38,10 @@ workflows through discoverable convenience tasks:
 
 After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
 project toolchain. The config pins Node.js for partial-spec filters, Python for maintenance tools,
-and the Cargo security/coverage tools to versions matching CI. `deny.toml`
+and the Cargo security, coverage, cache, recipe, and test tools to versions matching CI.
+`cargo chef cook` rehydrates placeholder manifests and sources, so never run it directly from the
+source worktree; `mise run chef:cook` uses an isolated temporary workspace while sharing `target/`.
+`deny.toml`
 rejects unknown registries, Git dependencies, wildcard dependency versions, unknown licenses,
 advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades can
 remove them incrementally; do not suppress one without a documented reason. CI also publishes LCOV and fails

@@ -21,11 +21,12 @@ cargo clippy --workspace --all-targets \
   --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
 ```
 
-CI (`.github/workflows/ci.yml`) enforces these three plus a RustSec dependency audit. The CLI
+CI (`.github/workflows/ci.yml`) enforces equivalent workspace tests with `cargo-nextest` plus a
+separate doctest run, along with formatting, Clippy, and a RustSec dependency audit. The CLI
 package is `atla`, not `atla-cli`: `cargo test -p atla`. For local orchestration, use
 `mise run check:fast` during the inner loop and `mise run check:pr` before pushing; `mise tasks`
-lists focused test, contract, security, and coverage tasks. The explicit CI commands remain the
-authority.
+lists focused test, contract, security, and coverage tasks. The explicit Cargo commands above
+remain the portable baseline.
 
 ## Changing the CLI surface (checklist)
 
