@@ -371,6 +371,7 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn jira_jql_token_round_trips_and_validates_query() {
@@ -433,6 +434,48 @@ mod tests {
                 .expect("decode"),
             50
         );
+    }
+
+    proptest! {
+        #[test]
+        fn jira_offset_tokens_round_trip_for_arbitrary_offsets(offset in any::<u64>()) {
+            let hash = query_hash("jira.project.list", &[("query", "project = ABC".to_owned())]);
+            let token = jira_offset_next_token(
+                "jira.project.list",
+                Some(offset),
+                hash.clone(),
+            )
+            .expect("encode")
+            .expect("token");
+
+            prop_assert_eq!(
+                decode_jira_offset_token(Some(&token), "jira.project.list", hash)
+                    .expect("decode"),
+                offset
+            );
+        }
+
+        #[test]
+        fn confluence_cursor_tokens_round_trip_for_arbitrary_cursors(
+            cursor in proptest::string::string_regex("[A-Za-z0-9_-]{1,64}").unwrap(),
+        ) {
+            let hash = query_hash("confluence.space.list", &[("key", "ENG".to_owned())]);
+            let token = confluence_cursor_next_token(
+                "confluence.space.list",
+                Some(cursor.clone()),
+                hash.clone(),
+            )
+            .expect("encode")
+            .expect("token");
+
+            let decoded = decode_confluence_cursor_token(
+                Some(&token),
+                "confluence.space.list",
+                hash,
+            )
+            .expect("decode");
+            prop_assert_eq!(decoded.as_deref(), Some(cursor.as_str()));
+        }
     }
 
     #[test]

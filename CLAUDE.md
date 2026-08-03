@@ -16,6 +16,7 @@ product features here, not niceties.
 
 ```bash
 cargo test --workspace --locked
+cargo test --doc --workspace --locked
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --locked \
   --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
@@ -78,7 +79,8 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 
 - `.github/workflows/release.yml` starts from cargo-dist output but is intentionally post-generated:
   action refs and installer bytes are SHA-pinned, permissions are job-scoped, shell expressions are
-  injection-safe, and cargo-cyclonedx 0.5.9 emits a binary-only CycloneDX 1.5 SBOM with hashes.
+  injection-safe, cargo-cyclonedx 0.5.9 emits a binary-only CycloneDX 1.5 SBOM with hashes, and
+  host-compatible macOS/Windows platform archives must pass native smoke tests before publishing.
 - `allow-dirty = ["ci"]` in `dist-workspace.toml` is intentional. Do not replace release.yml with
   raw `dist generate` output. If regenerating, reapply the hardening and the release-tag skill
   version gate, verify with `mise run workflow:check` and `mise run workflow:security`, then run

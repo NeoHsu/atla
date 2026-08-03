@@ -50,7 +50,9 @@ def checked_zip_names(archive: zipfile.ZipFile, path: Path) -> set[str]:
         safe_names([member.filename], path)
         mode = member.external_attr >> 16
         if stat.S_IFMT(mode) == stat.S_IFLNK:
-            raise ValueError(f"archive contains an unexpected symlink: {member.filename}")
+            raise ValueError(
+                f"archive contains an unexpected symlink: {member.filename}"
+            )
     return safe_names([member.filename for member in members], path)
 
 
@@ -99,7 +101,10 @@ def binary_from_archive(directory: Path, path: Path) -> tuple[bytes, int]:
         with zipfile.ZipFile(path) as archive:
             checked_zip_names(archive, path)
             for member in archive.infolist():
-                if not member.is_dir() and PurePosixPath(member.filename).name == executable:
+                if (
+                    not member.is_dir()
+                    and PurePosixPath(member.filename).name == executable
+                ):
                     found.append((archive.read(member), member.external_attr >> 16))
     else:
         with tarfile.open(path, mode="r:xz") as archive:
@@ -108,7 +113,9 @@ def binary_from_archive(directory: Path, path: Path) -> tuple[bytes, int]:
                 if member.isfile() and PurePosixPath(member.name).name == executable:
                     source = archive.extractfile(member)
                     if source is None:
-                        raise ValueError(f"could not read {executable} from {path.name}")
+                        raise ValueError(
+                            f"could not read {executable} from {path.name}"
+                        )
                     found.append((source.read(), member.mode))
     if len(found) != 1:
         raise ValueError(f"{path.name} should contain exactly one {executable}")
@@ -152,7 +159,9 @@ def execute_native_archive(directory: Path, archives: list[Path]) -> None:
                 timeout=30,
             )
             if "atla" not in f"{result.stdout}{result.stderr}".lower():
-                raise ValueError(f"native archive returned unexpected output for {arguments[0]}")
+                raise ValueError(
+                    f"native archive returned unexpected output for {arguments[0]}"
+                )
 
 
 def verify_sbom(path: Path) -> None:
@@ -186,12 +195,25 @@ def verify_checksum_manifest(directory: Path) -> None:
     manifest = directory / "sha256.sum"
     if not manifest.is_file():
         raise ValueError("missing sha256.sum")
-    for line in manifest.read_text(encoding="utf-8").splitlines():
+    manifest = constrained(directory, manifest)
+    for line_number, line in enumerate(
+        manifest.read_text(encoding="utf-8").splitlines(), start=1
+    ):
         if not line.strip():
             continue
-        expected, name = line.split(maxsplit=1)
-        artifact = directory / name.lstrip(" *")
-        if not artifact.is_file() or digest(artifact) != expected:
+        fields = line.split(maxsplit=1)
+        if len(fields) != 2:
+            raise ValueError(f"invalid sha256.sum entry on line {line_number}")
+        expected, name = fields
+        if len(expected) != 64 or any(
+            character not in "0123456789abcdefABCDEF" for character in expected
+        ):
+            raise ValueError(f"invalid SHA-256 digest on line {line_number}")
+        artifact_name = name.lstrip(" *")
+        if not artifact_name:
+            raise ValueError(f"missing artifact name on line {line_number}")
+        artifact = constrained(directory, directory / artifact_name)
+        if not artifact.is_file() or digest(artifact) != expected.lower():
             raise ValueError(f"sha256.sum mismatch for {artifact.name}")
 
 
@@ -209,6 +231,11 @@ def main() -> int:
         action="store_true",
         help="run --version and --help from the archive matching the current runner",
     )
+    parser.add_argument(
+        "--platform-only",
+        action="store_true",
+        help="verify only platform archives; skip global release files",
+    )
     arguments = parser.parse_args()
     directory = Path("target/distrib").resolve(strict=True)
     archives = [
@@ -222,6 +249,9 @@ def main() -> int:
         verify_binary_archive(directory, archive)
     if arguments.execute_native:
         execute_native_archive(directory, archives)
+    if arguments.platform_only:
+        sys.stdout.write(f"verified {len(archives)} platform archive(s)\n")
+        return 0
     verify_source_archive(directory, directory / "source.tar.gz")
     verify_sbom(constrained(directory, directory / "atla.cdx.xml"))
     verify_installers(directory)

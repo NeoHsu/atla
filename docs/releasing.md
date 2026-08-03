@@ -14,12 +14,15 @@ description: Versioning, cargo-dist artifacts, SBOM, provenance, and supply-chai
    an empty `[Unreleased]` section plus compare links.
 3. Run the workspace test, fmt, Clippy, `cargo machete`, RustSec, MSRV, doc, CLI-surface,
    workflow syntax, and workflow-security checks (`mise run workflow:check workflow:security`).
-4. Run cargo-dist plan/local/global artifact smoke tests.
+4. Run cargo-dist plan/local/global artifact smoke tests. Release CI also executes the host-compatible
+   platform archive on macOS and Windows; a failing platform smoke blocks publication.
 5. Run `mise run size:bloat` and compare the `dist` profile crate breakdown with the previous
    release. This is diagnostic until a target-specific size budget is established.
 6. Run `python3 scripts/verify-release-artifacts.py`; it checks archive contents,
    sidecar/manifest hashes, CycloneDX 1.5, and SBOM component hashes. On the Ubuntu release
    runner, `--execute-native` also runs `atla --version` and `atla --help` from the native archive.
+   The macOS and Windows verification matrix uses `--platform-only --execute-native` against the
+   local archives before the release host can publish them.
 7. For bounded Jira and Confluence sandbox testing, follow
    [Live Sandbox Smoke Testing](./live-smoke.md). The ledger's `finish` command
    must report complete, with every selected remote operation classified and no

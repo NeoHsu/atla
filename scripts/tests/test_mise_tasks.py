@@ -18,6 +18,7 @@ EXPECTED_TASKS = {
     "contract:update",
     "coverage",
     "deny",
+    "deps:duplicates",
     "fmt",
     "lint",
     "msrv",
@@ -92,11 +93,35 @@ class MiseTaskTests(unittest.TestCase):
         self.assertIn("workflow-security:", workflow)
         self.assertGreaterEqual(workflow.count("timeout-minutes:"), 5)
 
+    def test_coverage_publishes_per_crate_summary(self) -> None:
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(
+            "cargo llvm-cov report --locked --json --summary-only --output-path coverage-summary.json",
+            workflow,
+        )
+        self.assertIn(
+            "python3 scripts/coverage-report.py --input coverage-summary.json --output coverage-summary.md",
+            workflow,
+        )
+        self.assertIn('cat coverage-summary.md >> "$GITHUB_STEP_SUMMARY"', workflow)
+        coverage_task = self.config["tasks"]["coverage"]["run"]
+        self.assertIn(
+            "python scripts/coverage-report.py --input target/coverage-summary.json --output target/coverage-summary.md",
+            coverage_task,
+        )
+
     def test_release_runs_native_artifact_smoke(self) -> None:
         workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn(
             "python3 scripts/verify-release-artifacts.py --execute-native", workflow
         )
+        self.assertIn("verify-platform-artifacts:", workflow)
+        self.assertIn(
+            "python scripts/verify-release-artifacts.py --platform-only --execute-native",
+            workflow,
+        )
+        self.assertIn("pattern: artifacts-build-local-*", workflow)
+        self.assertIn("needs.verify-platform-artifacts.result", workflow)
 
     def test_pr_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
@@ -105,7 +130,7 @@ class MiseTaskTests(unittest.TestCase):
             "python scripts/check-skill-version.py",
             "cargo +1.91 check --workspace --all-targets --locked",
             "cargo nextest run --workspace --locked --status-level all",
-            "cargo test --doc --locked -p atla-core -p atla-jira-api",
+            "cargo test --doc --workspace --locked",
             "cargo audit",
             "cargo deny check",
             "scripts/check-workflows.sh",
@@ -117,7 +142,10 @@ class MiseTaskTests(unittest.TestCase):
     def test_workflow_security_tasks_use_pinned_tools(self) -> None:
         tools = self.config["tools"]
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn(f'github.com/rhysd/actionlint/cmd/actionlint@v{tools["actionlint"]}', workflow)
+        self.assertIn(
+            f"github.com/rhysd/actionlint/cmd/actionlint@v{tools['actionlint']}",
+            workflow,
+        )
         self.assertIn(f"version: {tools['zizmor']}", workflow)
         self.assertIn("zizmorcore/zizmor-action@", workflow)
         self.assertTrue((ROOT / "scripts/check-workflows.sh").stat().st_mode & 0o111)

@@ -47,9 +47,13 @@ Each crate contains only three hand-maintained files:
 
 - `Cargo.toml` — declares build-dependencies on progenitor and runtime dependencies on progenitor-client
 - `build.rs` — reads the spec and invokes progenitor to generate `$OUT_DIR/codegen.rs`
-- `src/lib.rs` — `include!(concat!(env!("OUT_DIR"), "/codegen.rs"));`
+- `src/lib.rs` — includes `codegen.rs` for normal builds; skips the generated documentation
+  examples under `cfg(doctest)` because Progenitor emits raw URL/JSON fragments that are not
+  valid Rust doctests.
 
 All API client code is generated at compile time. There are no hand-maintained API modules.
+The generated clients' transport behavior is exercised through `atla-core` contract tests, so
+`cargo test --doc --workspace` remains a valid workspace-wide gate without editing `OUT_DIR`.
 
 ---
 

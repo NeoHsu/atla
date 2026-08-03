@@ -470,6 +470,7 @@ pub async fn read_empty(request: reqwest::RequestBuilder) -> Result<(), ApiError
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn joins_base_url_and_paths() {
@@ -603,6 +604,30 @@ mod tests {
             Some(Duration::from_secs(12))
         );
         assert_eq!(parse_retry_after("not-a-date", now), None);
+    }
+
+    proptest! {
+        #[test]
+        fn retry_after_parser_handles_arbitrary_text_without_panicking(
+            value in proptest::string::string_regex(".{0,128}").unwrap(),
+        ) {
+            let now = std::time::SystemTime::UNIX_EPOCH;
+            let _ = parse_retry_after(&value, now);
+        }
+
+        #[test]
+        fn retry_delays_remain_bounded_for_arbitrary_seconds(seconds in any::<u64>()) {
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert(
+                reqwest::header::RETRY_AFTER,
+                reqwest::header::HeaderValue::from_str(&seconds.to_string())
+                    .expect("decimal seconds are valid header values"),
+            );
+
+            prop_assert!(
+                retry_delay_from_headers(Some(&headers), 0) <= MAX_RETRY_DELAY
+            );
+        }
     }
 
     #[tokio::test]

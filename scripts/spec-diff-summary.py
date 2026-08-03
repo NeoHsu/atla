@@ -42,7 +42,9 @@ class Delta:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", default="HEAD", help="Git revision to compare against")
+    parser.add_argument(
+        "--base", default="HEAD", help="Git revision to compare against"
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -57,7 +59,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def git(repo: Path, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[bytes]:
+def git(
+    repo: Path, *arguments: str, check: bool = True
+) -> subprocess.CompletedProcess[bytes]:
     return subprocess.run(
         ["git", "-C", str(repo), *arguments],
         check=check,
@@ -104,7 +108,11 @@ def resolve_local_ref(document: dict[str, Any], value: Any) -> Any:
     seen: set[str] = set()
     while isinstance(value, dict) and set(value) == {"$ref"}:
         reference = value["$ref"]
-        if not isinstance(reference, str) or not reference.startswith("#/") or reference in seen:
+        if (
+            not isinstance(reference, str)
+            or not reference.startswith("#/")
+            or reference in seen
+        ):
             break
         seen.add(reference)
         resolved: Any = document
@@ -166,7 +174,9 @@ def collect_contract_facts(document: dict[str, Any]) -> frozenset[str]:
             if not isinstance(path_parameters, list):
                 path_parameters = []
             for method, operation in path_item.items():
-                if method.lower() not in HTTP_METHODS or not isinstance(operation, dict):
+                if method.lower() not in HTTP_METHODS or not isinstance(
+                    operation, dict
+                ):
                     continue
                 operation_prefix = f"{method.upper()} {route}"
                 operation_parameters = operation.get("parameters", [])
@@ -250,7 +260,9 @@ def parse_snapshot(source: bytes, description: str) -> Snapshot:
             if not isinstance(path_item, dict):
                 continue
             for method, operation in path_item.items():
-                if method.lower() not in HTTP_METHODS or not isinstance(operation, dict):
+                if method.lower() not in HTTP_METHODS or not isinstance(
+                    operation, dict
+                ):
                     continue
                 operation_id = operation.get("operationId")
                 if isinstance(operation_id, str) and operation_id:
@@ -405,7 +417,9 @@ def render_summary(deltas: list[Delta], revision: str) -> str:
             ]
         )
     if not any_contract_changes:
-        lines.extend(["No parameter, request, response, or schema contract facts changed.", ""])
+        lines.extend(
+            ["No parameter, request, response, or schema contract facts changed.", ""]
+        )
 
     lines.extend(
         [

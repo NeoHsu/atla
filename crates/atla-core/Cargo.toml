@@ -31,5 +31,6 @@ directories = { workspace = true }
 libc = { workspace = true }
 
 [dev-dependencies]
+proptest.workspace = true
 tokio.workspace = true
 wiremock.workspace = true

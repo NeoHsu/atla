@@ -48,7 +48,7 @@ for required in \
 	"zizmorcore/zizmor-action@" \
 	"rustsec/audit-check@" \
 	"cargo nextest run --workspace --locked" \
-	"cargo test --doc --locked -p atla-core -p atla-jira-api"; do
+	"cargo test --doc --workspace --locked"; do
 	if ! grep -Fq "$required" "$CI_WORKFLOW"; then
 		echo "$CI_WORKFLOW must contain: $required" >&2
 		exit 1

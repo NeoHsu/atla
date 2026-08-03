@@ -55,7 +55,9 @@ through `GeneratedTransport`.
 | `crates/atla-cli/src/output/` | Table, JSON, CSV, key, schema, and error rendering | Stable machine-readable output |
 | `crates/atla-core/src/jira/` | Jira domain clients and models | No CLI formatting or command matching |
 | `crates/atla-core/src/confluence/` | Confluence domain clients and models | No CLI formatting or command matching |
+| `crates/atla-core/src/profile/` | Profile config, policy, storage, and migration modules | Atomic local configuration boundary |
 | `crates/atla-core/src/markdown/` | Markdown/ADF conversion | Shared content boundary |
+| `crates/atla-cli/src/commands/{jira,confluence}/format/` | Domain-specific rendering, parsing, and body helpers | CLI output and input boundary |
 | `crates/atla-core/src/generated_api.rs` | Generated-client ownership and transport | Keeps generated APIs behind policy |
 | `crates/*-api/build.rs` | Partial-spec Progenitor generation | Build-time only; output is not committed |
 | `specs/` | Upstream and filtered API contracts | Reproducible code-generation input |

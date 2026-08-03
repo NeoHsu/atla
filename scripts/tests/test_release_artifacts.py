@@ -59,6 +59,75 @@ class ReleaseArtifactTests(unittest.TestCase):
 
             verify.verify_binary_archive(root.resolve(), archive)
 
+    def test_checksum_manifest_accepts_valid_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            artifact = root / "atla.cdx.xml"
+            artifact.write_bytes(b"sbom")
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            (root / "sha256.sum").write_text(
+                f"{digest}  {artifact.name}\n", encoding="utf-8"
+            )
+
+            verify.verify_checksum_manifest(root)
+
+    def test_checksum_manifest_rejects_paths_outside_distribution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / "dist"
+            root.mkdir()
+            outside = root.parent / "outside.bin"
+            outside.write_bytes(b"outside")
+            digest = hashlib.sha256(outside.read_bytes()).hexdigest()
+            (root / "sha256.sum").write_text(
+                f"{digest}  ../outside.bin\n", encoding="utf-8"
+            )
+
+            with self.assertRaises(ValueError):
+                verify.verify_checksum_manifest(root)
+
+    def test_checksum_manifest_rejects_malformed_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            artifact = root / "artifact.bin"
+            artifact.write_bytes(b"artifact")
+            (root / "sha256.sum").write_text(
+                f"not-a-digest  {artifact.name}\n", encoding="utf-8"
+            )
+
+            with self.assertRaises(ValueError):
+                verify.verify_checksum_manifest(root)
+
+    def test_installers_require_checksum_verification_and_sidecars(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            shell = root / "atla-installer.sh"
+            powershell = root / "atla-installer.ps1"
+            shell.write_text(
+                "verify_checksum archive sha256sum", encoding="utf-8"
+            )
+            powershell.write_text(
+                "Get-FileHash -Algorithm SHA256 $url.sha256", encoding="utf-8"
+            )
+            self.write_sidecar(shell)
+            self.write_sidecar(powershell)
+
+            verify.verify_installers(root)
+
+    def test_installer_without_checksum_verification_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            shell = root / "atla-installer.sh"
+            powershell = root / "atla-installer.ps1"
+            shell.write_text("download archive", encoding="utf-8")
+            powershell.write_text(
+                "Get-FileHash -Algorithm SHA256 $url.sha256", encoding="utf-8"
+            )
+            self.write_sidecar(shell)
+            self.write_sidecar(powershell)
+
+            with self.assertRaises(ValueError):
+                verify.verify_installers(root)
+
     def test_native_smoke_executes_matching_archive_binary(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -72,7 +141,9 @@ class ReleaseArtifactTests(unittest.TestCase):
                     "LICENSE": b"license",
                 },
             )
-            with patch.object(verify, "native_target", return_value="x86_64-unknown-linux-gnu"):
+            with patch.object(
+                verify, "native_target", return_value="x86_64-unknown-linux-gnu"
+            ):
                 verify.execute_native_archive(root.resolve(), [archive])
 
     def test_zip_symlink_is_rejected(self) -> None:
