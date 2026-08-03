@@ -1,14 +1,15 @@
 use anyhow::Context;
 use atla_core::{ConfluenceSpaceCreate, ConfluenceSpaceSearch, ConfluenceSpaceUpdate};
 
-use crate::cli::{GlobalArgs, OutputFormat, SpaceAction, SpaceCommand};
+use crate::cli::{OutputFormat, SpaceAction, SpaceCommand};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{
     print_deleted, print_space, print_spaces, print_spaces_with_footer, read_body,
 };
 
-pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) async fn run_space(command: SpaceCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.action {
         SpaceAction::List {
             key,
@@ -78,7 +79,7 @@ pub(super) async fn run_space(command: SpaceCommand, global: &GlobalArgs) -> any
                 crate::pagination::next_command(parts, limit, token)
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                OutputFormat::Json => global.output().print_json(&serde_json::json!({
                     "results": page.results,
                     "pagination": { "isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command }
                 }))?,

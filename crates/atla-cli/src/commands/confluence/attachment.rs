@@ -1,8 +1,9 @@
 use anyhow::Context;
 use atla_core::{ConfluenceAttachmentSearch, ConfluenceAttachmentUpload};
 
-use crate::cli::{AttachmentAction, AttachmentCommand, GlobalArgs, OutputFormat};
+use crate::cli::{AttachmentAction, AttachmentCommand, OutputFormat};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{
     print_attachment, print_attachment_download, print_attachments, print_attachments_with_footer,
@@ -11,7 +12,7 @@ use super::format::{
 
 pub(super) async fn run_attachment(
     command: AttachmentCommand,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match command.action {
         AttachmentAction::List {
@@ -89,7 +90,7 @@ pub(super) async fn run_attachment(
                 crate::pagination::next_command(parts, limit, token)
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+                OutputFormat::Json => global.output().print_json(&serde_json::json!({
                     "results": page.results,
                     "pagination": { "isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command }
                 }))?,
@@ -173,7 +174,9 @@ pub(super) async fn run_attachment(
                 })?;
 
             if global.output == Some(OutputFormat::Json) {
-                crate::output::print_json(&serde_json::json!({ "results": page.results }))?;
+                global
+                    .output()
+                    .print_json(&serde_json::json!({ "results": page.results }))?;
             } else {
                 print_attachments(&page.results, global)?;
             }

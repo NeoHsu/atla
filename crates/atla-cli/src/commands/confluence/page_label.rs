@@ -1,14 +1,15 @@
 use anyhow::Context;
 use atla_core::ConfluenceLabelSearch;
 
-use crate::cli::{GlobalArgs, OutputFormat, PageLabelAction};
+use crate::cli::{OutputFormat, PageLabelAction};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{print_deleted, print_labels, print_labels_with_footer};
 
 pub(super) async fn run_page_label(
     action: PageLabelAction,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match action {
         PageLabelAction::List {
@@ -83,7 +84,7 @@ pub(super) async fn run_page_label(
                 crate::pagination::next_command(parts, limit, token)
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(
+                OutputFormat::Json => global.output().print_json(
                     &serde_json::json!({"results": labels.results, "pagination": {"isLast": labels.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
                 )?,
                 OutputFormat::Table => print_labels_with_footer(

@@ -1,14 +1,15 @@
 use anyhow::Context;
 use atla_core::JiraWorklogCreate;
 
-use crate::cli::{GlobalArgs, IssueWorklogAction, OutputFormat};
+use crate::cli::{IssueWorklogAction, OutputFormat};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{print_worklog, print_worklogs, print_worklogs_with_footer};
 
 pub(super) async fn run_issue_worklog(
     action: IssueWorklogAction,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match action {
         IssueWorklogAction::Add {
@@ -111,7 +112,7 @@ pub(super) async fn run_issue_worklog(
                 )
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(
+                OutputFormat::Json => global.output().print_json(
                     &serde_json::json!({"worklogs": page.worklogs, "total": page.total, "pagination": {"isLast": next_cli_token.is_none(), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
                 )?,
                 OutputFormat::Table => print_worklogs_with_footer(

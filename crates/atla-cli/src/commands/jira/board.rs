@@ -1,12 +1,13 @@
 use anyhow::Context;
 use atla_core::JiraBoardSearch;
 
-use crate::cli::{BoardAction, BoardCommand, GlobalArgs, OutputFormat};
+use crate::cli::{BoardAction, BoardCommand, OutputFormat};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{print_board, print_boards, print_boards_with_footer};
 
-pub(super) async fn run_board(command: BoardCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) async fn run_board(command: BoardCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.action {
         BoardAction::List {
             project,
@@ -87,7 +88,7 @@ pub(super) async fn run_board(command: BoardCommand, global: &GlobalArgs) -> any
                 crate::pagination::next_command(parts, limit, token)
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(
+                OutputFormat::Json => global.output().print_json(
                     &serde_json::json!({"values": page.values, "total": page.total, "pagination": {"isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
                 )?,
                 OutputFormat::Table => print_boards_with_footer(

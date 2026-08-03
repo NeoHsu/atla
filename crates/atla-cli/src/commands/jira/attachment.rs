@@ -1,14 +1,15 @@
 use anyhow::Context;
 
-use crate::cli::{GlobalArgs, IssueAttachmentAction, OutputFormat};
+use crate::cli::{IssueAttachmentAction, OutputFormat};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 use crate::output;
 
 use super::format::{print_attachment_downloads, print_attachments};
 
 pub(super) async fn run_issue_attachment(
     action: IssueAttachmentAction,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match action {
         IssueAttachmentAction::Upload { key, file } => {
@@ -141,15 +142,19 @@ pub(super) async fn run_issue_attachment(
                 })?;
 
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => output::print_json(&output::schema::MutationReceipt {
-                    schema_version: output::schema::SCHEMA_VERSION,
-                    operation: "jira.issue.attachment.delete",
-                    profile: profile_name.to_owned(),
-                    target: Some(attachment_id.clone()),
-                    request_id: None,
-                    result: serde_json::json!({ "deleted": attachment_id }),
-                    completed_at: chrono::Utc::now().to_rfc3339(),
-                }),
+                OutputFormat::Json => {
+                    global
+                        .output()
+                        .print_json(&output::schema::MutationReceipt {
+                            schema_version: output::schema::SCHEMA_VERSION,
+                            operation: "jira.issue.attachment.delete",
+                            profile: profile_name.to_owned(),
+                            target: Some(attachment_id.clone()),
+                            request_id: None,
+                            result: serde_json::json!({ "deleted": attachment_id }),
+                            completed_at: chrono::Utc::now().to_rfc3339(),
+                        })
+                }
                 OutputFormat::Keys => {
                     println!("{attachment_id}");
                     Ok(())

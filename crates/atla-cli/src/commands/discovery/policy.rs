@@ -2,10 +2,10 @@ use anyhow::Context;
 use atla_core::{ConfigStore, PolicyDecisionSource};
 use serde::Serialize;
 
-use crate::cli::{ExplainPolicyArgs, GlobalArgs, OutputFormat};
+use crate::cli::{ExplainPolicyArgs, OutputFormat};
 use crate::error::UsageError;
+use crate::invocation::Invocation;
 use crate::operation;
-use crate::output;
 use crate::output::schema::SCHEMA_VERSION;
 use crate::policy;
 
@@ -27,7 +27,7 @@ struct PolicyExplanation {
     reason: String,
 }
 
-pub fn explain_policy(args: ExplainPolicyArgs, global: &GlobalArgs) -> anyhow::Result<()> {
+pub fn explain_policy(args: ExplainPolicyArgs, global: &Invocation) -> anyhow::Result<()> {
     let metadata = operation::by_id(&args.operation_id).ok_or_else(|| {
         anyhow::Error::new(UsageError(format!(
             "unknown operation `{}`; run `atla operation list`",
@@ -57,7 +57,7 @@ pub fn explain_policy(args: ExplainPolicyArgs, global: &GlobalArgs) -> anyhow::R
         if policy_applies {
             let decision = selected
                 .policy
-                .decision(metadata.id, metadata.risk.mutates());
+                .decision(metadata.id.as_str(), metadata.risk.mutates());
             profile_allowed = decision.allowed;
             profile_decision = match decision.source {
                 PolicyDecisionSource::Deny => "deny-rule",
@@ -109,9 +109,9 @@ pub fn explain_policy(args: ExplainPolicyArgs, global: &GlobalArgs) -> anyhow::R
     };
 
     match global.output {
-        Some(OutputFormat::Json) => output::print_json(&report),
+        Some(OutputFormat::Json) => global.output().print_json(&report),
         Some(format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys)) => {
-            output::print_records(
+            global.output().print_records(
                 format,
                 &report,
                 vec![report.operation.id.to_owned()],

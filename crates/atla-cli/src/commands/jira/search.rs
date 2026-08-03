@@ -1,8 +1,9 @@
 use anyhow::Context;
 use atla_core::JiraIssueSearch;
 
-use crate::cli::{GlobalArgs, OutputFormat};
+use crate::cli::OutputFormat;
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{
     issue_fields_for_url, parse_issue_fields, print_issues, print_issues_with_footer,
@@ -14,7 +15,7 @@ pub(super) async fn run_search(
     all: bool,
     page_token: Option<String>,
     fields: Option<String>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     let ctx = AppContext::load(global)?;
     let profile_name = ctx.profile_name();
@@ -84,7 +85,7 @@ pub(super) async fn run_search(
     });
 
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "issues": page.issues,
             "pagination": crate::output::schema::Pagination {
                 is_last: page.is_last.unwrap_or(true),

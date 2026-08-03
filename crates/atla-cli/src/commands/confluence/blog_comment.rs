@@ -1,8 +1,9 @@
 use anyhow::Context;
 use atla_core::{ConfluenceCommentCreate, ConfluenceCommentSearch};
 
-use crate::cli::{BlogCommentAction, GlobalArgs, OutputFormat};
+use crate::cli::{BlogCommentAction, OutputFormat};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{
     prepare_required_body_with_options, print_comment, print_comments, print_comments_with_footer,
@@ -11,7 +12,7 @@ use super::format::{
 
 pub(super) async fn run_blog_comment(
     action: BlogCommentAction,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match action {
         BlogCommentAction::List {
@@ -80,7 +81,7 @@ pub(super) async fn run_blog_comment(
                 )
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(
+                OutputFormat::Json => global.output().print_json(
                     &serde_json::json!({"results": comments.results, "pagination": {"isLast": comments.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
                 )?,
                 OutputFormat::Table => print_comments_with_footer(

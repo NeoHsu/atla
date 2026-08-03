@@ -1,4 +1,5 @@
-use crate::cli::{GlobalArgs, JiraCommand, JiraResource};
+use crate::cli::{JiraCommand, JiraResource};
+use crate::invocation::Invocation;
 
 mod attachment;
 mod board;
@@ -10,7 +11,7 @@ mod search;
 mod sprint;
 mod worklog;
 
-pub async fn run(command: JiraCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub async fn run(command: JiraCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.resource {
         JiraResource::Issue(command) => issue::run_issue(command, global).await?,
         JiraResource::Project(command) => project::run_project(command, global).await?,

@@ -9,13 +9,14 @@ use dialoguer::Select;
 use std::io::{IsTerminal, stdin, stdout};
 use std::path::Path;
 
-use crate::cli::{GlobalArgs, OutputFormat};
+use crate::cli::OutputFormat;
+use crate::invocation::Invocation;
 use crate::output;
 
 pub(super) fn print_projects(
     projects: &[JiraProject],
     total: Option<u64>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     print_projects_with_footer(projects, total, global, None)
 }
@@ -23,10 +24,10 @@ pub(super) fn print_projects(
 pub(super) fn print_projects_with_footer(
     projects: &[JiraProject],
     total: Option<u64>,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         projects,
         projects
@@ -61,7 +62,7 @@ pub(super) fn print_projects_with_footer(
 
 pub(super) fn print_issues(
     issues: &[JiraIssue],
-    global: &GlobalArgs,
+    global: &Invocation,
     requested_fields: Option<&[String]>,
 ) -> anyhow::Result<()> {
     print_issues_with_footer(issues, global, requested_fields, None)
@@ -69,7 +70,7 @@ pub(super) fn print_issues(
 
 pub(super) fn print_issues_with_footer(
     issues: &[JiraIssue],
-    global: &GlobalArgs,
+    global: &Invocation,
     requested_fields: Option<&[String]>,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
@@ -116,7 +117,7 @@ pub(super) fn print_issues_with_footer(
     };
 
     let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         issues,
         issues
@@ -145,12 +146,12 @@ pub(super) fn issue_column_cell(issue: &JiraIssue, col: &str) -> String {
 
 pub(super) fn print_issue(
     issue: &JiraIssue,
-    global: &GlobalArgs,
+    global: &Invocation,
     requested_fields: Option<&[String]>,
 ) -> anyhow::Result<()> {
     let extra_fields = display_extra_issue_fields(requested_fields);
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(issue),
+        OutputFormat::Json => global.output().print_json(issue),
         OutputFormat::Keys => {
             if let Some(key) = &issue.key {
                 println!("{key}");
@@ -282,10 +283,10 @@ pub(super) fn print_issue(
 
 pub(super) fn print_created_issue(
     issue: &JiraCreatedIssue,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(issue),
+        OutputFormat::Json => global.output().print_json(issue),
         OutputFormat::Keys => {
             if let Some(key) = &issue.key {
                 println!("{key}");
@@ -312,9 +313,9 @@ pub(super) fn print_created_issue(
     }
 }
 
-pub(super) fn print_issue_update(key: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_issue_update(key: &str, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "key": key,
             "updated": true
         })),
@@ -334,9 +335,9 @@ pub(super) fn print_issue_update(key: &str, global: &GlobalArgs) -> anyhow::Resu
     }
 }
 
-pub(super) fn print_issue_delete(key: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_issue_delete(key: &str, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "key": key,
             "deleted": true
         })),
@@ -359,12 +360,12 @@ pub(super) fn print_issue_delete(key: &str, global: &GlobalArgs) -> anyhow::Resu
 pub(super) fn print_issue_assign(
     key: &str,
     user: &JiraUser,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => {
             let is_unassigned = user.account_id.is_none() && user.display_name.is_none();
-            output::print_json(&serde_json::json!({
+            global.output().print_json(&serde_json::json!({
                 "key": key,
                 "assigned": !is_unassigned,
                 "assignee": if is_unassigned { serde_json::Value::Null } else { serde_json::to_value(user).unwrap_or(serde_json::Value::Null) }
@@ -411,10 +412,10 @@ pub(super) fn print_issue_assign(
 pub(super) fn print_transition_update(
     key: &str,
     transition: &JiraTransition,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "key": key,
             "transitioned": true,
             "transition": transition,
@@ -455,16 +456,16 @@ pub(super) fn print_transition_update(
     }
 }
 
-pub(super) fn print_comments(page: &JiraCommentPage, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_comments(page: &JiraCommentPage, global: &Invocation) -> anyhow::Result<()> {
     print_comments_with_footer(page, global, None)
 }
 
 pub(super) fn print_comments_with_footer(
     page: &JiraCommentPage,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
         page.comments
@@ -501,7 +502,7 @@ pub(super) fn print_comments_with_footer(
 
 pub(super) fn print_issue_comments_section(
     page: &JiraCommentPage,
-    _global: &GlobalArgs,
+    _global: &Invocation,
 ) -> anyhow::Result<()> {
     let total = page.total.unwrap_or(page.comments.len() as u32);
     println!();
@@ -527,9 +528,9 @@ pub(super) fn print_issue_comments_section(
     Ok(())
 }
 
-pub(super) fn print_comment(comment: &JiraComment, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_comment(comment: &JiraComment, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(comment),
+        OutputFormat::Json => global.output().print_json(comment),
         OutputFormat::Keys => {
             if let Some(id) = &comment.id {
                 println!("{id}");
@@ -566,9 +567,9 @@ pub(super) fn print_comment(comment: &JiraComment, global: &GlobalArgs) -> anyho
 
 pub(super) fn print_issue_links(
     links: &[JiraIssueLink],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         links,
         links.iter().filter_map(|link| link.id.clone()).collect(),
@@ -610,10 +611,10 @@ pub(super) fn print_issue_with_github(
     issue: &JiraIssue,
     prs: &[JiraGithubPullRequest],
     commits: &[JiraGithubCommit],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "issue": issue,
             "pull_requests": prs,
             "commits": commits,
@@ -664,9 +665,9 @@ pub(super) fn print_issue_with_github(
 
 pub(super) fn print_github_pull_requests(
     prs: &[JiraGithubPullRequest],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         prs,
         prs.iter().filter_map(|pr| pr.url.clone()).collect(),
@@ -698,9 +699,9 @@ pub(super) fn print_github_pull_requests(
 
 pub(super) fn print_github_commits(
     commits: &[JiraGithubCommit],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         commits,
         commits.iter().filter_map(|c| c.url.clone()).collect(),
@@ -728,16 +729,16 @@ pub(super) fn print_github_commits(
     )
 }
 
-pub(super) fn print_worklogs(page: &JiraWorklogPage, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_worklogs(page: &JiraWorklogPage, global: &Invocation) -> anyhow::Result<()> {
     print_worklogs_with_footer(page, global, None)
 }
 
 pub(super) fn print_worklogs_with_footer(
     page: &JiraWorklogPage,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
         page.worklogs
@@ -776,7 +777,7 @@ pub(super) fn print_worklogs_with_footer(
     )
 }
 
-pub(super) fn print_worklog(worklog: &JiraWorklog, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_worklog(worklog: &JiraWorklog, global: &Invocation) -> anyhow::Result<()> {
     print_worklogs(
         &JiraWorklogPage {
             start_at: 0,
@@ -790,9 +791,9 @@ pub(super) fn print_worklog(worklog: &JiraWorklog, global: &GlobalArgs) -> anyho
 
 pub(super) fn print_issue_types(
     types: &[JiraIssueType],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         types,
         types
@@ -825,7 +826,7 @@ pub(super) fn print_issue_types(
 pub(super) fn print_issue_fields(
     fields: &[JiraIssueField],
     required_only: bool,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     let filtered: Vec<&JiraIssueField> = if required_only {
         fields.iter().filter(|f| f.required).collect()
@@ -833,7 +834,7 @@ pub(super) fn print_issue_fields(
         fields.iter().collect()
     };
 
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         &filtered,
         filtered.iter().map(|f| f.field_id.clone()).collect(),
@@ -871,9 +872,9 @@ pub(super) fn print_issue_fields(
 
 pub(super) fn print_attachment_downloads(
     downloads: &[JiraAttachmentDownload],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         downloads,
         downloads
@@ -903,9 +904,9 @@ pub(super) fn print_attachment_downloads(
 
 pub(super) fn print_attachments(
     attachments: &[JiraAttachment],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         attachments,
         attachments
@@ -930,16 +931,16 @@ pub(super) fn print_attachments(
     )
 }
 
-pub(super) fn print_boards(page: &JiraBoardPage, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_boards(page: &JiraBoardPage, global: &Invocation) -> anyhow::Result<()> {
     print_boards_with_footer(page, global, None)
 }
 
 pub(super) fn print_boards_with_footer(
     page: &JiraBoardPage,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
         page.values
@@ -965,9 +966,9 @@ pub(super) fn print_boards_with_footer(
     )
 }
 
-pub(super) fn print_board(board: &JiraBoard, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_board(board: &JiraBoard, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(board),
+        OutputFormat::Json => global.output().print_json(board),
         OutputFormat::Keys => {
             if let Some(id) = board.id {
                 println!("{id}");
@@ -1000,16 +1001,16 @@ pub(super) fn print_board(board: &JiraBoard, global: &GlobalArgs) -> anyhow::Res
     }
 }
 
-pub(super) fn print_sprints(page: &JiraSprintPage, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_sprints(page: &JiraSprintPage, global: &Invocation) -> anyhow::Result<()> {
     print_sprints_with_footer(page, global, None)
 }
 
 pub(super) fn print_sprints_with_footer(
     page: &JiraSprintPage,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
         page.values
@@ -1051,9 +1052,9 @@ pub(super) fn print_sprints_with_footer(
     )
 }
 
-pub(super) fn print_sprint(sprint: &JiraSprint, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_sprint(sprint: &JiraSprint, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(sprint),
+        OutputFormat::Json => global.output().print_json(sprint),
         OutputFormat::Keys => {
             if let Some(id) = sprint.id {
                 println!("{id}");
@@ -1114,10 +1115,10 @@ pub(super) fn print_sprint(sprint: &JiraSprint, global: &GlobalArgs) -> anyhow::
 pub(super) fn print_sprint_issue_move(
     sprint_id: u64,
     issues: &[String],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "sprintId": sprint_id,
             "issues": issues
         })),
@@ -1142,9 +1143,9 @@ pub(super) fn print_sprint_issue_move(
     }
 }
 
-pub(super) fn print_deleted(kind: &str, id: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_deleted(kind: &str, id: &str, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "deleted": true,
             "kind": kind,
             "id": id
@@ -1165,9 +1166,9 @@ pub(super) fn print_deleted(kind: &str, id: &str, global: &GlobalArgs) -> anyhow
     }
 }
 
-pub(super) fn print_project(project: &JiraProject, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_project(project: &JiraProject, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(project),
+        OutputFormat::Json => global.output().print_json(project),
         OutputFormat::Keys => {
             if let Some(key) = &project.key {
                 println!("{key}");
@@ -1464,7 +1465,7 @@ pub(super) fn transition_display(transition: &JiraTransition) -> String {
     }
 }
 
-pub(super) fn can_prompt(global: &GlobalArgs) -> bool {
+pub(super) fn can_prompt(global: &Invocation) -> bool {
     !global.no_input && stdin().is_terminal() && stdout().is_terminal()
 }
 

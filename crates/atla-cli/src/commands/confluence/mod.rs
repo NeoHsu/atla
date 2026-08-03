@@ -1,4 +1,5 @@
-use crate::cli::{ConfluenceCommand, ConfluenceResource, GlobalArgs};
+use crate::cli::{ConfluenceCommand, ConfluenceResource};
+use crate::invocation::Invocation;
 
 mod attachment;
 mod blog;
@@ -11,7 +12,7 @@ mod page_label;
 mod search;
 mod space;
 
-pub async fn run(command: ConfluenceCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub async fn run(command: ConfluenceCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.resource {
         ConfluenceResource::Page(command) => page::run_page(command, global).await?,
         ConfluenceResource::Space(command) => space::run_space(command, global).await?,

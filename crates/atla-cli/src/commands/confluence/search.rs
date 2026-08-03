@@ -1,8 +1,8 @@
 use anyhow::Context;
 use atla_core::ConfluenceSearch;
 
-use crate::cli::GlobalArgs;
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::print_search_results;
 
@@ -11,7 +11,7 @@ pub(super) async fn run_search(
     limit: u32,
     all: bool,
     page_token: Option<String>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     let ctx = AppContext::load(global)?;
     let profile_name = ctx.profile_name();
@@ -69,7 +69,7 @@ pub(super) async fn run_search(
     });
 
     match global.output.unwrap_or(crate::cli::OutputFormat::Table) {
-        crate::cli::OutputFormat::Json => crate::output::print_json(&serde_json::json!({
+        crate::cli::OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "results": page.results,
             "pagination": {
                 "isLast": page.is_last.unwrap_or(true),

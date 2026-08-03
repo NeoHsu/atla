@@ -5,20 +5,26 @@ use anyhow::Context;
 use atla_core::client::read_json;
 use atla_core::{AtlassianProduct, Profile};
 use chrono::{DateTime, Duration, Utc};
-use reqwest::{Method, Url};
+use reqwest::Url;
 use sha2::{Digest, Sha256};
 
-use crate::cli::GlobalArgs;
 use crate::context::AppContext;
 use crate::error::UsageError;
+use crate::invocation::Invocation;
 use crate::output;
 use crate::output::schema::{OperationPlan, PlannedRequest};
 
-pub async fn apply(path: &Path, yes: bool, global: &GlobalArgs) -> anyhow::Result<()> {
+pub async fn apply(path: &Path, yes: bool, global: &Invocation) -> anyhow::Result<()> {
     if !yes {
         return usage("refusing to apply a mutation plan without --yes");
     }
     let plan = load_and_verify(path)?;
+    let operation = crate::operation::saved_plan_metadata(&plan.operation).ok_or_else(|| {
+        anyhow::Error::new(UsageError(format!(
+            "operation `{}` is not allowed in saved plans",
+            plan.operation
+        )))
+    })?;
     let ctx = AppContext::load(global)?;
     if plan.profile != ctx.profile_name() {
         return usage(format!(
@@ -55,7 +61,7 @@ pub async fn apply(path: &Path, yes: bool, global: &GlobalArgs) -> anyhow::Resul
     if plan.requests.len() != 1 {
         return usage("only single-request plans are supported");
     }
-    let product = validate_request(&plan.operation, request, ctx.profile())?;
+    let product = validate_request(operation, request, ctx.profile())?;
     let body = request.body.as_ref().ok_or_else(|| {
         anyhow::Error::new(UsageError("plan request has no JSON body".to_owned()))
     })?;
@@ -63,8 +69,10 @@ pub async fn apply(path: &Path, yes: bool, global: &GlobalArgs) -> anyhow::Resul
         return usage("plan request body must be a JSON object");
     }
 
-    output::configure_operation(plan.operation.clone(), true, false);
-    output::configure_profile(ctx.profile_name());
+    global
+        .output()
+        .configure_operation(operation.id, true, false);
+    global.output().configure_profile(ctx.profile_name());
     let client = ctx.atlassian_client(product)?;
     let builder = match request.method.as_str() {
         "POST" => client.post(&request.url),
@@ -76,9 +84,11 @@ pub async fn apply(path: &Path, yes: bool, global: &GlobalArgs) -> anyhow::Resul
         .await
         .with_context(|| format!("failed to apply operation `{}`", plan.operation))?;
     if result.is_object() {
-        output::print_json(&result)
+        global.output().print_json(&result)
     } else {
-        output::print_json(&serde_json::json!({ "result": result }))
+        global
+            .output()
+            .print_json(&serde_json::json!({ "result": result }))
     }
 }
 
@@ -113,7 +123,7 @@ fn load_and_verify(path: &Path) -> anyhow::Result<OperationPlan> {
     if !plan.mutating {
         return usage("apply accepts only mutating plans");
     }
-    if !crate::operation::supports_saved_plan(&plan.operation) {
+    if crate::operation::saved_plan_metadata(&plan.operation).is_none() {
         return usage(format!(
             "operation `{}` is not allowed in saved plans",
             plan.operation
@@ -174,44 +184,31 @@ fn verify_input_files(plan: &OperationPlan) -> anyhow::Result<()> {
 }
 
 fn validate_request(
-    operation: &str,
+    metadata: crate::operation::OperationMetadata,
     request: &PlannedRequest,
     profile: &Profile,
 ) -> anyhow::Result<AtlassianProduct> {
-    let (product, method, route) = match operation {
-        "jira.issue.create" => (
-            AtlassianProduct::Jira,
-            Method::POST,
-            Route::Exact("/rest/api/3/issue"),
-        ),
-        "confluence.page.create" => (
-            AtlassianProduct::Confluence,
-            Method::POST,
-            Route::Exact("/wiki/api/v2/pages"),
-        ),
-        "confluence.page.update" => (
-            AtlassianProduct::Confluence,
-            Method::PUT,
-            Route::Resource("/wiki/api/v2/pages/"),
-        ),
-        "confluence.blog.create" => (
-            AtlassianProduct::Confluence,
-            Method::POST,
-            Route::Exact("/wiki/api/v2/blogposts"),
-        ),
-        "confluence.blog.update" => (
-            AtlassianProduct::Confluence,
-            Method::PUT,
-            Route::Resource("/wiki/api/v2/blogposts/"),
-        ),
-        _ => return usage(format!("operation `{operation}` is not applicable")),
-    };
-    if request.method != method.as_str() {
+    let operation = metadata.id.as_str();
+    let contract = metadata.plan.ok_or_else(|| {
+        anyhow::Error::new(UsageError(format!(
+            "operation `{operation}` has no saved-plan contract"
+        )))
+    })?;
+    let method = metadata.method.ok_or_else(|| {
+        anyhow::Error::new(UsageError(format!(
+            "operation `{operation}` has no HTTP method"
+        )))
+    })?;
+    if request.method != method {
         return usage(format!(
-            "operation `{operation}` requires {}, not {}",
-            method, request.method
+            "operation `{operation}` requires {method}, not {}",
+            request.method
         ));
     }
+    let product = match contract.product {
+        crate::operation::PlanProduct::Jira => AtlassianProduct::Jira,
+        crate::operation::PlanProduct::Confluence => AtlassianProduct::Confluence,
+    };
     let base = match product {
         AtlassianProduct::Jira => profile.jira_api_base_url(),
         AtlassianProduct::Confluence => profile.confluence_api_base_url(),
@@ -231,44 +228,43 @@ fn validate_request(
             "plan request URL escaped the API base path".to_owned(),
         ))
     })?;
-    match route {
-        Route::Exact(expected) if relative_path != expected => {
+    match contract.route {
+        crate::operation::PlanRoute::Exact(expected) if relative_path != expected => {
             return usage(format!(
                 "plan request path `{relative_path}` is not allowed"
             ));
         }
-        Route::Resource(prefix) => {
+        crate::operation::PlanRoute::NumericResource {
+            prefix,
+            allow_title_suffix,
+        } => {
             let resource = relative_path.strip_prefix(prefix).ok_or_else(|| {
                 anyhow::Error::new(UsageError(format!(
                     "plan request path `{relative_path}` is not allowed"
                 )))
             })?;
-            let resource_id = if operation == "confluence.page.update" {
+            let resource_id = if allow_title_suffix {
                 resource.strip_suffix("/title").unwrap_or(resource)
             } else {
                 resource
             };
             let valid = !resource_id.is_empty()
                 && resource_id.bytes().all(|byte| byte.is_ascii_digit())
-                && (resource == resource_id || resource == format!("{resource_id}/title"));
+                && (resource == resource_id
+                    || (allow_title_suffix && resource == format!("{resource_id}/title")));
             if !valid {
                 return usage(format!(
                     "plan request resource path `{relative_path}` is not allowed"
                 ));
             }
         }
-        _ => {}
+        crate::operation::PlanRoute::Exact(_) => {}
     }
-    validate_query(operation, &url)?;
+    validate_query(contract.allowed_true_queries, &url)?;
     Ok(product)
 }
 
-fn validate_query(operation: &str, url: &Url) -> anyhow::Result<()> {
-    let allowed: &[&str] = match operation {
-        "confluence.page.create" => &["private", "root-level"],
-        "confluence.blog.create" => &["private"],
-        _ => &[],
-    };
+fn validate_query(allowed: &[&str], url: &Url) -> anyhow::Result<()> {
     for (key, value) in url.query_pairs() {
         if !allowed.contains(&key.as_ref()) || value != "true" {
             return usage(format!("plan request query `{key}={value}` is not allowed"));
@@ -281,11 +277,6 @@ fn same_origin(left: &Url, right: &Url) -> bool {
     left.scheme() == right.scheme()
         && left.host_str() == right.host_str()
         && left.port_or_known_default() == right.port_or_known_default()
-}
-
-enum Route {
-    Exact(&'static str),
-    Resource(&'static str),
 }
 
 fn usage<T>(message: impl Into<String>) -> anyhow::Result<T> {
@@ -355,14 +346,18 @@ mod tests {
             url: "https://evil.example/rest/api/3/issue".to_owned(),
             body: Some(serde_json::json!({})),
         };
-        assert!(validate_request("jira.issue.create", &cross_origin, &profile()).is_err());
+        let operation = crate::operation::saved_plan_metadata(
+            crate::operation::OperationId::JIRA_ISSUE_CREATE.as_str(),
+        )
+        .unwrap_or_else(|| panic!("jira issue create must support saved plans"));
+        assert!(validate_request(operation, &cross_origin, &profile()).is_err());
 
         let wrong_path = PlannedRequest {
             method: "POST".to_owned(),
             url: "https://example.atlassian.net/rest/api/3/issue/PROJ-1".to_owned(),
             body: Some(serde_json::json!({})),
         };
-        assert!(validate_request("jira.issue.create", &wrong_path, &profile()).is_err());
+        assert!(validate_request(operation, &wrong_path, &profile()).is_err());
     }
 
     #[test]

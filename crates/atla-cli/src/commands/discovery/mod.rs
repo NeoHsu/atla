@@ -24,7 +24,7 @@ struct OperationView {
 
 fn operation_view(metadata: OperationMetadata) -> OperationView {
     OperationView {
-        id: metadata.id,
+        id: metadata.id.as_str(),
         method: metadata.method,
         risk: match metadata.risk {
             OperationRisk::Read => "read",

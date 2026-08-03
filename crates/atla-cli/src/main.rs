@@ -6,6 +6,7 @@ mod context;
 #[cfg(test)]
 mod doc_check;
 mod error;
+mod invocation;
 mod operation;
 mod output;
 mod pagination;
@@ -46,7 +47,7 @@ async fn main() {
             None,
         );
     }
-    if let Command::Plan {
+    let plan_output = if let Command::Plan {
         out, expires_in, ..
     } = &cli.command
     {
@@ -58,16 +59,20 @@ async fn main() {
                 None,
             )
         });
-        output::configure_plan_output(out, *expires_in);
-    }
+        Some((out, *expires_in))
+    } else {
+        None
+    };
     let output = cli.global.output;
-    output::configure_max_bytes(cli.global.max_bytes);
     operation::apply_context_budgets(
         &mut cli.command,
         cli.global.max_pages.is_some() || cli.global.max_items.is_some(),
     );
     let operation = operation::metadata(&cli.command);
-    output::configure_operation(operation.id, operation.risk.mutates(), cli.global.dry_run);
+    let invocation = invocation::Invocation::new(cli.global, operation);
+    if let Some((path, expires_in)) = plan_output {
+        invocation.output().configure_plan_output(path, expires_in);
+    }
     if matches!(&cli.command, Command::Plan { .. }) && !operation::supports_saved_plan(operation.id)
     {
         exit_with(
@@ -79,7 +84,7 @@ async fn main() {
             Some(operation),
         );
     }
-    if cli.global.dry_run
+    if invocation.dry_run
         && output == Some(OutputFormat::Json)
         && !operation::supports_saved_plan(operation.id)
     {
@@ -92,7 +97,7 @@ async fn main() {
             Some(operation),
         );
     }
-    if cli.global.verbose {
+    if invocation.verbose {
         eprintln!(
             "[verbose] operation={} method={} risk={:?} paginated={} dry-run-supported={}",
             operation.id,
@@ -102,9 +107,9 @@ async fn main() {
             operation.dry_run
         );
     }
-    if cli.global.read_only
+    if invocation.read_only
         && operation.risk.mutates()
-        && (!cli.global.dry_run || matches!(&cli.command, Command::Plan { .. }))
+        && (!invocation.dry_run || matches!(&cli.command, Command::Plan { .. }))
     {
         exit_with(
             anyhow::Error::new(error::UsageError(format!(
@@ -116,7 +121,7 @@ async fn main() {
         );
     }
     if operation.risk == operation::OperationRisk::Destructive
-        && !cli.global.dry_run
+        && !invocation.dry_run
         && !operation::destructive_confirmed(&cli.command)
     {
         exit_with(
@@ -128,11 +133,11 @@ async fn main() {
             Some(operation),
         );
     }
-    if let Err(error) = policy::enforce_profile_policy(&cli.global, operation) {
+    if let Err(error) = policy::enforce_profile_policy(invocation.args(), operation) {
         exit_with(error, output, Some(operation));
     }
 
-    if let Err(err) = run_command(cli.command, &cli.global).await {
+    if let Err(err) = run_command(cli.command, &invocation).await {
         exit_with(err, output, Some(operation));
     }
 }
@@ -140,7 +145,7 @@ async fn main() {
 /// Dispatch one parsed command while keeping handler futures off the main
 /// thread's stack. Storing every handler future inline here overflows the
 /// smaller default stack used by Windows binaries.
-async fn run_command(command: Command, global: &cli::GlobalArgs) -> anyhow::Result<()> {
+async fn run_command(command: Command, global: &invocation::Invocation) -> anyhow::Result<()> {
     match command {
         Command::Auth(command) => Box::pin(commands::auth::run(command, global)).await,
         Command::Config(command) => Box::pin(commands::config::run(command, global)).await,
@@ -213,7 +218,9 @@ mod tests {
     fn command_dispatch_future_stays_small() {
         let Cli { global, command } = Cli::try_parse_from(["atla", "schema", "list"])
             .expect("representative command should parse");
-        let future = run_command(command, &global);
+        let operation = operation::metadata(&command);
+        let invocation = invocation::Invocation::new(global, operation);
+        let future = run_command(command, &invocation);
 
         assert!(
             std::mem::size_of_val(&future) <= 4 * 1024,

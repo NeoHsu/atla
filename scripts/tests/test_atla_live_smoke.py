@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import Any
 
 SCRIPT = Path(__file__).resolve().parents[1] / "atla-live-smoke.py"
-OPERATION_SOURCE = SCRIPT.parents[1] / "crates" / "atla-cli" / "src" / "operation.rs"
+OPERATION_SOURCE = (
+    SCRIPT.parents[1] / "crates" / "atla-cli" / "src" / "operation" / "registry.rs"
+)
 
 
 class LiveSmokeLedgerTests(unittest.TestCase):
@@ -148,7 +150,7 @@ class LiveSmokeLedgerTests(unittest.TestCase):
         source_operations = {
             operation: risk.lower()
             for operation, risk in re.findall(
-                r'operation!\(\s*"([a-z.-]+)"\s*,.*?,\s*(Read|Write|Destructive)\s*,',
+                r'\b[A-Z][A-Z0-9_]*\s*=>\s*\{\s*id:\s*"([a-z.-]+)".*?\brisk:\s*(Read|Write|Destructive)\b',
                 source,
                 re.DOTALL,
             )
@@ -382,17 +384,13 @@ class LiveSmokeLedgerTests(unittest.TestCase):
                 resource,
             ]
             if parent:
-                arguments.extend(
-                    ["--parent-type", parent[0], "--parent-id", parent[1]]
-                )
+                arguments.extend(["--parent-type", parent[0], "--parent-id", parent[1]])
             self.run_script(*arguments)
 
         cleanup = self.run_script("cleanup-commands", "--state", str(self.state))
         self.assertIn("jira issue delete SANDBOX-2 --yes", cleanup.stdout)
         self.assertIn("jira issue attachment delete 20001 --yes", cleanup.stdout)
-        self.assertIn(
-            "jira issue comment delete SANDBOX-2 30001 --yes", cleanup.stdout
-        )
+        self.assertIn("jira issue comment delete SANDBOX-2 30001 --yes", cleanup.stdout)
         self.assertIn("jira issue link remove 40001 --yes", cleanup.stdout)
 
     def test_mutation_and_resource_budgets_fail_closed(self) -> None:
@@ -519,9 +517,7 @@ class LiveSmokeLedgerTests(unittest.TestCase):
             "--reason",
             "Jira exposes no sprint delete command; sandbox owner approved residue",
         )
-        status = self.run_script(
-            "status", "--state", str(self.state), "--json"
-        )
+        status = self.run_script("status", "--state", str(self.state), "--json")
         self.assertEqual(self.parse_json(status.stdout)["residueResources"], 1)
 
 

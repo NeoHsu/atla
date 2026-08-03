@@ -7,9 +7,9 @@ use atla_core::{
     FileCredentialStore, HttpPolicy, JiraClient, KeyringCredentialStore, Profile,
 };
 
-use crate::cli::GlobalArgs;
 use crate::config;
 use crate::error::AuthSetupError;
+use crate::invocation::Invocation;
 
 #[derive(Debug, Clone)]
 pub struct AppContext {
@@ -22,7 +22,7 @@ pub struct AppContext {
 }
 
 impl AppContext {
-    pub fn load(global: &GlobalArgs) -> anyhow::Result<Self> {
+    pub fn load(global: &Invocation) -> anyhow::Result<Self> {
         let store = ConfigStore::default_store().context("failed to find config location")?;
         let atla_config = if global.read_only {
             store.load_read_only()
@@ -51,7 +51,7 @@ impl AppContext {
         let http_policy = global.timeout.map_or_else(HttpPolicy::default, |seconds| {
             HttpPolicy::default().with_timeout(Duration::from_secs(seconds))
         });
-        crate::output::configure_profile(profile_name);
+        global.output().configure_profile(profile_name);
         Ok(Self {
             profile_name: profile_name.to_owned(),
             profile: profile.clone(),

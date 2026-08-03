@@ -9,9 +9,9 @@ use atla_core::{
 use semver::Version;
 use serde::Serialize;
 
-use crate::cli::{DoctorArgs, GlobalArgs, OutputFormat};
+use crate::cli::{DoctorArgs, OutputFormat};
 use crate::error::VersionMismatchError;
-use crate::output;
+use crate::invocation::Invocation;
 use crate::output::schema::SCHEMA_VERSION;
 
 #[derive(Debug, Serialize)]
@@ -93,7 +93,7 @@ fn mismatch_error(compatibility: &SkillCompatibility) -> VersionMismatchError {
     ))
 }
 
-pub async fn doctor(args: DoctorArgs, global: &GlobalArgs) -> anyhow::Result<()> {
+pub async fn doctor(args: DoctorArgs, global: &Invocation) -> anyhow::Result<()> {
     let mut checks = Vec::new();
     let skill_compatibility = args.skill_version.as_ref().map(build_skill_compatibility);
     if let Some(compatibility) = skill_compatibility.as_ref() {
@@ -339,11 +339,11 @@ fn credential_check(profile_name: &str, profile: &Profile) -> DoctorCheck {
     }
 }
 
-fn print_doctor(report: &DoctorReport, global: &GlobalArgs) -> anyhow::Result<()> {
+fn print_doctor(report: &DoctorReport, global: &Invocation) -> anyhow::Result<()> {
     match global.output {
-        Some(OutputFormat::Json) => output::print_json(report),
+        Some(OutputFormat::Json) => global.output().print_json(report),
         Some(format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys)) => {
-            output::print_records(
+            global.output().print_records(
                 format,
                 report,
                 report

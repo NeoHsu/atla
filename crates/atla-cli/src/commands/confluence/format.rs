@@ -9,7 +9,8 @@ use atla_core::{
 use std::fs;
 use std::path::Path;
 
-use crate::cli::{BodyRepresentation, ContentViewFormat, GlobalArgs, OutputFormat};
+use crate::cli::{BodyRepresentation, ContentViewFormat, OutputFormat};
+use crate::invocation::Invocation;
 use crate::output;
 
 pub(super) async fn resolve_space_id(
@@ -309,7 +310,7 @@ pub(super) fn view_format_body_representation(
 
 pub(super) fn parse_view_fields(
     fields: Option<&str>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<Option<Vec<String>>> {
     let Some(fields) = fields else {
         return Ok(None);
@@ -440,7 +441,7 @@ pub(super) fn print_page_body_view(
     page: &ConfluencePage,
     format: ContentViewFormat,
     attachments: Option<&[ConfluenceAttachment]>,
-    global: &GlobalArgs,
+    global: &Invocation,
     options: markdown::AdfToMarkdownOptions,
     max_chars: Option<usize>,
     fields: Option<&[String]>,
@@ -467,7 +468,9 @@ pub(super) fn print_page_body_view(
                     serde_json::to_value(attachments).context("failed to serialize attachments")?;
             }
             warn_if_body_truncated(&rendered, max_chars);
-            output::print_json(&select_json_fields(value, fields)?)
+            global
+                .output()
+                .print_json(&select_json_fields(value, fields)?)
         }
         OutputFormat::Csv => {
             println!("id,title,rendered_format,rendered_body,attachment_ids");
@@ -515,7 +518,7 @@ pub(super) fn print_page_metadata_view(
     profile_name: &str,
     attachments: Option<&[ConfluenceAttachment]>,
     fields: Option<&[String]>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     let command = body_view_command(profile_name, "page", id);
     if global.output == Some(OutputFormat::Json) {
@@ -526,7 +529,9 @@ pub(super) fn print_page_metadata_view(
             value["attachments"] =
                 serde_json::to_value(attachments).context("failed to serialize attachments")?;
         }
-        return output::print_json(&select_json_fields(value, fields)?);
+        return global
+            .output()
+            .print_json(&select_json_fields(value, fields)?);
     }
 
     if let Some(attachments) = attachments {
@@ -541,7 +546,7 @@ pub(super) fn print_page_metadata_view(
 pub(super) fn print_blog_body_view(
     post: &ConfluenceBlogPost,
     format: ContentViewFormat,
-    global: &GlobalArgs,
+    global: &Invocation,
     max_chars: Option<usize>,
     fields: Option<&[String]>,
 ) -> anyhow::Result<()> {
@@ -577,7 +582,9 @@ pub(super) fn print_blog_body_view(
             value["renderedBodyTruncated"] = rendered.truncated.into();
             value["renderedFormat"] = format_name.into();
             warn_if_body_truncated(&rendered, max_chars);
-            output::print_json(&select_json_fields(value, fields)?)
+            global
+                .output()
+                .print_json(&select_json_fields(value, fields)?)
         }
         OutputFormat::Csv => {
             println!("id,title,rendered_format,rendered_body");
@@ -610,14 +617,16 @@ pub(super) fn print_blog_metadata_view(
     id: &str,
     profile_name: &str,
     fields: Option<&[String]>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     let command = body_view_command(profile_name, "blog", id);
     if global.output == Some(OutputFormat::Json) {
         let mut value = serde_json::to_value(post).context("failed to serialize blog post")?;
         value["bodyIncluded"] = false.into();
         value["bodyCommand"] = command.clone().into();
-        return output::print_json(&select_json_fields(value, fields)?);
+        return global
+            .output()
+            .print_json(&select_json_fields(value, fields)?);
     }
 
     print_blog_post(post, global)?;
@@ -652,10 +661,10 @@ pub(super) fn open_web_url(url: &str) -> anyhow::Result<()> {
 
 pub(super) fn print_search_results(
     results: &[ConfluenceSearchResult],
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         results,
         results
@@ -709,10 +718,10 @@ pub(super) fn search_title(result: &ConfluenceSearchResult) -> &str {
 
 pub(super) fn print_attachment(
     attachment: &ConfluenceAttachment,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(attachment),
+        OutputFormat::Json => global.output().print_json(attachment),
         OutputFormat::Keys => {
             if let Some(id) = &attachment.id {
                 println!("{id}");
@@ -796,17 +805,17 @@ pub(super) fn attachment_version(attachment: &ConfluenceAttachment) -> Option<St
 
 pub(super) fn print_attachments(
     attachments: &[ConfluenceAttachment],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     print_attachments_with_footer(attachments, global, None)
 }
 
 pub(super) fn print_attachments_with_footer(
     attachments: &[ConfluenceAttachment],
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         attachments,
         attachments
@@ -848,10 +857,10 @@ pub(super) fn print_attachments_with_footer(
 pub(super) fn print_attachment_download(
     path: &str,
     bytes: u64,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "path": path,
             "bytes": bytes
         })),
@@ -872,9 +881,9 @@ pub(super) fn print_attachment_download(
     }
 }
 
-pub(super) fn print_deleted(kind: &str, id: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_deleted(kind: &str, id: &str, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(&serde_json::json!({
+        OutputFormat::Json => global.output().print_json(&serde_json::json!({
             "type": kind,
             "id": id,
             "deleted": true
@@ -895,16 +904,16 @@ pub(super) fn print_deleted(kind: &str, id: &str, global: &GlobalArgs) -> anyhow
     }
 }
 
-pub(super) fn print_labels(page: &ConfluenceLabelPage, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_labels(page: &ConfluenceLabelPage, global: &Invocation) -> anyhow::Result<()> {
     print_labels_with_footer(page, global, None)
 }
 
 pub(super) fn print_labels_with_footer(
     page: &ConfluenceLabelPage,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
         page.results
@@ -928,17 +937,17 @@ pub(super) fn print_labels_with_footer(
 
 pub(super) fn print_comments(
     page: &ConfluenceCommentPage,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     print_comments_with_footer(page, global, None)
 }
 
 pub(super) fn print_comments_with_footer(
     page: &ConfluenceCommentPage,
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         page,
         page.results
@@ -969,7 +978,7 @@ pub(super) fn print_comments_with_footer(
 
 pub(super) fn print_comment(
     comment: &ConfluenceComment,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     print_comments(
         &ConfluenceCommentPage {
@@ -991,17 +1000,17 @@ pub(super) fn comment_version(comment: &ConfluenceComment) -> Option<String> {
 
 pub(super) fn print_content_nodes(
     nodes: &[ConfluenceContentNode],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     print_content_nodes_with_footer(nodes, global, None)
 }
 
 pub(super) fn print_content_nodes_with_footer(
     nodes: &[ConfluenceContentNode],
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         nodes,
         nodes.iter().filter_map(|node| node.id.clone()).collect(),
@@ -1038,16 +1047,16 @@ pub(super) fn print_content_nodes_with_footer(
     )
 }
 
-pub(super) fn print_pages(pages: &[ConfluencePage], global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_pages(pages: &[ConfluencePage], global: &Invocation) -> anyhow::Result<()> {
     print_pages_with_footer(pages, global, None)
 }
 
 pub(super) fn print_pages_with_footer(
     pages: &[ConfluencePage],
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         pages,
         pages.iter().filter_map(|page| page.id.clone()).collect(),
@@ -1074,14 +1083,14 @@ pub(super) fn print_pages_with_footer(
 pub(super) fn print_page_with_attachments(
     page: &ConfluencePage,
     attachments: &[ConfluenceAttachment],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
         OutputFormat::Json => {
             let mut page_json = serde_json::to_value(page).context("failed to serialize page")?;
             page_json["attachments"] =
                 serde_json::to_value(attachments).context("failed to serialize attachments")?;
-            output::print_json(&page_json)
+            global.output().print_json(&page_json)
         }
         _ => {
             print_page(page, global)?;
@@ -1095,9 +1104,9 @@ pub(super) fn print_page_with_attachments(
     }
 }
 
-pub(super) fn print_page(page: &ConfluencePage, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_page(page: &ConfluencePage, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(page),
+        OutputFormat::Json => global.output().print_json(page),
         OutputFormat::Keys => {
             if let Some(id) = &page.id {
                 println!("{id}");
@@ -1138,17 +1147,17 @@ pub(super) fn page_version(page: &ConfluencePage) -> Option<String> {
 
 pub(super) fn print_blog_posts(
     posts: &[ConfluenceBlogPost],
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     print_blog_posts_with_footer(posts, global, None)
 }
 
 pub(super) fn print_blog_posts_with_footer(
     posts: &[ConfluenceBlogPost],
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         posts,
         posts.iter().filter_map(|post| post.id.clone()).collect(),
@@ -1171,10 +1180,10 @@ pub(super) fn print_blog_posts_with_footer(
 
 pub(super) fn print_blog_post(
     post: &ConfluenceBlogPost,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(post),
+        OutputFormat::Json => global.output().print_json(post),
         OutputFormat::Keys => {
             if let Some(id) = &post.id {
                 println!("{id}");
@@ -1214,16 +1223,16 @@ pub(super) fn blog_post_version(post: &ConfluenceBlogPost) -> Option<String> {
         .map(|number| number.to_string())
 }
 
-pub(super) fn print_spaces(spaces: &[ConfluenceSpace], global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_spaces(spaces: &[ConfluenceSpace], global: &Invocation) -> anyhow::Result<()> {
     print_spaces_with_footer(spaces, global, None)
 }
 
 pub(super) fn print_spaces_with_footer(
     spaces: &[ConfluenceSpace],
-    global: &GlobalArgs,
+    global: &Invocation,
     footer: Option<String>,
 ) -> anyhow::Result<()> {
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         spaces,
         spaces
@@ -1248,9 +1257,9 @@ pub(super) fn print_spaces_with_footer(
     )
 }
 
-pub(super) fn print_space(space: &ConfluenceSpace, global: &GlobalArgs) -> anyhow::Result<()> {
+pub(super) fn print_space(space: &ConfluenceSpace, global: &Invocation) -> anyhow::Result<()> {
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => output::print_json(space),
+        OutputFormat::Json => global.output().print_json(space),
         OutputFormat::Keys => {
             if let Some(key) = &space.key {
                 println!("{key}");

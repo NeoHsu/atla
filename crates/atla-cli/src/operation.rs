@@ -5,286 +5,11 @@
 
 use crate::cli::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OperationRisk {
-    Read,
-    Write,
-    Destructive,
-}
+mod registry;
 
-impl OperationRisk {
-    pub fn mutates(self) -> bool {
-        matches!(self, Self::Write | Self::Destructive)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OperationMetadata {
-    pub id: &'static str,
-    pub method: Option<&'static str>,
-    pub risk: OperationRisk,
-    pub paginated: bool,
-    pub dry_run: bool,
-}
-
-impl OperationMetadata {
-    pub fn is_retry_safe(self) -> bool {
-        matches!(
-            self.method,
-            Some("GET" | "HEAD" | "PUT" | "DELETE" | "OPTIONS" | "TRACE")
-        )
-    }
-}
-
-macro_rules! operation {
-    ($id:literal, $method:expr, $risk:ident, $paginated:literal, $dry_run:literal) => {
-        OperationMetadata {
-            id: $id,
-            method: $method,
-            risk: OperationRisk::$risk,
-            paginated: $paginated,
-            dry_run: $dry_run,
-        }
-    };
-}
-
-/// Complete, stable operation contract exposed to policy, tests, and discovery commands.
-/// Runtime command classification resolves through this table so metadata has one source of truth.
-pub const OPERATION_CATALOG: &[OperationMetadata] = &[
-    operation!("auth.discover", Some("GET"), Read, false, true),
-    operation!("auth.login", None, Write, false, true),
-    operation!("auth.logout", Some("LOCAL"), Destructive, false, true),
-    operation!("auth.status", None, Read, false, true),
-    operation!("auth.switch", None, Write, false, true),
-    operation!("completion", None, Read, false, false),
-    operation!("config.get", None, Read, false, true),
-    operation!("config.list", None, Read, false, true),
-    operation!("config.set", None, Write, false, true),
-    operation!(
-        "confluence.attachment.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.attachment.download",
-        Some("GET"),
-        Read,
-        false,
-        true
-    ),
-    operation!("confluence.attachment.list", Some("GET"), Read, true, true),
-    operation!(
-        "confluence.attachment.upload",
-        Some("PUT"),
-        Write,
-        false,
-        true
-    ),
-    operation!("confluence.attachment.view", Some("GET"), Read, false, true),
-    operation!(
-        "confluence.blog.comment.add",
-        Some("POST"),
-        Write,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.blog.comment.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.blog.comment.list",
-        Some("GET"),
-        Read,
-        true,
-        true
-    ),
-    operation!("confluence.blog.create", Some("POST"), Write, false, true),
-    operation!(
-        "confluence.blog.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.blog.label.add",
-        Some("POST"),
-        Write,
-        false,
-        true
-    ),
-    operation!("confluence.blog.label.list", Some("GET"), Read, true, true),
-    operation!(
-        "confluence.blog.label.remove",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!("confluence.blog.list", Some("GET"), Read, true, true),
-    operation!("confluence.blog.update", Some("PUT"), Write, false, true),
-    operation!("confluence.blog.view", Some("GET"), Read, false, true),
-    operation!("confluence.page.children", Some("GET"), Read, true, true),
-    operation!(
-        "confluence.page.comment.add",
-        Some("POST"),
-        Write,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.page.comment.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.page.comment.list",
-        Some("GET"),
-        Read,
-        true,
-        true
-    ),
-    operation!("confluence.page.copy", Some("POST"), Write, false, true),
-    operation!("confluence.page.create", Some("POST"), Write, false, true),
-    operation!(
-        "confluence.page.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!(
-        "confluence.page.label.add",
-        Some("POST"),
-        Write,
-        false,
-        true
-    ),
-    operation!("confluence.page.label.list", Some("GET"), Read, true, true),
-    operation!(
-        "confluence.page.label.remove",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!("confluence.page.list", Some("GET"), Read, true, true),
-    operation!("confluence.page.move", Some("PUT"), Write, false, true),
-    operation!("confluence.page.update", Some("PUT"), Write, false, true),
-    operation!("confluence.page.view", Some("GET"), Read, false, true),
-    operation!("confluence.search", Some("GET"), Read, true, true),
-    operation!("confluence.space.create", Some("POST"), Write, false, true),
-    operation!(
-        "confluence.space.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!("confluence.space.list", Some("GET"), Read, true, true),
-    operation!("confluence.space.update", Some("PUT"), Write, false, true),
-    operation!("confluence.space.view", Some("GET"), Read, false, true),
-    operation!("doctor", Some("GET"), Read, false, false),
-    operation!("explain-policy", Some("LOCAL"), Read, false, false),
-    operation!("jira.board.list", Some("GET"), Read, true, true),
-    operation!("jira.board.view", Some("GET"), Read, false, true),
-    operation!("jira.issue.assign", Some("PUT"), Write, false, true),
-    operation!(
-        "jira.issue.attachment.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!(
-        "jira.issue.attachment.download",
-        Some("GET"),
-        Read,
-        false,
-        true
-    ),
-    operation!("jira.issue.attachment.list", Some("GET"), Read, false, true),
-    operation!(
-        "jira.issue.attachment.upload",
-        Some("POST"),
-        Write,
-        false,
-        true
-    ),
-    operation!("jira.issue.comment.add", Some("POST"), Write, false, true),
-    operation!(
-        "jira.issue.comment.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!("jira.issue.comment.list", Some("GET"), Read, true, true),
-    operation!("jira.issue.comment.update", Some("PUT"), Write, false, true),
-    operation!("jira.issue.create", Some("POST"), Write, false, true),
-    operation!(
-        "jira.issue.delete",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!("jira.issue.fields", Some("GET"), Read, false, true),
-    operation!("jira.issue.link.add", Some("POST"), Write, false, true),
-    operation!(
-        "jira.issue.link.github-commits",
-        Some("GET"),
-        Read,
-        false,
-        true
-    ),
-    operation!(
-        "jira.issue.link.github-links",
-        Some("GET"),
-        Read,
-        false,
-        true
-    ),
-    operation!("jira.issue.link.list", Some("GET"), Read, false, true),
-    operation!(
-        "jira.issue.link.remove",
-        Some("DELETE"),
-        Destructive,
-        false,
-        true
-    ),
-    operation!("jira.issue.list", Some("GET"), Read, true, true),
-    operation!("jira.issue.transition", Some("POST"), Write, false, true),
-    operation!("jira.issue.update", Some("PUT"), Write, false, true),
-    operation!("jira.issue.view", Some("GET"), Read, false, true),
-    operation!("jira.issue.worklog.add", Some("POST"), Write, false, true),
-    operation!("jira.issue.worklog.list", Some("GET"), Read, true, true),
-    operation!("jira.project.issue-types", Some("GET"), Read, false, true),
-    operation!("jira.project.list", Some("GET"), Read, true, true),
-    operation!("jira.project.view", Some("GET"), Read, false, true),
-    operation!("jira.search", Some("GET"), Read, true, true),
-    operation!("jira.sprint.active", Some("GET"), Read, true, true),
-    operation!("jira.sprint.add", Some("POST"), Write, false, true),
-    operation!("jira.sprint.close", Some("PUT"), Write, false, true),
-    operation!("jira.sprint.create", Some("POST"), Write, false, true),
-    operation!("jira.sprint.issues", Some("GET"), Read, true, true),
-    operation!("jira.sprint.list", Some("GET"), Read, true, true),
-    operation!("jira.sprint.remove", Some("POST"), Write, false, true),
-    operation!("jira.sprint.start", Some("PUT"), Write, false, true),
-    operation!("jira.sprint.view", Some("GET"), Read, false, true),
-    operation!("operation.list", Some("LOCAL"), Read, false, false),
-    operation!("plan.apply", Some("LOCAL"), Destructive, false, true),
-    operation!("schema.list", Some("LOCAL"), Read, false, false),
-    operation!("schema.print", Some("LOCAL"), Read, false, false),
-];
+pub use registry::{
+    OPERATION_CATALOG, OperationId, OperationMetadata, OperationRisk, PlanProduct, PlanRoute,
+};
 
 pub fn catalog() -> &'static [OperationMetadata] {
     OPERATION_CATALOG
@@ -294,11 +19,12 @@ pub fn by_id(id: &str) -> Option<OperationMetadata> {
     catalog()
         .iter()
         .copied()
-        .find(|operation| operation.id == id)
+        .find(|operation| operation.id.as_str() == id)
 }
 
-fn registered(id: &'static str) -> OperationMetadata {
-    by_id(id).unwrap_or_else(|| panic!("operation `{id}` is missing from OPERATION_CATALOG"))
+fn registered(id: OperationId) -> OperationMetadata {
+    by_id(id.as_str())
+        .unwrap_or_else(|| panic!("operation `{id}` is missing from OPERATION_CATALOG"))
 }
 
 /// A bounded `--all` request behaves like a normal page so the caller gets a
@@ -436,27 +162,27 @@ pub fn destructive_confirmed(command: &Command) -> bool {
 pub fn metadata(command: &Command) -> OperationMetadata {
     match command {
         Command::Auth(command) => match &command.action {
-            AuthAction::Login { .. } => registered("auth.login"),
-            AuthAction::Discover { .. } => registered("auth.discover"),
-            AuthAction::Logout { .. } => registered("auth.logout"),
-            AuthAction::Status => registered("auth.status"),
-            AuthAction::Switch { .. } => registered("auth.switch"),
+            AuthAction::Login { .. } => registered(OperationId::AUTH_LOGIN),
+            AuthAction::Discover { .. } => registered(OperationId::AUTH_DISCOVER),
+            AuthAction::Logout { .. } => registered(OperationId::AUTH_LOGOUT),
+            AuthAction::Status => registered(OperationId::AUTH_STATUS),
+            AuthAction::Switch { .. } => registered(OperationId::AUTH_SWITCH),
         },
         Command::Config(command) => match &command.action {
-            ConfigAction::Set { .. } => registered("config.set"),
-            ConfigAction::Get { .. } => registered("config.get"),
-            ConfigAction::List => registered("config.list"),
+            ConfigAction::Set { .. } => registered(OperationId::CONFIG_SET),
+            ConfigAction::Get { .. } => registered(OperationId::CONFIG_GET),
+            ConfigAction::List => registered(OperationId::CONFIG_LIST),
         },
         Command::Jira(command) => jira_metadata(&command.resource),
         Command::Confluence(command) => confluence_metadata(&command.resource),
-        Command::Doctor(_) => registered("doctor"),
-        Command::ExplainPolicy(_) => registered("explain-policy"),
+        Command::Doctor(_) => registered(OperationId::DOCTOR),
+        Command::ExplainPolicy(_) => registered(OperationId::EXPLAIN_POLICY),
         Command::Operation(command) => match &command.action {
-            OperationAction::List => registered("operation.list"),
+            OperationAction::List => registered(OperationId::OPERATION_LIST),
         },
         Command::Schema(command) => match &command.action {
-            SchemaAction::List => registered("schema.list"),
-            SchemaAction::Print { .. } => registered("schema.print"),
+            SchemaAction::List => registered(OperationId::SCHEMA_LIST),
+            SchemaAction::Print { .. } => registered(OperationId::SCHEMA_PRINT),
         },
         Command::Plan { command, .. } => match command {
             PlannableCommand::Jira(PlanJiraCommand {
@@ -464,96 +190,105 @@ pub fn metadata(command: &Command) -> OperationMetadata {
                     PlanJiraResource::Issue(PlanIssueCommand {
                         action: PlanIssueAction::Create { .. },
                     }),
-            }) => registered("jira.issue.create"),
+            }) => registered(OperationId::JIRA_ISSUE_CREATE),
             PlannableCommand::Confluence(PlanConfluenceCommand {
                 resource: PlanConfluenceResource::Page(PlanPageCommand { action }),
             }) => match action {
-                PlanPageAction::Create { .. } => registered("confluence.page.create"),
-                PlanPageAction::Update { .. } => registered("confluence.page.update"),
+                PlanPageAction::Create { .. } => registered(OperationId::CONFLUENCE_PAGE_CREATE),
+                PlanPageAction::Update { .. } => registered(OperationId::CONFLUENCE_PAGE_UPDATE),
             },
             PlannableCommand::Confluence(PlanConfluenceCommand {
                 resource: PlanConfluenceResource::Blog(PlanBlogCommand { action }),
             }) => match action {
-                PlanBlogAction::Create { .. } => registered("confluence.blog.create"),
-                PlanBlogAction::Update { .. } => registered("confluence.blog.update"),
+                PlanBlogAction::Create { .. } => registered(OperationId::CONFLUENCE_BLOG_CREATE),
+                PlanBlogAction::Update { .. } => registered(OperationId::CONFLUENCE_BLOG_UPDATE),
             },
         },
-        Command::Apply { .. } => registered("plan.apply"),
-        Command::Completion { .. } => registered("completion"),
+        Command::Apply { .. } => registered(OperationId::PLAN_APPLY),
+        Command::Completion { .. } => registered(OperationId::COMPLETION),
     }
 }
 
-pub fn supports_saved_plan(operation: &str) -> bool {
-    matches!(
-        operation,
-        "jira.issue.create"
-            | "confluence.page.create"
-            | "confluence.page.update"
-            | "confluence.blog.create"
-            | "confluence.blog.update"
-    )
+pub fn supports_saved_plan(operation: OperationId) -> bool {
+    registered(operation).plan.is_some()
+}
+
+pub fn saved_plan_metadata(operation: &str) -> Option<OperationMetadata> {
+    by_id(operation).filter(|metadata| metadata.plan.is_some())
 }
 
 fn jira_metadata(resource: &JiraResource) -> OperationMetadata {
     match resource {
         JiraResource::Issue(command) => issue_metadata(&command.action),
         JiraResource::Project(command) => match &command.action {
-            ProjectAction::List { .. } => registered("jira.project.list"),
-            ProjectAction::View { .. } => registered("jira.project.view"),
-            ProjectAction::IssueTypes { .. } => registered("jira.project.issue-types"),
+            ProjectAction::List { .. } => registered(OperationId::JIRA_PROJECT_LIST),
+            ProjectAction::View { .. } => registered(OperationId::JIRA_PROJECT_VIEW),
+            ProjectAction::IssueTypes { .. } => registered(OperationId::JIRA_PROJECT_ISSUE_TYPES),
         },
         JiraResource::Sprint(command) => match &command.action {
-            SprintAction::List { .. } => registered("jira.sprint.list"),
-            SprintAction::Active { .. } => registered("jira.sprint.active"),
-            SprintAction::View { .. } => registered("jira.sprint.view"),
-            SprintAction::Create { .. } => registered("jira.sprint.create"),
-            SprintAction::Start { .. } => registered("jira.sprint.start"),
-            SprintAction::Close { .. } => registered("jira.sprint.close"),
-            SprintAction::Add { .. } => registered("jira.sprint.add"),
-            SprintAction::Remove { .. } => registered("jira.sprint.remove"),
-            SprintAction::Issues { .. } => registered("jira.sprint.issues"),
+            SprintAction::List { .. } => registered(OperationId::JIRA_SPRINT_LIST),
+            SprintAction::Active { .. } => registered(OperationId::JIRA_SPRINT_ACTIVE),
+            SprintAction::View { .. } => registered(OperationId::JIRA_SPRINT_VIEW),
+            SprintAction::Create { .. } => registered(OperationId::JIRA_SPRINT_CREATE),
+            SprintAction::Start { .. } => registered(OperationId::JIRA_SPRINT_START),
+            SprintAction::Close { .. } => registered(OperationId::JIRA_SPRINT_CLOSE),
+            SprintAction::Add { .. } => registered(OperationId::JIRA_SPRINT_ADD),
+            SprintAction::Remove { .. } => registered(OperationId::JIRA_SPRINT_REMOVE),
+            SprintAction::Issues { .. } => registered(OperationId::JIRA_SPRINT_ISSUES),
         },
         JiraResource::Board(command) => match &command.action {
-            BoardAction::List { .. } => registered("jira.board.list"),
-            BoardAction::View { .. } => registered("jira.board.view"),
+            BoardAction::List { .. } => registered(OperationId::JIRA_BOARD_LIST),
+            BoardAction::View { .. } => registered(OperationId::JIRA_BOARD_VIEW),
         },
-        JiraResource::Search { .. } => registered("jira.search"),
+        JiraResource::Search { .. } => registered(OperationId::JIRA_SEARCH),
     }
 }
 
 fn issue_metadata(action: &IssueAction) -> OperationMetadata {
     match action {
-        IssueAction::List { .. } => registered("jira.issue.list"),
-        IssueAction::Create { .. } => registered("jira.issue.create"),
-        IssueAction::Update { .. } => registered("jira.issue.update"),
-        IssueAction::View { .. } => registered("jira.issue.view"),
-        IssueAction::Delete { .. } => registered("jira.issue.delete"),
-        IssueAction::Assign { .. } => registered("jira.issue.assign"),
-        IssueAction::Transition { .. } => registered("jira.issue.transition"),
+        IssueAction::List { .. } => registered(OperationId::JIRA_ISSUE_LIST),
+        IssueAction::Create { .. } => registered(OperationId::JIRA_ISSUE_CREATE),
+        IssueAction::Update { .. } => registered(OperationId::JIRA_ISSUE_UPDATE),
+        IssueAction::View { .. } => registered(OperationId::JIRA_ISSUE_VIEW),
+        IssueAction::Delete { .. } => registered(OperationId::JIRA_ISSUE_DELETE),
+        IssueAction::Assign { .. } => registered(OperationId::JIRA_ISSUE_ASSIGN),
+        IssueAction::Transition { .. } => registered(OperationId::JIRA_ISSUE_TRANSITION),
         IssueAction::Comment { action } => match action {
-            IssueCommentAction::Add { .. } => registered("jira.issue.comment.add"),
-            IssueCommentAction::List { .. } => registered("jira.issue.comment.list"),
-            IssueCommentAction::Update { .. } => registered("jira.issue.comment.update"),
-            IssueCommentAction::Delete { .. } => registered("jira.issue.comment.delete"),
+            IssueCommentAction::Add { .. } => registered(OperationId::JIRA_ISSUE_COMMENT_ADD),
+            IssueCommentAction::List { .. } => registered(OperationId::JIRA_ISSUE_COMMENT_LIST),
+            IssueCommentAction::Update { .. } => registered(OperationId::JIRA_ISSUE_COMMENT_UPDATE),
+            IssueCommentAction::Delete { .. } => registered(OperationId::JIRA_ISSUE_COMMENT_DELETE),
         },
         IssueAction::Attachment { action } => match action {
-            IssueAttachmentAction::Upload { .. } => registered("jira.issue.attachment.upload"),
-            IssueAttachmentAction::List { .. } => registered("jira.issue.attachment.list"),
-            IssueAttachmentAction::Download { .. } => registered("jira.issue.attachment.download"),
-            IssueAttachmentAction::Delete { .. } => registered("jira.issue.attachment.delete"),
+            IssueAttachmentAction::Upload { .. } => {
+                registered(OperationId::JIRA_ISSUE_ATTACHMENT_UPLOAD)
+            }
+            IssueAttachmentAction::List { .. } => {
+                registered(OperationId::JIRA_ISSUE_ATTACHMENT_LIST)
+            }
+            IssueAttachmentAction::Download { .. } => {
+                registered(OperationId::JIRA_ISSUE_ATTACHMENT_DOWNLOAD)
+            }
+            IssueAttachmentAction::Delete { .. } => {
+                registered(OperationId::JIRA_ISSUE_ATTACHMENT_DELETE)
+            }
         },
         IssueAction::Link { action } => match action {
-            IssueLinkAction::Add { .. } => registered("jira.issue.link.add"),
-            IssueLinkAction::List { .. } => registered("jira.issue.link.list"),
-            IssueLinkAction::Remove { .. } => registered("jira.issue.link.remove"),
-            IssueLinkAction::GithubLinks { .. } => registered("jira.issue.link.github-links"),
-            IssueLinkAction::GithubCommits { .. } => registered("jira.issue.link.github-commits"),
+            IssueLinkAction::Add { .. } => registered(OperationId::JIRA_ISSUE_LINK_ADD),
+            IssueLinkAction::List { .. } => registered(OperationId::JIRA_ISSUE_LINK_LIST),
+            IssueLinkAction::Remove { .. } => registered(OperationId::JIRA_ISSUE_LINK_REMOVE),
+            IssueLinkAction::GithubLinks { .. } => {
+                registered(OperationId::JIRA_ISSUE_LINK_GITHUB_LINKS)
+            }
+            IssueLinkAction::GithubCommits { .. } => {
+                registered(OperationId::JIRA_ISSUE_LINK_GITHUB_COMMITS)
+            }
         },
         IssueAction::Worklog { action } => match action {
-            IssueWorklogAction::Add { .. } => registered("jira.issue.worklog.add"),
-            IssueWorklogAction::List { .. } => registered("jira.issue.worklog.list"),
+            IssueWorklogAction::Add { .. } => registered(OperationId::JIRA_ISSUE_WORKLOG_ADD),
+            IssueWorklogAction::List { .. } => registered(OperationId::JIRA_ISSUE_WORKLOG_LIST),
         },
-        IssueAction::Fields { .. } => registered("jira.issue.fields"),
+        IssueAction::Fields { .. } => registered(OperationId::JIRA_ISSUE_FIELDS),
     }
 }
 
@@ -561,63 +296,73 @@ fn confluence_metadata(resource: &ConfluenceResource) -> OperationMetadata {
     match resource {
         ConfluenceResource::Page(command) => page_metadata(&command.action),
         ConfluenceResource::Space(command) => match &command.action {
-            SpaceAction::List { .. } => registered("confluence.space.list"),
-            SpaceAction::View { .. } => registered("confluence.space.view"),
-            SpaceAction::Create { .. } => registered("confluence.space.create"),
-            SpaceAction::Update { .. } => registered("confluence.space.update"),
-            SpaceAction::Delete { .. } => registered("confluence.space.delete"),
+            SpaceAction::List { .. } => registered(OperationId::CONFLUENCE_SPACE_LIST),
+            SpaceAction::View { .. } => registered(OperationId::CONFLUENCE_SPACE_VIEW),
+            SpaceAction::Create { .. } => registered(OperationId::CONFLUENCE_SPACE_CREATE),
+            SpaceAction::Update { .. } => registered(OperationId::CONFLUENCE_SPACE_UPDATE),
+            SpaceAction::Delete { .. } => registered(OperationId::CONFLUENCE_SPACE_DELETE),
         },
         ConfluenceResource::Blog(command) => blog_metadata(&command.action),
-        ConfluenceResource::Search { .. } => registered("confluence.search"),
+        ConfluenceResource::Search { .. } => registered(OperationId::CONFLUENCE_SEARCH),
         ConfluenceResource::Attachment(command) => match &command.action {
-            AttachmentAction::List { .. } => registered("confluence.attachment.list"),
-            AttachmentAction::View { .. } => registered("confluence.attachment.view"),
-            AttachmentAction::Upload { .. } => registered("confluence.attachment.upload"),
-            AttachmentAction::Download { .. } => registered("confluence.attachment.download"),
-            AttachmentAction::Delete { .. } => registered("confluence.attachment.delete"),
+            AttachmentAction::List { .. } => registered(OperationId::CONFLUENCE_ATTACHMENT_LIST),
+            AttachmentAction::View { .. } => registered(OperationId::CONFLUENCE_ATTACHMENT_VIEW),
+            AttachmentAction::Upload { .. } => {
+                registered(OperationId::CONFLUENCE_ATTACHMENT_UPLOAD)
+            }
+            AttachmentAction::Download { .. } => {
+                registered(OperationId::CONFLUENCE_ATTACHMENT_DOWNLOAD)
+            }
+            AttachmentAction::Delete { .. } => {
+                registered(OperationId::CONFLUENCE_ATTACHMENT_DELETE)
+            }
         },
     }
 }
 
 fn page_metadata(action: &PageAction) -> OperationMetadata {
     match action {
-        PageAction::Create { .. } => registered("confluence.page.create"),
-        PageAction::List { .. } => registered("confluence.page.list"),
-        PageAction::View { .. } => registered("confluence.page.view"),
-        PageAction::Children { .. } => registered("confluence.page.children"),
-        PageAction::Copy { .. } => registered("confluence.page.copy"),
-        PageAction::Update { .. } => registered("confluence.page.update"),
-        PageAction::Delete { .. } => registered("confluence.page.delete"),
-        PageAction::Move { .. } => registered("confluence.page.move"),
+        PageAction::Create { .. } => registered(OperationId::CONFLUENCE_PAGE_CREATE),
+        PageAction::List { .. } => registered(OperationId::CONFLUENCE_PAGE_LIST),
+        PageAction::View { .. } => registered(OperationId::CONFLUENCE_PAGE_VIEW),
+        PageAction::Children { .. } => registered(OperationId::CONFLUENCE_PAGE_CHILDREN),
+        PageAction::Copy { .. } => registered(OperationId::CONFLUENCE_PAGE_COPY),
+        PageAction::Update { .. } => registered(OperationId::CONFLUENCE_PAGE_UPDATE),
+        PageAction::Delete { .. } => registered(OperationId::CONFLUENCE_PAGE_DELETE),
+        PageAction::Move { .. } => registered(OperationId::CONFLUENCE_PAGE_MOVE),
         PageAction::Label { action } => match action {
-            PageLabelAction::List { .. } => registered("confluence.page.label.list"),
-            PageLabelAction::Add { .. } => registered("confluence.page.label.add"),
-            PageLabelAction::Remove { .. } => registered("confluence.page.label.remove"),
+            PageLabelAction::List { .. } => registered(OperationId::CONFLUENCE_PAGE_LABEL_LIST),
+            PageLabelAction::Add { .. } => registered(OperationId::CONFLUENCE_PAGE_LABEL_ADD),
+            PageLabelAction::Remove { .. } => registered(OperationId::CONFLUENCE_PAGE_LABEL_REMOVE),
         },
         PageAction::Comment { action } => match action {
-            PageCommentAction::List { .. } => registered("confluence.page.comment.list"),
-            PageCommentAction::Add { .. } => registered("confluence.page.comment.add"),
-            PageCommentAction::Delete { .. } => registered("confluence.page.comment.delete"),
+            PageCommentAction::List { .. } => registered(OperationId::CONFLUENCE_PAGE_COMMENT_LIST),
+            PageCommentAction::Add { .. } => registered(OperationId::CONFLUENCE_PAGE_COMMENT_ADD),
+            PageCommentAction::Delete { .. } => {
+                registered(OperationId::CONFLUENCE_PAGE_COMMENT_DELETE)
+            }
         },
     }
 }
 
 fn blog_metadata(action: &BlogAction) -> OperationMetadata {
     match action {
-        BlogAction::Create { .. } => registered("confluence.blog.create"),
-        BlogAction::List { .. } => registered("confluence.blog.list"),
-        BlogAction::View { .. } => registered("confluence.blog.view"),
-        BlogAction::Update { .. } => registered("confluence.blog.update"),
-        BlogAction::Delete { .. } => registered("confluence.blog.delete"),
+        BlogAction::Create { .. } => registered(OperationId::CONFLUENCE_BLOG_CREATE),
+        BlogAction::List { .. } => registered(OperationId::CONFLUENCE_BLOG_LIST),
+        BlogAction::View { .. } => registered(OperationId::CONFLUENCE_BLOG_VIEW),
+        BlogAction::Update { .. } => registered(OperationId::CONFLUENCE_BLOG_UPDATE),
+        BlogAction::Delete { .. } => registered(OperationId::CONFLUENCE_BLOG_DELETE),
         BlogAction::Label { action } => match action {
-            BlogLabelAction::List { .. } => registered("confluence.blog.label.list"),
-            BlogLabelAction::Add { .. } => registered("confluence.blog.label.add"),
-            BlogLabelAction::Remove { .. } => registered("confluence.blog.label.remove"),
+            BlogLabelAction::List { .. } => registered(OperationId::CONFLUENCE_BLOG_LABEL_LIST),
+            BlogLabelAction::Add { .. } => registered(OperationId::CONFLUENCE_BLOG_LABEL_ADD),
+            BlogLabelAction::Remove { .. } => registered(OperationId::CONFLUENCE_BLOG_LABEL_REMOVE),
         },
         BlogAction::Comment { action } => match action {
-            BlogCommentAction::List { .. } => registered("confluence.blog.comment.list"),
-            BlogCommentAction::Add { .. } => registered("confluence.blog.comment.add"),
-            BlogCommentAction::Delete { .. } => registered("confluence.blog.comment.delete"),
+            BlogCommentAction::List { .. } => registered(OperationId::CONFLUENCE_BLOG_COMMENT_LIST),
+            BlogCommentAction::Add { .. } => registered(OperationId::CONFLUENCE_BLOG_COMMENT_ADD),
+            BlogCommentAction::Delete { .. } => {
+                registered(OperationId::CONFLUENCE_BLOG_COMMENT_DELETE)
+            }
         },
     }
 }
@@ -693,7 +438,7 @@ mod tests {
     fn catalog_covers_every_cli_leaf_and_safety_marker() {
         let catalog_by_id = catalog()
             .iter()
-            .map(|operation| (operation.id, *operation))
+            .map(|operation| (operation.id.as_str(), *operation))
             .collect::<BTreeMap<_, _>>();
         assert_eq!(
             catalog_by_id.len(),
@@ -712,13 +457,13 @@ mod tests {
             .collect::<BTreeSet<_>>();
         let mut expected_paths = catalog()
             .iter()
-            .map(|operation| command_path_for_operation(operation.id))
+            .map(|operation| command_path_for_operation(operation.id.as_str()))
             .collect::<BTreeSet<_>>();
         expected_paths.extend(
             catalog()
                 .iter()
                 .filter(|operation| supports_saved_plan(operation.id))
-                .map(|operation| format!("atla plan {}", operation.id.replace('.', " "))),
+                .map(|operation| format!("atla plan {}", operation.id.as_str().replace('.', " "))),
         );
         assert_eq!(
             actual_paths, expected_paths,
@@ -852,7 +597,7 @@ mod tests {
     #[test]
     fn list_metadata_records_pagination() {
         let metadata = operation(&["atla", "jira", "search", "project = PROJ"]);
-        assert_eq!(metadata.id, "jira.search");
+        assert_eq!(metadata.id, OperationId::JIRA_SEARCH);
         assert!(metadata.paginated);
         assert_eq!(metadata.method, Some("GET"));
     }

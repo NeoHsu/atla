@@ -10,9 +10,9 @@ use atla_core::{
 };
 use dialoguer::{Input, Password};
 
-use crate::cli::{AuthAction, AuthCommand, AuthStorage, GlobalArgs, OutputFormat};
+use crate::cli::{AuthAction, AuthCommand, AuthStorage, OutputFormat};
 use crate::config;
-use crate::output;
+use crate::invocation::Invocation;
 
 #[derive(serde::Serialize)]
 struct AuthStatusOutput<'a> {
@@ -27,7 +27,7 @@ struct AuthStatusOutput<'a> {
     token: String,
 }
 
-pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub async fn run(command: AuthCommand, global: &Invocation) -> anyhow::Result<()> {
     let store = ConfigStore::default_store().context("failed to find config location")?;
     let mut atla_config = if global.read_only {
         store.load_read_only()
@@ -120,9 +120,9 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                 .await
                 .with_context(|| format!("failed to discover Atlassian tenant at {site}"))?;
             match global.output {
-                Some(OutputFormat::Json) => output::print_json(&discovery)?,
+                Some(OutputFormat::Json) => global.output().print_json(&discovery)?,
                 Some(format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys)) => {
-                    output::print_records(
+                    global.output().print_records(
                         format,
                         &discovery,
                         vec![discovery.cloud_id.clone()],
@@ -185,11 +185,11 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
                     "token": token,
                 });
                 match global.output {
-                    Some(OutputFormat::Json) => output::print_json(&status)?,
+                    Some(OutputFormat::Json) => global.output().print_json(&status)?,
                     Some(
                         format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys),
                     ) => {
-                        output::print_records(
+                        global.output().print_records(
                             format,
                             &status,
                             Vec::new(),
@@ -227,9 +227,9 @@ pub async fn run(command: AuthCommand, global: &GlobalArgs) -> anyhow::Result<()
             };
 
             match global.output {
-                Some(OutputFormat::Json) => output::print_json(&status)?,
+                Some(OutputFormat::Json) => global.output().print_json(&status)?,
                 Some(format @ (OutputFormat::Table | OutputFormat::Csv | OutputFormat::Keys)) => {
-                    output::print_records(
+                    global.output().print_records(
                         format,
                         &status,
                         vec![status.profile.to_owned()],
@@ -350,7 +350,7 @@ fn token_status(storage: CredentialStorage, credential: &atla_core::CredentialRe
 
 fn active_profile<'a>(
     atla_config: &'a AtlaConfig,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<(&'a str, &'a Profile)> {
     atla_config
         .active_profile(config::active_profile(global))
@@ -361,7 +361,7 @@ fn required_text(
     prompt: &str,
     flag: &str,
     value: Option<String>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<String> {
     if let Some(value) = value {
         return Ok(value);
@@ -402,7 +402,7 @@ fn required_secret(
     prompt: &str,
     flag: &str,
     value: Option<String>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<String> {
     if let Some(value) = value {
         return Ok(value);
@@ -418,7 +418,7 @@ fn required_secret(
     bail!("missing required flag: {flag}");
 }
 
-fn can_prompt(global: &GlobalArgs) -> bool {
+fn can_prompt(global: &Invocation) -> bool {
     !global.no_input && stdin().is_terminal() && stdout().is_terminal()
 }
 

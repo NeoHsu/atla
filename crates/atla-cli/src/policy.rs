@@ -3,11 +3,12 @@ use atla_core::ConfigStore;
 
 use crate::cli::GlobalArgs;
 use crate::error::UsageError;
-use crate::operation::OperationMetadata;
+use crate::operation::{OperationId, OperationMetadata};
 
 /// Whether an operation is governed by profile allow/deny/mode rules.
 /// Local recovery and discovery commands deliberately bypass profile policy.
-pub fn profile_policy_applies(operation_id: &str) -> bool {
+pub fn profile_policy_applies(operation_id: OperationId) -> bool {
+    let operation_id = operation_id.as_str();
     !operation_id.starts_with("auth.")
         && !operation_id.starts_with("config.")
         && !operation_id.starts_with("operation.")
@@ -38,7 +39,7 @@ pub fn enforce_profile_policy(
     };
     if profile
         .policy
-        .allows(operation.id, operation.risk.mutates())
+        .allows(operation.id.as_str(), operation.risk.mutates())
     {
         return Ok(());
     }
@@ -55,17 +56,17 @@ mod tests {
 
     #[test]
     fn profile_policy_applies_only_to_product_operations() {
-        assert!(profile_policy_applies("jira.issue.view"));
-        assert!(profile_policy_applies("confluence.page.update"));
+        assert!(profile_policy_applies(OperationId::JIRA_ISSUE_VIEW));
+        assert!(profile_policy_applies(OperationId::CONFLUENCE_PAGE_UPDATE));
         for operation in [
-            "auth.login",
-            "config.set",
-            "doctor",
-            "explain-policy",
-            "operation.list",
-            "schema.print",
-            "plan.apply",
-            "completion",
+            OperationId::AUTH_LOGIN,
+            OperationId::CONFIG_SET,
+            OperationId::DOCTOR,
+            OperationId::EXPLAIN_POLICY,
+            OperationId::OPERATION_LIST,
+            OperationId::SCHEMA_PRINT,
+            OperationId::PLAN_APPLY,
+            OperationId::COMPLETION,
         ] {
             assert!(!profile_policy_applies(operation), "{operation}");
         }

@@ -1,14 +1,15 @@
 use anyhow::Context;
 use atla_core::JiraProjectSearch;
 
-use crate::cli::{GlobalArgs, OutputFormat, ProjectAction, ProjectCommand};
+use crate::cli::{OutputFormat, ProjectAction, ProjectCommand};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{print_issue_types, print_project, print_projects, print_projects_with_footer};
 
 pub(super) async fn run_project(
     command: ProjectCommand,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match command.action {
         ProjectAction::List {
@@ -80,7 +81,7 @@ pub(super) async fn run_project(
                 crate::pagination::next_command(parts, limit, token)
             });
             match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(
+                OutputFormat::Json => global.output().print_json(
                     &serde_json::json!({"values": page.values, "total": page.total, "pagination": {"isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
                 )?,
                 OutputFormat::Table => print_projects_with_footer(

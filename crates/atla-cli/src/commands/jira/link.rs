@@ -1,8 +1,9 @@
 use anyhow::Context;
 use atla_core::JiraIssueLinkCreate;
 
-use crate::cli::{GlobalArgs, IssueLinkAction};
+use crate::cli::IssueLinkAction;
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{
     print_deleted, print_github_commits, print_github_pull_requests, print_issue_links,
@@ -11,7 +12,7 @@ use super::format::{
 
 pub(super) async fn run_issue_link(
     action: IssueLinkAction,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     match action {
         IssueLinkAction::Add {

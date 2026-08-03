@@ -1,326 +1,36 @@
 use anyhow::Context;
 use atla_core::{JiraSprintCreate, JiraSprintSearch, JiraSprintUpdate};
 
-use crate::cli::{GlobalArgs, OutputFormat, SprintAction, SprintCommand};
+use crate::cli::{OutputFormat, SprintAction, SprintCommand};
 use crate::context::AppContext;
+use crate::invocation::Invocation;
 
 use super::format::{
     parse_issue_fields, print_issues, print_issues_with_footer, print_sprint,
     print_sprint_issue_move, print_sprints, print_sprints_with_footer,
 };
 
-pub(super) async fn run_sprint(command: SprintCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+mod active;
+mod add;
+mod close;
+mod create;
+mod issues;
+mod list;
+mod remove;
+mod start;
+mod view;
+
+pub(super) async fn run_sprint(command: SprintCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.action {
-        SprintAction::List {
-            board,
-            state,
-            limit,
-            all,
-            page_token,
-        } => {
-            run_sprint_list(board, state, limit, all, page_token, global).await?;
-        }
-        SprintAction::Active {
-            board,
-            limit,
-            all,
-            page_token,
-        } => {
-            run_sprint_list(
-                board,
-                Some("active".to_owned()),
-                limit,
-                all,
-                page_token,
-                global,
-            )
-            .await?;
-        }
-        SprintAction::View { id } => {
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-
-            if global.dry_run {
-                let url = format!("{}/rest/agile/1.0/sprint/{id}", profile.jira_api_base_url());
-                println!("Would GET {url} using profile `{profile_name}`");
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            let sprint = client.get_sprint(id).await.with_context(|| {
-                format!(
-                    "failed to load Jira sprint `{id}` from {}",
-                    client.instance_url()
-                )
-            })?;
-
-            print_sprint(&sprint, global)?;
-        }
-        SprintAction::Create {
-            board,
-            name,
-            start,
-            end,
-            goal,
-        } => {
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-
-            if global.dry_run {
-                println!(
-                    "Would POST {}/rest/agile/1.0/sprint using profile `{profile_name}`",
-                    profile.jira_api_base_url()
-                );
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            let sprint = client
-                .create_sprint(&JiraSprintCreate {
-                    board_id: board,
-                    name,
-                    start_date: start,
-                    end_date: end,
-                    goal,
-                })
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to create Jira sprint from {}",
-                        client.instance_url()
-                    )
-                })?;
-            print_sprint(&sprint, global)?;
-        }
-        SprintAction::Start { id, start, end } => {
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-
-            if global.dry_run {
-                println!(
-                    "Would PUT {}/rest/agile/1.0/sprint/{} with state active using profile `{profile_name}`",
-                    profile.jira_api_base_url(),
-                    id
-                );
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            let existing = client.get_sprint(id).await.with_context(|| {
-                format!(
-                    "failed to load Jira sprint `{id}` from {}",
-                    client.instance_url()
-                )
-            })?;
-            if existing.state.as_deref() == Some("active") {
-                anyhow::bail!("sprint `{id}` is already active");
-            }
-            let sprint = client
-                .update_sprint(&JiraSprintUpdate {
-                    id,
-                    state: Some("active".to_owned()),
-                    name: None,
-                    start_date: start,
-                    end_date: end,
-                    goal: None,
-                })
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to start Jira sprint `{id}` from {}",
-                        client.instance_url()
-                    )
-                })?;
-            print_sprint(&sprint, global)?;
-        }
-        SprintAction::Close { id } => {
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-
-            if global.dry_run {
-                println!(
-                    "Would PUT {}/rest/agile/1.0/sprint/{} with state closed using profile `{profile_name}`",
-                    profile.jira_api_base_url(),
-                    id
-                );
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            let sprint = client
-                .update_sprint(&JiraSprintUpdate {
-                    id,
-                    state: Some("closed".to_owned()),
-                    name: None,
-                    start_date: None,
-                    end_date: None,
-                    goal: None,
-                })
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to close Jira sprint `{id}` from {}",
-                        client.instance_url()
-                    )
-                })?;
-            print_sprint(&sprint, global)?;
-        }
-        SprintAction::Add { id, issues } => {
-            if issues.is_empty() {
-                anyhow::bail!("provide at least one issue with --issues");
-            }
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-
-            if global.dry_run {
-                println!(
-                    "Would POST {}/rest/agile/1.0/sprint/{}/issue using profile `{profile_name}`",
-                    profile.jira_api_base_url(),
-                    id
-                );
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            client
-                .move_issues_to_sprint(id, &issues)
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to move issues to Jira sprint `{id}` from {}",
-                        client.instance_url()
-                    )
-                })?;
-            print_sprint_issue_move(id, &issues, global)?;
-        }
-        SprintAction::Remove { id, issues } => {
-            if issues.is_empty() {
-                anyhow::bail!("provide at least one issue with --issues");
-            }
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-
-            if global.dry_run {
-                println!(
-                    "Would POST {}/rest/agile/1.0/backlog/issue for sprint `{id}` using profile `{profile_name}`",
-                    profile.jira_api_base_url()
-                );
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            client
-                .move_issues_to_backlog(&issues)
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to remove issues from Jira sprint `{id}` via backlog move from {}",
-                        client.instance_url()
-                    )
-                })?;
-            print_sprint_issue_move(id, &issues, global)?;
-        }
-        SprintAction::Issues {
-            id,
-            limit,
-            all,
-            fields,
-            page_token,
-        } => {
-            let ctx = AppContext::load(global)?;
-            let profile_name = ctx.profile_name();
-            let profile = ctx.profile();
-            let requested_fields = parse_issue_fields(fields.as_deref())?;
-            let max_results = if all { u32::MAX } else { limit };
-            let query_hash = crate::pagination::query_hash(
-                "jira.sprint.issues",
-                &[
-                    ("id", id.to_string()),
-                    (
-                        "fields",
-                        requested_fields.clone().unwrap_or_default().join(","),
-                    ),
-                ],
-            );
-            let start_at = crate::pagination::decode_jira_offset_token(
-                page_token.as_deref(),
-                "jira.sprint.issues",
-                query_hash.clone(),
-            )?;
-
-            if global.dry_run {
-                let url = format!(
-                    "{}/rest/agile/1.0/sprint/{id}/issue",
-                    profile.jira_api_base_url()
-                );
-                println!("Would GET {url} using profile `{profile_name}`");
-                return Ok(());
-            }
-
-            let client = ctx.jira_client()?;
-            let page = client
-                .get_sprint_issues_from(id, max_results, requested_fields.clone(), start_at)
-                .await
-                .with_context(|| {
-                    format!(
-                        "failed to list issues for Jira sprint `{id}` from {}",
-                        client.instance_url()
-                    )
-                })?;
-
-            let next_start = page
-                .next_page_token
-                .as_deref()
-                .and_then(|s| s.parse::<u64>().ok());
-            let next_cli_token = if !all && matches!(page.is_last, Some(false)) {
-                crate::pagination::jira_offset_next_token(
-                    "jira.sprint.issues",
-                    next_start,
-                    query_hash,
-                )?
-            } else {
-                None
-            };
-            let next_command = next_cli_token.as_ref().map(|token| {
-                let mut parts = vec![
-                    "atla".to_owned(),
-                    "jira".to_owned(),
-                    "sprint".to_owned(),
-                    "issues".to_owned(),
-                    id.to_string(),
-                ];
-                if let Some(fields) = requested_fields.as_ref().filter(|f| !f.is_empty()) {
-                    parts.push("--fields".to_owned());
-                    parts.push(crate::pagination::quote(&fields.join(",")));
-                }
-                crate::pagination::next_command(parts, limit, token)
-            });
-            match global.output.unwrap_or(OutputFormat::Table) {
-                OutputFormat::Json => crate::output::print_json(
-                    &serde_json::json!({"issues": page.issues, "pagination": {"isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
-                )?,
-                OutputFormat::Table => print_issues_with_footer(
-                    &page.issues,
-                    global,
-                    requested_fields.as_deref(),
-                    next_command
-                        .as_deref()
-                        .map(crate::pagination::next_page_footer),
-                )?,
-                OutputFormat::Csv | OutputFormat::Keys => {
-                    print_issues(&page.issues, global, requested_fields.as_deref())?;
-                    if let Some(command) = next_command {
-                        eprintln!("{}", crate::pagination::next_page_footer(&command));
-                    }
-                }
-            }
-        }
+        action @ SprintAction::List { .. } => list::run(action, global).await?,
+        action @ SprintAction::Active { .. } => active::run(action, global).await?,
+        action @ SprintAction::View { .. } => view::run(action, global).await?,
+        action @ SprintAction::Create { .. } => create::run(action, global).await?,
+        action @ SprintAction::Start { .. } => start::run(action, global).await?,
+        action @ SprintAction::Close { .. } => close::run(action, global).await?,
+        action @ SprintAction::Add { .. } => add::run(action, global).await?,
+        action @ SprintAction::Remove { .. } => remove::run(action, global).await?,
+        action @ SprintAction::Issues { .. } => issues::run(action, global).await?,
     }
 
     Ok(())
@@ -332,7 +42,7 @@ pub(super) async fn run_sprint_list(
     limit: u32,
     all: bool,
     page_token: Option<String>,
-    global: &GlobalArgs,
+    global: &Invocation,
 ) -> anyhow::Result<()> {
     let ctx = AppContext::load(global)?;
     let profile_name = ctx.profile_name();
@@ -401,7 +111,7 @@ pub(super) async fn run_sprint_list(
         crate::pagination::next_command(parts, limit, token)
     });
     match global.output.unwrap_or(OutputFormat::Table) {
-        OutputFormat::Json => crate::output::print_json(
+        OutputFormat::Json => global.output().print_json(
             &serde_json::json!({"values": page.values, "total": page.total, "pagination": {"isLast": page.is_last.unwrap_or(true), "nextPageToken": next_cli_token, "nextCommand": next_command}}),
         )?,
         OutputFormat::Table => print_sprints_with_footer(

@@ -1,12 +1,10 @@
 use anyhow::Context;
 use serde::Serialize;
 
-use crate::cli::{
-    GlobalArgs, OperationAction, OperationCommand, OutputFormat, SchemaAction, SchemaCommand,
-};
+use crate::cli::{OperationAction, OperationCommand, OutputFormat, SchemaAction, SchemaCommand};
 use crate::error::UsageError;
+use crate::invocation::Invocation;
 use crate::operation;
-use crate::output;
 use crate::output::schema::{Pagination, SCHEMA_VERSION};
 
 use super::{OperationView, operation_view};
@@ -153,13 +151,13 @@ const BUNDLED_SCHEMAS: &[BundledSchema] = &[
     },
 ];
 
-pub fn operation(command: OperationCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub fn operation(command: OperationCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.action {
         OperationAction::List => list_operations(global),
     }
 }
 
-fn list_operations(global: &GlobalArgs) -> anyhow::Result<()> {
+fn list_operations(global: &Invocation) -> anyhow::Result<()> {
     let operations = operation::catalog()
         .iter()
         .copied()
@@ -170,7 +168,7 @@ fn list_operations(global: &GlobalArgs) -> anyhow::Result<()> {
         operations,
         pagination: complete_pagination(),
     };
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         &report,
         report
@@ -206,14 +204,14 @@ fn list_operations(global: &GlobalArgs) -> anyhow::Result<()> {
     )
 }
 
-pub fn schema(command: SchemaCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub fn schema(command: SchemaCommand, global: &Invocation) -> anyhow::Result<()> {
     match command.action {
         SchemaAction::List => list_schemas(global),
         SchemaAction::Print { name } => print_schema(&name, global),
     }
 }
 
-fn list_schemas(global: &GlobalArgs) -> anyhow::Result<()> {
+fn list_schemas(global: &Invocation) -> anyhow::Result<()> {
     let schemas = BUNDLED_SCHEMAS
         .iter()
         .map(|schema| schema.view.clone())
@@ -223,7 +221,7 @@ fn list_schemas(global: &GlobalArgs) -> anyhow::Result<()> {
         schemas,
         pagination: complete_pagination(),
     };
-    output::print_records(
+    global.output().print_records(
         global.output.unwrap_or(OutputFormat::Table),
         &report,
         report
@@ -247,7 +245,7 @@ fn list_schemas(global: &GlobalArgs) -> anyhow::Result<()> {
     )
 }
 
-fn print_schema(name: &str, global: &GlobalArgs) -> anyhow::Result<()> {
+fn print_schema(name: &str, global: &Invocation) -> anyhow::Result<()> {
     if global
         .output
         .is_some_and(|format| format != OutputFormat::Json)
@@ -267,7 +265,7 @@ fn print_schema(name: &str, global: &GlobalArgs) -> anyhow::Result<()> {
         })?;
     serde_json::from_str::<serde_json::Value>(schema.content)
         .with_context(|| format!("bundled schema `{normalized}` is invalid"))?;
-    output::print_raw(schema.content)
+    global.output().print_raw(schema.content)
 }
 
 fn complete_pagination() -> Pagination {

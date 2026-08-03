@@ -1,11 +1,11 @@
 use anyhow::{Context, bail};
 use atla_core::ConfigStore;
 
-use crate::cli::{ConfigAction, ConfigCommand, GlobalArgs};
+use crate::cli::{ConfigAction, ConfigCommand};
 use crate::config;
-use crate::output;
+use crate::invocation::Invocation;
 
-pub async fn run(command: ConfigCommand, global: &GlobalArgs) -> anyhow::Result<()> {
+pub async fn run(command: ConfigCommand, global: &Invocation) -> anyhow::Result<()> {
     let store = ConfigStore::default_store().context("failed to find config location")?;
     let mut atla_config = if global.read_only {
         store.load_read_only()
@@ -51,7 +51,14 @@ pub async fn run(command: ConfigCommand, global: &GlobalArgs) -> anyhow::Result<
                 .map(|(key, value)| vec![key, value])
                 .collect();
 
-            output::print_records(format, &atla_config, keys, &["key", "value"], rows, None)?;
+            global.output().print_records(
+                format,
+                &atla_config,
+                keys,
+                &["key", "value"],
+                rows,
+                None,
+            )?;
         }
     }
 
