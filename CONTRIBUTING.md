@@ -18,13 +18,16 @@ cargo deny check
 
 These explicit commands remain the portable Rust baseline. CI runs the same workspace unit and
 integration tests with `cargo-nextest`, then runs doctests separately so test coverage is not lost.
-It also scans the source tree with gitleaks. Contributors using `mise` can run the common workflows
-through discoverable convenience tasks:
+It also scans the source tree with gitleaks and checks direct Cargo dependency liveness with
+`cargo-machete`. Contributors using `mise` can run the common workflows through discoverable
+convenience tasks:
 
 | Task | Purpose |
 | --- | --- |
 | `mise run check:fast` | Fast `atla` package check for the inner development loop |
 | `mise run lint` | Formatting check plus the CI Clippy policy |
+| `mise run deps:check` | Check direct Cargo dependencies with `cargo-machete` |
+| `mise run size:bloat` | Report release binary size by crate with `cargo-bloat` |
 | `mise run test`, `mise run test:cli`, `mise run test:core`, or `mise run test:e2e` | Workspace or focused test suites |
 | `mise run test:nextest` | Parallel workspace unit and integration tests with detailed failure reporting |
 | `mise run sccache:stats` | Show cache statistics after opting in with `RUSTC_WRAPPER=sccache CARGO_INCREMENTAL=0` |
@@ -39,16 +42,26 @@ through discoverable convenience tasks:
 
 After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
 project toolchain. The config pins Node.js for partial-spec filters, Python for maintenance tools,
-gitleaks for secret scanning, and the Cargo security, coverage, cache, and test tools to versions
-matching CI. `.gitleaks.toml` carries the repository-specific false-positive policy. `deny.toml`
-rejects unknown registries, Git dependencies, wildcard dependency versions, unknown licenses,
-advisories, and yanked crates. Duplicate transitive versions remain warnings so upgrades can
-remove them incrementally; do not suppress one without a documented reason. CI also publishes LCOV and fails
-below the 53% line-coverage ratchet; raise the floor only after deterministic tests land.
+gitleaks for secret scanning, Cargo dependency/size analysis, and the Cargo security, coverage,
+cache, and test tools to versions matching CI where applicable. `.gitleaks.toml` carries the
+repository-specific false-positive policy. `deny.toml` rejects unknown registries, Git dependencies,
+wildcard dependency versions, unknown licenses, advisories, and yanked crates. Duplicate transitive
+versions remain warnings so upgrades can remove them incrementally; do not suppress one without a
+documented reason. CI also publishes LCOV and fails below the 53% line-coverage ratchet; raise the
+floor only after deterministic tests land.
 
-Generated API code is built into `OUT_DIR`; do not commit it. For ordinary
-CLI/core iteration, `scripts/check-fast.sh` reuses an opt-in Cargo target cache
-across worktrees; full PR validation still uses the workspace commands above.
+Generated API code is built into `OUT_DIR`; do not commit it. The generated API manifests
+explicitly ignore their generated runtime dependencies for `cargo-machete`, because the references
+are emitted outside the source tree. For ordinary CLI/core iteration, `scripts/check-fast.sh`
+reuses an opt-in Cargo target cache across worktrees; full PR validation still uses the workspace
+commands above. Use `mise run size:bloat` periodically or before a release to inspect the `dist`
+profile; it is a diagnostic report, not yet a fixed size budget.
+
+`clippy::too_many_lines` is intentionally not part of the blocking Clippy policy. Its default
+threshold flags existing orchestration, formatting, test, and generated functions; without a
+baseline or new-code-only gate, enabling it with `-D warnings` would turn a size heuristic into
+workspace-wide refactoring debt. Use it as a report/review signal and prefer responsibility and
+cognitive-complexity findings when deciding whether a function should be split.
 
 ## Code architecture
 
@@ -68,7 +81,8 @@ Keep changes focused, explain user-visible behavior, and add tests for success a
 Fill every applicable section of `.github/pull_request_template.md`; explain why any contract or
 security checklist item is not applicable. Before opening a PR:
 
-1. run the gitleaks scan, fmt, Clippy, workspace tests, RustSec audit, and `cargo deny check`;
+1. run the gitleaks scan, fmt, Clippy, `cargo machete`, workspace tests, RustSec audit, and
+   `cargo deny check`;
 2. run `cargo +1.91 check --workspace` for changes affecting dependencies/language features;
 3. update `CHANGELOG.md` under Unreleased;
 4. update every affected document and the agent skill;

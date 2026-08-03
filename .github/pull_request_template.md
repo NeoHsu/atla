@@ -10,6 +10,7 @@
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings`
+- [ ] `cargo machete`
 - [ ] `cargo test --workspace`
 - [ ] `cargo +1.91.0 check --workspace` when dependencies or language features change
 - [ ] `cargo audit`

@@ -52,12 +52,17 @@ jobs:
           tool: cargo-audit@0.22.1
       - uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
         with:
+          tool: cargo-machete@0.9.2
+      - uses: taiki-e/install-action@6a1bd70eaac3c8bdf093356838d7ee09fda951cf # v2.85.5
+        with:
           tool: cargo-deny@0.20.2
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
       - name: Scan the source tree for secrets
         run: gitleaks dir --redact --no-banner .
       - name: Check dependency policy
         run: cargo deny check
+      - name: Check for unused Cargo dependencies
+        run: cargo machete
       - name: Test repository safety tools
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
       - name: Verify exact CLI and skill version lockstep

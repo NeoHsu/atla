@@ -22,3 +22,14 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 regress = "0.11"
+
+# These runtime dependencies are referenced by the Progenitor output generated in OUT_DIR.
+[package.metadata.cargo-machete]
+ignored = [
+  "chrono",
+  "progenitor-client",
+  "regress",
+  "reqwest",
+  "serde",
+  "serde_json",
+]

@@ -17,3 +17,7 @@ progenitor-client = "0.14"
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+# These runtime dependencies are referenced by the Progenitor output generated in OUT_DIR.
+[package.metadata.cargo-machete]
+ignored = ["progenitor-client", "reqwest", "serde", "serde_json"]

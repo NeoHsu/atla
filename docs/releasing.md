@@ -12,16 +12,19 @@ description: Versioning, cargo-dist artifacts, SBOM, provenance, and supply-chai
    docs. The tag-triggered workflow repeats this check with `--tag "$GITHUB_REF_NAME"`.
 2. Rename the combined `[Unreleased]` section to `[0.6.1]` with the actual release date and restore
    an empty `[Unreleased]` section plus compare links.
-3. Run the workspace test, fmt, Clippy, RustSec, MSRV, doc, and CLI-surface checks.
+3. Run the workspace test, fmt, Clippy, `cargo machete`, RustSec, MSRV, doc, and CLI-surface
+   checks.
 4. Run cargo-dist plan/local/global artifact smoke tests.
-5. Run `python3 scripts/verify-release-artifacts.py`; it checks archive contents,
+5. Run `mise run size:bloat` and compare the `dist` profile crate breakdown with the previous
+   release. This is diagnostic until a target-specific size budget is established.
+6. Run `python3 scripts/verify-release-artifacts.py`; it checks archive contents,
    sidecar/manifest hashes, CycloneDX 1.5, and SBOM component hashes.
-6. For bounded Jira and Confluence sandbox testing, follow
+7. For bounded Jira and Confluence sandbox testing, follow
    [Live Sandbox Smoke Testing](./live-smoke.md). The ledger's `finish` command
    must report complete, with every selected remote operation classified and no
    active or trashed temporary resources.
-7. Confirm every `uses:` reference in `.github/workflows/release.yml` is a full commit SHA.
-8. Confirm release-job permissions are scoped (`contents: write` only on `host`).
+8. Confirm every `uses:` reference in `.github/workflows/release.yml` is a full commit SHA.
+9. Confirm release-job permissions are scoped (`contents: write` only on `host`).
 
 ## Generated workflow policy
 
