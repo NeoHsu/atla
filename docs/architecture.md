@@ -95,14 +95,15 @@ Integration tests are grouped by contract responsibility under `crates/atla-cli/
 
 This keeps the integration-test root as a module index and makes responsibility-specific failures
 quick to locate without weakening the full `cargo nextest` gate. Core tests remain close to domain
-modules, while `scripts/tests/` verifies repository tooling and spec-generation invariants.
+modules, while `scripts/tests/` verifies repository tooling and spec-generation invariants; Ruff
+checks the same Python maintenance surface for lint and formatting regressions.
 
 ## Quality-gate layers
 
 | Layer | Entry point | Contract enforced |
 | --- | --- | --- |
 | Inner loop | `mise run check:fast` | Fast CLI compilation with shared target cache |
-| Focused checks | `mise run lint`, `mise run test:*`, `mise run contract:check` | One subsystem at a time |
+| Focused checks | `mise run lint`, `mise run python:lint`, `mise run python:format`, `mise run test:*`, `mise run contract:check` | One subsystem at a time |
 | Security | `mise run security` and `mise run workflow:security` | Secrets, dependency policy, advisories, workflow security |
 | Pull request | `mise run check:pr` | Locked dependencies, lint, tests, MSRV, contracts, security, workflows |
 | CI | `.github/workflows/ci.yml` | Parallel Rust quality, coverage, MSRV, platform, and workflow gates |

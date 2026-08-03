@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import tomllib
 import unittest
 from pathlib import Path
-
-import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 MISE_CONFIG = ROOT / "mise.toml"
@@ -22,6 +21,9 @@ EXPECTED_TASKS = {
     "fmt",
     "lint",
     "msrv",
+    "python:complexity",
+    "python:format",
+    "python:lint",
     "sccache:stats",
     "security",
     "security:secrets",
@@ -60,6 +62,15 @@ class MiseTaskTests(unittest.TestCase):
         self.assertIn(f"cargo-deny@{tools['cargo:cargo-deny']}", workflow)
         self.assertIn(f"cargo-llvm-cov@{tools['cargo:cargo-llvm-cov']}", workflow)
         self.assertIn(f"cargo-nextest@{tools['cargo:cargo-nextest']}", workflow)
+        self.assertIn(
+            "astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89",
+            workflow,
+        )
+        self.assertIn(f'version: "{tools["ruff"]}"', workflow)
+        self.assertIn(
+            'checksum: "7e1cc9b3da4911bb2c98c076302fd8997d822fac74dd8f1e30371701e70a4c56"',
+            workflow,
+        )
         self.assertIn("github.com/rhysd/actionlint/cmd/actionlint@v1.7.12", workflow)
         self.assertIn(f'GITLEAKS_VERSION: "{tools["gitleaks"]}"', workflow)
         self.assertIn('CARGO_INCREMENTAL: "0"', workflow)
@@ -128,6 +139,9 @@ class MiseTaskTests(unittest.TestCase):
         for command in (
             "gitleaks dir --redact --no-banner .",
             "python scripts/check-skill-version.py",
+            "ruff check scripts",
+            "ruff format --check scripts",
+            "ruff check scripts --select C901,PLR0911,PLR0912,PLR0913,PLR0915 --exit-zero",
             "cargo +1.91 check --workspace --all-targets --locked",
             "cargo nextest run --workspace --locked --status-level all",
             "cargo test --doc --workspace --locked",
@@ -169,6 +183,7 @@ class MiseTaskTests(unittest.TestCase):
             self.assertNotIn(retired_task, tasks)
         self.assertNotIn("cargo-chef", workflow)
         self.assertNotIn("cargo chef", workflow)
+        self.assertTrue((ROOT / "ruff.toml").is_file())
 
 
 if __name__ == "__main__":

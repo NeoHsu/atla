@@ -52,7 +52,9 @@ class SpecDiffSummaryTests(unittest.TestCase):
         for index, path in enumerate(SPEC_PATHS):
             destination = self.root / path
             destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text(json.dumps(spec(f"oldOperation{index}", "OldSchema")))
+            destination.write_text(
+                json.dumps(spec(f"oldOperation{index}", "OldSchema"))
+            )
         subprocess.run(["git", "-C", str(self.root), "add", "specs"], check=True)
         subprocess.run(
             ["git", "-C", str(self.root), "commit", "-qm", "fixture base"],

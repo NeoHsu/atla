@@ -18,9 +18,9 @@ cargo deny check
 
 These explicit commands remain the portable Rust baseline. CI runs the same workspace unit and
 integration tests with `cargo-nextest`, then runs doctests separately so test coverage is not lost.
-It also scans the source tree with gitleaks and checks direct Cargo dependency liveness with
-`cargo-machete`. Contributors using `mise` can run the common workflows through discoverable
-convenience tasks:
+It also scans the source tree with gitleaks, checks direct Cargo dependency liveness with
+`cargo-machete`, and validates the repository's Python maintenance scripts with Ruff. Contributors
+using `mise` can run the common workflows through discoverable convenience tasks:
 
 | Task | Purpose |
 | --- | --- |
@@ -34,6 +34,8 @@ convenience tasks:
 | `mise run contract:check` | CLI surface, docs, schemas, and operation-catalog contracts |
 | `mise run contract:update` | Regenerate `docs/cli-surface.txt` after a CLI change |
 | `mise run tooling:test` | Python maintenance-tool tests |
+| `mise run python:lint` / `mise run python:format` | Ruff lint and formatting checks for Python maintenance scripts |
+| `mise run python:complexity` | Report-only Python complexity candidates |
 | `mise run skill:version` | Exact CLI/skill/Cargo/docs release-version lockstep |
 | `mise run security:secrets` | Scan committed and uncommitted source files for secrets |
 | `mise run workflow:check` | Validate workflow syntax, immutable Action pins, and release gates |
@@ -43,11 +45,10 @@ convenience tasks:
 | `mise run check:pr` | Sequential local PR gate: secret scan, lint, tests, tooling, MSRV, deny, audit, and workflow security |
 
 After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
-project toolchain. The config pins Node.js for partial-spec filters, Python for maintenance tools,
-actionlint and zizmor for workflow checks, gitleaks for secret scanning, Cargo dependency/size
+project toolchain. The config pins Node.js for partial-spec filters, Python and Ruff for maintenance
+tools, actionlint and zizmor for workflow checks, gitleaks for secret scanning, Cargo dependency/size
 analysis, and the Cargo security, coverage, cache, and test tools to versions matching CI where
-applicable. `.gitleaks.toml` carries the
-repository-specific false-positive policy. `deny.toml` rejects unknown registries, Git dependencies,
+applicable. `.gitleaks.toml` carries the repository-specific false-positive policy. `deny.toml` rejects unknown registries, Git dependencies,
 wildcard dependency versions, unknown licenses, advisories, and yanked crates. Duplicate transitive
 versions remain warnings so upgrades can remove them incrementally; do not suppress one without a
 documented reason. CI also publishes LCOV and fails below the 53% line-coverage ratchet; raise the
@@ -90,8 +91,8 @@ Keep changes focused, explain user-visible behavior, and add tests for success a
 Fill every applicable section of `.github/pull_request_template.md`; explain why any contract or
 security checklist item is not applicable. Before opening a PR:
 
-1. run the gitleaks scan, fmt, Clippy, `cargo machete`, workspace tests, RustSec audit,
-   `cargo deny check`, workflow syntax, and workflow-security checks;
+1. run the gitleaks scan, Python Ruff lint/format checks, fmt, Clippy, `cargo machete`, workspace
+   tests, RustSec audit, `cargo deny check`, workflow syntax, and workflow-security checks;
 2. run `cargo +1.91 check --workspace --all-targets --locked` for changes affecting dependencies/language features;
 3. update `CHANGELOG.md` under Unreleased;
 4. update every affected document and the agent skill;

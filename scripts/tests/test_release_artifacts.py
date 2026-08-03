@@ -102,9 +102,7 @@ class ReleaseArtifactTests(unittest.TestCase):
             root = Path(directory).resolve()
             shell = root / "atla-installer.sh"
             powershell = root / "atla-installer.ps1"
-            shell.write_text(
-                "verify_checksum archive sha256sum", encoding="utf-8"
-            )
+            shell.write_text("verify_checksum archive sha256sum", encoding="utf-8")
             powershell.write_text(
                 "Get-FileHash -Algorithm SHA256 $url.sha256", encoding="utf-8"
             )

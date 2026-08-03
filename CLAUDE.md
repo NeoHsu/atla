@@ -23,9 +23,10 @@ cargo clippy --workspace --all-targets --locked \
 ```
 
 CI (`.github/workflows/ci.yml`) enforces equivalent workspace tests with `cargo-nextest` plus a
-separate doctest run, along with formatting, Clippy, secret scanning, and a RustSec dependency
-audit, workflow syntax/pin checks, and zizmor security analysis. The CLI package is `atla`, not
-`atla-cli`: `cargo test --locked -p atla`. For local orchestration, use `mise run check:fast` during
+separate doctest run, along with Rust/Python formatting and lint checks, Clippy, secret scanning,
+and a RustSec dependency audit, workflow syntax/pin checks, and zizmor security analysis. The CLI
+package is `atla`, not `atla-cli`: `cargo test --locked -p atla`. For local orchestration, use
+`mise run check:fast` during
 the inner loop and `mise run check:pr` before pushing; `mise tasks` lists focused test, contract,
 security, and coverage tasks. The explicit Cargo commands above
 remain the portable baseline.

@@ -120,7 +120,9 @@ def render_summary(
             "| --- | ---: | ---: | ---: |",
         ]
     )
-    for filename, coverage in sorted(files, key=lambda item: (item[1].percent, item[0]))[:top]:
+    for filename, coverage in sorted(
+        files, key=lambda item: (item[1].percent, item[0])
+    )[:top]:
         lines.append(
             f"| `{filename}` | {coverage.covered:,} | {coverage.total:,} | {coverage.percent:.2f}% |"
         )
@@ -130,9 +132,15 @@ def render_summary(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True, help="cargo llvm-cov JSON file")
-    parser.add_argument("--output", type=Path, help="write Markdown here instead of stdout")
-    parser.add_argument("--top", type=int, default=10, help="number of low-coverage files to show")
+    parser.add_argument(
+        "--input", type=Path, required=True, help="cargo llvm-cov JSON file"
+    )
+    parser.add_argument(
+        "--output", type=Path, help="write Markdown here instead of stdout"
+    )
+    parser.add_argument(
+        "--top", type=int, default=10, help="number of low-coverage files to show"
+    )
     return parser.parse_args()
 
 

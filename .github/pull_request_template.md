@@ -8,6 +8,9 @@
 
 ## Validation
 
+- [ ] `ruff check scripts`
+- [ ] `ruff format --check scripts`
+- [ ] `python -m unittest discover -s scripts/tests -p "test_*.py"`
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --workspace --all-targets --locked --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings`
 - [ ] `cargo machete`

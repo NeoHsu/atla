@@ -12,8 +12,8 @@ description: Versioning, cargo-dist artifacts, SBOM, provenance, and supply-chai
    docs. The tag-triggered workflow repeats this check with `--tag "$GITHUB_REF_NAME"`.
 2. Rename the combined `[Unreleased]` section to `[0.6.1]` with the actual release date and restore
    an empty `[Unreleased]` section plus compare links.
-3. Run the workspace test, fmt, Clippy, `cargo machete`, RustSec, MSRV, doc, CLI-surface,
-   workflow syntax, and workflow-security checks (`mise run workflow:check workflow:security`).
+3. Run the workspace test, Python Ruff checks, fmt, Clippy, `cargo machete`, RustSec, MSRV, doc,
+   CLI-surface, workflow syntax, and workflow-security checks (`mise run workflow:check workflow:security`).
 4. Run cargo-dist plan/local/global artifact smoke tests. Release CI also executes the host-compatible
    platform archive on macOS and Windows; a failing platform smoke blocks publication.
 5. Run `mise run size:bloat` and compare the `dist` profile crate breakdown with the previous

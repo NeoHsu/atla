@@ -82,8 +82,12 @@ class CoverageReportTests(unittest.TestCase):
         self.assertNotIn("`crates/atla-cli/src/high.rs`", summary)
 
     def test_invalid_coverage_values_are_ignored(self) -> None:
-        self.assertIsNone(coverage_report.parse_line_coverage({"covered": 2, "count": 1}))
-        self.assertIsNone(coverage_report.parse_line_coverage({"covered": -1, "count": 1}))
+        self.assertIsNone(
+            coverage_report.parse_line_coverage({"covered": 2, "count": 1})
+        )
+        self.assertIsNone(
+            coverage_report.parse_line_coverage({"covered": -1, "count": 1})
+        )
 
 
 if __name__ == "__main__":

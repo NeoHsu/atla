@@ -2,6 +2,7 @@
 actionlint = "1.7.12"
 node = "24"
 python = "3.12.13"
+ruff = "0.16.1"
 rust = "stable"
 gitleaks = "8.30.1"
 sccache = "0.17.0"
@@ -89,6 +90,18 @@ run = "zizmor --persona pedantic --min-severity medium --min-confidence medium .
 description = "Run repository Python tooling tests"
 run = "python -m unittest discover -s scripts/tests -p \"test_*.py\""
 
+[tasks."python:lint"]
+description = "Lint repository Python tooling with Ruff"
+run = "ruff check scripts"
+
+[tasks."python:format"]
+description = "Check repository Python formatting with Ruff"
+run = "ruff format --check scripts"
+
+[tasks."python:complexity"]
+description = "Report Python complexity candidates without blocking"
+run = "ruff check scripts --select C901,PLR0911,PLR0912,PLR0913,PLR0915 --exit-zero"
+
 [tasks."sccache:stats"]
 description = "Show current sccache cache statistics"
 run = "sccache --show-stats"
@@ -133,6 +146,9 @@ run = [
   "cargo machete",
   "gitleaks dir --redact --no-banner .",
   "python scripts/check-skill-version.py",
+  "ruff check scripts",
+  "ruff format --check scripts",
+  "ruff check scripts --select C901,PLR0911,PLR0912,PLR0913,PLR0915 --exit-zero",
   "cargo fmt --all -- --check",
   "cargo clippy --workspace --all-targets --locked --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
   "cargo nextest run --workspace --locked --status-level all",

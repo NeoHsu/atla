@@ -15,7 +15,7 @@ import os
 import shlex
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -206,7 +206,7 @@ MUTATED_RESOURCE_TYPES = {
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def normalize_site(value: str) -> str:
@@ -327,8 +327,7 @@ def command_init(args: argparse.Namespace) -> int:
         & set(selected_groups)
     )
     needs_jira_target = bool(
-        {"jira-issue-lifecycle", "jira-attachment-lifecycle"}
-        & set(selected_groups)
+        {"jira-issue-lifecycle", "jira-attachment-lifecycle"} & set(selected_groups)
     )
     if needs_confluence_target and not all(
         (args.confluence_baseline, args.target_page, args.space_key)
@@ -430,7 +429,7 @@ def command_init(args: argparse.Namespace) -> int:
 
     state = {
         "schemaVersion": SCHEMA_VERSION,
-        "runId": args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        "runId": args.run_id or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"),
         "createdAt": utc_now(),
         "updatedAt": utc_now(),
         "status": "running",
@@ -817,7 +816,9 @@ def command_cleanup_commands(args: argparse.Namespace) -> int:
     if not unresolved:
         print("# no unresolved temporary resources")
         if residue:
-            print(f"# {len(residue)} documented residue resource(s) remain in the sandbox")
+            print(
+                f"# {len(residue)} documented residue resource(s) remain in the sandbox"
+            )
         return 0
     for item in reversed(unresolved):
         command = cleanup_command(state, item)
@@ -864,9 +865,7 @@ def command_status(args: argparse.Namespace) -> int:
             "coverage: "
             + ", ".join(f"{key}={value}" for key, value in result["counts"].items())
         )
-        print(
-            f"mutations: {result['mutationRecords']}/{result['maxMutationRecords']}"
-        )
+        print(f"mutations: {result['mutationRecords']}/{result['maxMutationRecords']}")
         print(
             "resources: "
             f"{result['resources']}/{result['maxResources']} total, "
