@@ -2,6 +2,7 @@ use atla_confluence_api::Client as GeneratedClient;
 use atla_confluence_v1_api::Client as GeneratedV1Client;
 
 use crate::client::AtlassianClient;
+use crate::generated_api::GeneratedTransport;
 
 mod attachments;
 mod blog;
@@ -18,8 +19,8 @@ pub use models::*;
 #[derive(Debug, Clone)]
 pub struct ConfluenceClient {
     raw_client: AtlassianClient,
-    generated: GeneratedClient,
-    generated_v1: GeneratedV1Client,
+    transport: GeneratedTransport<GeneratedClient>,
+    transport_v1: GeneratedTransport<GeneratedV1Client>,
 }
 
 impl ConfluenceClient {
@@ -33,8 +34,8 @@ impl ConfluenceClient {
 
         Self {
             raw_client: client,
-            generated,
-            generated_v1,
+            transport: GeneratedTransport::new(generated),
+            transport_v1: GeneratedTransport::new(generated_v1),
         }
     }
 

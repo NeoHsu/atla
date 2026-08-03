@@ -1,6 +1,6 @@
 use super::JiraClient;
 use super::models::{JiraIssueType, JiraProject, JiraProjectPage, JiraProjectSearch};
-use super::util::{JIRA_LIST_PAGE_CAP, generated_request, limit_i32, next_offset};
+use super::util::{JIRA_LIST_PAGE_CAP, limit_i32, next_offset};
 use crate::client::ApiError;
 
 impl JiraClient {
@@ -21,20 +21,21 @@ impl JiraClient {
             }
             let page_size = remaining.min(JIRA_LIST_PAGE_CAP as u64) as u32;
 
-            let page: JiraProjectPage = generated_request(reqwest::Method::GET, || {
-                let mut request = self
-                    .generated
-                    .search_projects()
-                    .start_at(start_at.min(i64::MAX as u64) as i64)
-                    .max_results(limit_i32(page_size));
-                if let Some(query) = &search.query {
-                    request = request.query(query.clone());
-                }
-                request.send()
-            })
-            .await?
-            .into_inner()
-            .into();
+            let page: JiraProjectPage = self
+                .transport
+                .execute(reqwest::Method::GET, |generated| async move {
+                    let mut request = generated
+                        .search_projects()
+                        .start_at(start_at.min(i64::MAX as u64) as i64)
+                        .max_results(limit_i32(page_size));
+                    if let Some(query) = &search.query {
+                        request = request.query(query.clone());
+                    }
+                    request.send().await
+                })
+                .await?
+                .into_inner()
+                .into();
             let received = page.values.len() as u64;
             last_is_last = page.is_last;
             last_total = page.total;
@@ -69,14 +70,16 @@ impl JiraClient {
     }
 
     pub async fn get_project(&self, project_id_or_key: &str) -> Result<JiraProject, ApiError> {
-        generated_request(reqwest::Method::GET, || {
-            self.generated
-                .get_project()
-                .project_id_or_key(project_id_or_key)
-                .send()
-        })
-        .await
-        .map(|response| JiraProject::from(response.into_inner()))
+        self.transport
+            .execute(reqwest::Method::GET, |generated| async move {
+                generated
+                    .get_project()
+                    .project_id_or_key(project_id_or_key)
+                    .send()
+                    .await
+            })
+            .await
+            .map(|response| JiraProject::from(response.into_inner()))
     }
 
     pub async fn list_issue_types(
@@ -90,13 +93,16 @@ impl JiraClient {
             ))
         })?;
 
-        let issue_types = generated_request(reqwest::Method::GET, || {
-            self.generated
-                .get_issue_types_for_project()
-                .project_id(&project_id)
-                .send()
-        })
-        .await?;
+        let issue_types = self
+            .transport
+            .execute(reqwest::Method::GET, |generated| async move {
+                generated
+                    .get_issue_types_for_project()
+                    .project_id(&project_id)
+                    .send()
+                    .await
+            })
+            .await?;
 
         let list: Vec<_> = Vec::from(issue_types.into_inner());
         Ok(list.into_iter().map(JiraIssueType::from).collect())

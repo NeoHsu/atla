@@ -6,7 +6,7 @@ use super::models::{
     JiraIssueField, JiraIssueFieldsQuery, JiraIssueLabelUpdate, JiraIssueSearch,
     JiraIssueSearchPage, JiraIssueUpdate, JiraTransition, JiraUser,
 };
-use super::util::{generated_request, issue_fields, limit_i32};
+use super::util::{issue_fields, limit_i32};
 use crate::client::{ApiError, read_empty, read_json};
 
 /// Per-request maximum for `GET /rest/api/3/search/jql`. The server silently
@@ -18,26 +18,30 @@ impl JiraClient {
         &self,
         issue: &JiraIssueCreate,
     ) -> Result<JiraCreatedIssue, ApiError> {
-        generated_request(reqwest::Method::POST, || {
-            self.generated
-                .create_issue()
-                .body(issue.to_generated())
-                .send()
-        })
-        .await
-        .map(|response| JiraCreatedIssue::from(response.into_inner()))
+        self.transport
+            .execute(reqwest::Method::POST, |generated| async move {
+                generated
+                    .create_issue()
+                    .body(issue.to_generated())
+                    .send()
+                    .await
+            })
+            .await
+            .map(|response| JiraCreatedIssue::from(response.into_inner()))
     }
 
     pub async fn update_issue(&self, issue: &JiraIssueUpdate) -> Result<(), ApiError> {
-        generated_request(reqwest::Method::PUT, || {
-            self.generated
-                .edit_issue()
-                .issue_id_or_key(&issue.issue_id_or_key)
-                .body(issue.to_generated())
-                .send()
-        })
-        .await
-        .map(|_| ())
+        self.transport
+            .execute(reqwest::Method::PUT, |generated| async move {
+                generated
+                    .edit_issue()
+                    .issue_id_or_key(&issue.issue_id_or_key)
+                    .body(issue.to_generated())
+                    .send()
+                    .await
+            })
+            .await
+            .map(|_| ())
     }
 
     pub async fn update_issue_labels(&self, labels: &JiraIssueLabelUpdate) -> Result<(), ApiError> {
@@ -53,15 +57,17 @@ impl JiraClient {
             update: update_map,
         };
 
-        generated_request(reqwest::Method::PUT, || {
-            self.generated
-                .edit_issue()
-                .issue_id_or_key(&labels.issue_id_or_key)
-                .body(details.clone())
-                .send()
-        })
-        .await
-        .map(|_| ())
+        self.transport
+            .execute(reqwest::Method::PUT, |generated| async move {
+                generated
+                    .edit_issue()
+                    .issue_id_or_key(&labels.issue_id_or_key)
+                    .body(details.clone())
+                    .send()
+                    .await
+            })
+            .await
+            .map(|_| ())
     }
 
     pub async fn search_issues(
@@ -77,20 +83,22 @@ impl JiraClient {
         while (collected.len() as u32) < max_results && self.raw_client.take_page() {
             let remaining = max_results - collected.len() as u32;
             let page_size = remaining.min(JIRA_JQL_SEARCH_PAGE_CAP);
+            let request_fields = fields.clone();
 
-            let response = generated_request(reqwest::Method::GET, || {
-                let mut request = self
-                    .generated
-                    .search_and_reconsile_issues_using_jql()
-                    .jql(&search.jql)
-                    .max_results(limit_i32(page_size))
-                    .fields(fields.clone());
-                if let Some(token) = &next_page_token {
-                    request = request.next_page_token(token.clone());
-                }
-                request.send()
-            })
-            .await?;
+            let response = self
+                .transport
+                .execute(reqwest::Method::GET, |generated| async move {
+                    let mut request = generated
+                        .search_and_reconsile_issues_using_jql()
+                        .jql(&search.jql)
+                        .max_results(limit_i32(page_size))
+                        .fields(request_fields);
+                    if let Some(token) = &next_page_token {
+                        request = request.next_page_token(token.clone());
+                    }
+                    request.send().await
+                })
+                .await?;
             let mut page = JiraIssueSearchPage::from(response.into_inner());
 
             let received = page.issues.len();
@@ -121,29 +129,34 @@ impl JiraClient {
         fields: Option<Vec<String>>,
     ) -> Result<JiraIssue, ApiError> {
         let fields = issue_fields(fields.as_deref());
-        generated_request(reqwest::Method::GET, || {
-            self.generated
-                .get_issue()
-                .issue_id_or_key(issue_id_or_key)
-                .fields(fields.clone())
-                .send()
-        })
-        .await
-        .map(|response| JiraIssue::from(response.into_inner()))
+        self.transport
+            .execute(reqwest::Method::GET, |generated| async move {
+                generated
+                    .get_issue()
+                    .issue_id_or_key(issue_id_or_key)
+                    .fields(fields.clone())
+                    .send()
+                    .await
+            })
+            .await
+            .map(|response| JiraIssue::from(response.into_inner()))
     }
 
     pub async fn list_transitions(
         &self,
         issue_id_or_key: &str,
     ) -> Result<Vec<JiraTransition>, ApiError> {
-        let transitions = generated_request(reqwest::Method::GET, || {
-            self.generated
-                .get_transitions()
-                .issue_id_or_key(issue_id_or_key)
-                .expand("transitions.fields")
-                .send()
-        })
-        .await?;
+        let transitions = self
+            .transport
+            .execute(reqwest::Method::GET, |generated| async move {
+                generated
+                    .get_transitions()
+                    .issue_id_or_key(issue_id_or_key)
+                    .expand("transitions.fields")
+                    .send()
+                    .await
+            })
+            .await?;
 
         Ok(transitions
             .into_inner()
@@ -201,20 +214,22 @@ impl JiraClient {
             )));
         }
 
-        generated_request(reqwest::Method::POST, || {
-            let transition_request = generated_types::IssueTransitionRequest {
-                transition: generated_types::IssueTransitionRequestTransition {
-                    id: transition_id.clone(),
-                },
-                fields: fields.clone(),
-            };
-            self.generated
-                .do_transition()
-                .issue_id_or_key(issue_id_or_key)
-                .body(transition_request)
-                .send()
-        })
-        .await?;
+        self.transport
+            .execute(reqwest::Method::POST, |generated| async move {
+                let transition_request = generated_types::IssueTransitionRequest {
+                    transition: generated_types::IssueTransitionRequestTransition {
+                        id: transition_id.clone(),
+                    },
+                    fields: fields.clone(),
+                };
+                generated
+                    .do_transition()
+                    .issue_id_or_key(issue_id_or_key)
+                    .body(transition_request)
+                    .send()
+                    .await
+            })
+            .await?;
 
         Ok(transition)
     }
@@ -224,15 +239,17 @@ impl JiraClient {
         issue_id_or_key: &str,
         delete_subtasks: bool,
     ) -> Result<(), ApiError> {
-        generated_request(reqwest::Method::DELETE, || {
-            self.generated
-                .delete_issue()
-                .issue_id_or_key(issue_id_or_key)
-                .delete_subtasks(delete_subtasks)
-                .send()
-        })
-        .await
-        .map(|_| ())
+        self.transport
+            .execute(reqwest::Method::DELETE, |generated| async move {
+                generated
+                    .delete_issue()
+                    .issue_id_or_key(issue_id_or_key)
+                    .delete_subtasks(delete_subtasks)
+                    .send()
+                    .await
+            })
+            .await
+            .map(|_| ())
     }
 
     pub async fn assign_issue(&self, assign: &JiraIssueAssign) -> Result<JiraUser, ApiError> {
@@ -301,17 +318,20 @@ impl JiraClient {
         while all_fields.len() < max_results && self.raw_client.take_page() {
             let remaining = max_results.saturating_sub(all_fields.len());
             let page_size = remaining.min(50) as i32;
-            let page = generated_request(reqwest::Method::GET, || {
-                self.generated
-                    .get_create_issue_meta_issue_type_id()
-                    .project_id_or_key(&query.project_key)
-                    .issue_type_id(&query.issue_type_id)
-                    .max_results(page_size)
-                    .start_at(start_at)
-                    .send()
-            })
-            .await?
-            .into_inner();
+            let page = self
+                .transport
+                .execute(reqwest::Method::GET, |generated| async move {
+                    generated
+                        .get_create_issue_meta_issue_type_id()
+                        .project_id_or_key(&query.project_key)
+                        .issue_type_id(&query.issue_type_id)
+                        .max_results(page_size)
+                        .start_at(start_at)
+                        .send()
+                        .await
+                })
+                .await?
+                .into_inner();
 
             let total = page.total.unwrap_or(i32::MAX);
             let fetched = page.fields.len() as i32;

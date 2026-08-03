@@ -1,6 +1,7 @@
 use atla_jira_api::Client as GeneratedClient;
 
 use crate::client::{ApiError, AtlassianClient, read_json};
+use crate::generated_api::GeneratedTransport;
 
 mod attachments;
 mod boards;
@@ -38,7 +39,7 @@ pub fn default_issue_fields() -> Vec<String> {
 #[derive(Debug, Clone)]
 pub struct JiraClient {
     raw_client: AtlassianClient,
-    generated: GeneratedClient,
+    transport: GeneratedTransport<GeneratedClient>,
 }
 
 impl JiraClient {
@@ -48,7 +49,7 @@ impl JiraClient {
 
         Self {
             raw_client: client,
-            generated,
+            transport: GeneratedTransport::new(generated),
         }
     }
 

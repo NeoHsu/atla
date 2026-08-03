@@ -23,21 +23,23 @@ impl ConfluenceClient {
 
             let space_ids = optional_i64_vec(search.space_id.as_deref())?;
             let page_limit = limit_non_zero(page_size)?;
-            let page = generated_request(reqwest::Method::GET, || {
-                let mut request = self.generated.get_pages().limit(page_limit);
-                if let Some(space_ids) = &space_ids {
-                    request = request.space_id(space_ids.clone());
-                }
-                if let Some(title) = &search.title {
-                    request = request.title(title.clone());
-                }
-                if let Some(cursor) = &cursor {
-                    request = request.cursor(cursor.clone());
-                }
-                request.send()
-            })
-            .await?
-            .into_inner();
+            let page = self
+                .transport
+                .execute(reqwest::Method::GET, |generated| async move {
+                    let mut request = generated.get_pages().limit(page_limit);
+                    if let Some(space_ids) = &space_ids {
+                        request = request.space_id(space_ids.clone());
+                    }
+                    if let Some(title) = &search.title {
+                        request = request.title(title.clone());
+                    }
+                    if let Some(cursor) = &cursor {
+                        request = request.cursor(cursor.clone());
+                    }
+                    request.send().await
+                })
+                .await?
+                .into_inner();
 
             let received = page.results.len();
             collected.extend(page.results.into_iter().map(ConfluencePage::from));
@@ -84,20 +86,21 @@ impl ConfluenceClient {
             let (nodes, links) = if let Some(depth) = search.depth {
                 let page_limit = limit_non_zero(page_size)?;
                 let depth = limit_non_zero(depth)?;
-                let page = generated_request(reqwest::Method::GET, || {
-                    let mut request = self
-                        .generated
-                        .get_page_descendants()
-                        .id(id)
-                        .limit(page_limit)
-                        .depth(depth);
-                    if let Some(cursor) = &cursor {
-                        request = request.cursor(cursor.clone());
-                    }
-                    request.send()
-                })
-                .await?
-                .into_inner();
+                let page = self
+                    .transport
+                    .execute(reqwest::Method::GET, |generated| async move {
+                        let mut request = generated
+                            .get_page_descendants()
+                            .id(id)
+                            .limit(page_limit)
+                            .depth(depth);
+                        if let Some(cursor) = &cursor {
+                            request = request.cursor(cursor.clone());
+                        }
+                        request.send().await
+                    })
+                    .await?
+                    .into_inner();
                 let nodes: Vec<ConfluenceContentNode> = page
                     .results
                     .into_iter()
@@ -106,19 +109,20 @@ impl ConfluenceClient {
                 (nodes, page.links)
             } else {
                 let page_limit = limit_non_zero(page_size)?;
-                let page = generated_request(reqwest::Method::GET, || {
-                    let mut request = self
-                        .generated
-                        .get_page_direct_children()
-                        .id(id)
-                        .limit(page_limit);
-                    if let Some(cursor) = &cursor {
-                        request = request.cursor(cursor.clone());
-                    }
-                    request.send()
-                })
-                .await?
-                .into_inner();
+                let page = self
+                    .transport
+                    .execute(reqwest::Method::GET, |generated| async move {
+                        let mut request = generated
+                            .get_page_direct_children()
+                            .id(id)
+                            .limit(page_limit);
+                        if let Some(cursor) = &cursor {
+                            request = request.cursor(cursor.clone());
+                        }
+                        request.send().await
+                    })
+                    .await?
+                    .into_inner();
                 let nodes: Vec<ConfluenceContentNode> = page
                     .results
                     .into_iter()
@@ -162,15 +166,17 @@ impl ConfluenceClient {
         body_format: Option<ConfluenceBodyRepresentation>,
     ) -> Result<ConfluencePage, ApiError> {
         let id = parse_i64_id(id)?;
-        let page = generated_request(reqwest::Method::GET, || {
-            let mut request = self.generated.get_page_by_id().id(id).include_version(true);
-            if let Some(body_format) = body_format {
-                request = request.body_format(body_format.as_primary_body_single());
-            }
-            request.send()
-        })
-        .await?
-        .into_inner();
+        let page = self
+            .transport
+            .execute(reqwest::Method::GET, |generated| async move {
+                let mut request = generated.get_page_by_id().id(id).include_version(true);
+                if let Some(body_format) = body_format {
+                    request = request.body_format(body_format.as_primary_body_single());
+                }
+                request.send().await
+            })
+            .await?
+            .into_inner();
 
         Ok(page.into())
     }
@@ -179,18 +185,20 @@ impl ConfluenceClient {
         &self,
         page: &ConfluencePageCreate,
     ) -> Result<ConfluencePage, ApiError> {
-        let page = generated_request(reqwest::Method::POST, || {
-            let mut request = self.generated.create_page().body(page.to_generated());
-            if let Some(private) = page.private {
-                request = request.private(private);
-            }
-            if let Some(root_level) = page.root_level {
-                request = request.root_level(root_level);
-            }
-            request.send()
-        })
-        .await?
-        .into_inner();
+        let page = self
+            .transport
+            .execute(reqwest::Method::POST, |generated| async move {
+                let mut request = generated.create_page().body(page.to_generated());
+                if let Some(private) = page.private {
+                    request = request.private(private);
+                }
+                if let Some(root_level) = page.root_level {
+                    request = request.root_level(root_level);
+                }
+                request.send().await
+            })
+            .await?
+            .into_inner();
 
         Ok(page.into())
     }
@@ -232,21 +240,24 @@ impl ConfluenceClient {
         status: ConfluenceContentStatus,
     ) -> Result<ConfluencePage, ApiError> {
         let id = parse_i64_id(id)?;
-        let page = generated_request(reqwest::Method::PUT, || {
-            self.generated
-                .update_page_title()
-                .id(id)
-                .body(
-                    ConfluencePageTitleUpdate {
-                        status,
-                        title: title.to_owned(),
-                    }
-                    .to_generated(),
-                )
-                .send()
-        })
-        .await?
-        .into_inner();
+        let page = self
+            .transport
+            .execute(reqwest::Method::PUT, |generated| async move {
+                generated
+                    .update_page_title()
+                    .id(id)
+                    .body(
+                        ConfluencePageTitleUpdate {
+                            status,
+                            title: title.to_owned(),
+                        }
+                        .to_generated(),
+                    )
+                    .send()
+                    .await
+            })
+            .await?
+            .into_inner();
 
         Ok(page.into())
     }
@@ -256,28 +267,32 @@ impl ConfluenceClient {
         page: &ConfluencePageUpdate,
     ) -> Result<ConfluencePage, ApiError> {
         let id = parse_i64_id(&page.id)?;
-        let updated = generated_request(reqwest::Method::PUT, || {
-            self.generated
-                .update_page()
-                .id(id)
-                .body(page.to_generated())
-                .send()
-        })
-        .await?
-        .into_inner();
+        let updated = self
+            .transport
+            .execute(reqwest::Method::PUT, |generated| async move {
+                generated
+                    .update_page()
+                    .id(id)
+                    .body(page.to_generated())
+                    .send()
+                    .await
+            })
+            .await?
+            .into_inner();
 
         Ok(updated.into())
     }
 
     pub async fn delete_page(&self, id: &str, purge: bool, draft: bool) -> Result<(), ApiError> {
         let id = parse_i64_id(id)?;
-        generated_request(reqwest::Method::DELETE, || {
-            let request = self.generated.delete_page().id(id);
-            let request = if purge { request.purge(true) } else { request };
-            let request = if draft { request.draft(true) } else { request };
-            request.send()
-        })
-        .await?;
+        self.transport
+            .execute(reqwest::Method::DELETE, |generated| async move {
+                let request = generated.delete_page().id(id);
+                let request = if purge { request.purge(true) } else { request };
+                let request = if draft { request.draft(true) } else { request };
+                request.send().await
+            })
+            .await?;
         Ok(())
     }
 

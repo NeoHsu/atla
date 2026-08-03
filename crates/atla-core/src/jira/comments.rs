@@ -2,7 +2,7 @@ use atla_jira_api::types as generated_types;
 
 use super::JiraClient;
 use super::models::{JiraComment, JiraCommentPage};
-use super::util::{JIRA_LIST_PAGE_CAP, adf_body, generated_request, limit_i32, next_offset};
+use super::util::{JIRA_LIST_PAGE_CAP, adf_body, limit_i32, next_offset};
 use crate::client::ApiError;
 
 /// JSON request body `add_comment`/`update_comment` send (Markdown converted
@@ -17,16 +17,19 @@ impl JiraClient {
         issue_id_or_key: &str,
         body: &str,
     ) -> Result<JiraComment, ApiError> {
-        let comment = generated_request(reqwest::Method::POST, || {
-            self.generated
-                .add_comment()
-                .issue_id_or_key(issue_id_or_key)
-                .body(generated_types::CommentCreateRequest {
-                    body: adf_body(body),
-                })
-                .send()
-        })
-        .await?;
+        let comment = self
+            .transport
+            .execute(reqwest::Method::POST, |generated| async move {
+                generated
+                    .add_comment()
+                    .issue_id_or_key(issue_id_or_key)
+                    .body(generated_types::CommentCreateRequest {
+                        body: adf_body(body),
+                    })
+                    .send()
+                    .await
+            })
+            .await?;
 
         Ok(comment.into_inner().into())
     }
@@ -37,17 +40,20 @@ impl JiraClient {
         comment_id: &str,
         body: &str,
     ) -> Result<JiraComment, ApiError> {
-        let comment = generated_request(reqwest::Method::PUT, || {
-            self.generated
-                .update_comment()
-                .issue_id_or_key(issue_id_or_key)
-                .id(comment_id)
-                .body(generated_types::CommentCreateRequest {
-                    body: adf_body(body),
-                })
-                .send()
-        })
-        .await?;
+        let comment = self
+            .transport
+            .execute(reqwest::Method::PUT, |generated| async move {
+                generated
+                    .update_comment()
+                    .issue_id_or_key(issue_id_or_key)
+                    .id(comment_id)
+                    .body(generated_types::CommentCreateRequest {
+                        body: adf_body(body),
+                    })
+                    .send()
+                    .await
+            })
+            .await?;
 
         Ok(comment.into_inner().into())
     }
@@ -80,17 +86,20 @@ impl JiraClient {
             }
             let page_size = remaining.min(JIRA_LIST_PAGE_CAP as u64) as u32;
 
-            let page: JiraCommentPage = generated_request(reqwest::Method::GET, || {
-                self.generated
-                    .get_comments()
-                    .issue_id_or_key(issue_id_or_key)
-                    .start_at(limit_i32(start_at.min(i32::MAX as u64) as u32))
-                    .max_results(limit_i32(page_size))
-                    .send()
-            })
-            .await?
-            .into_inner()
-            .into();
+            let page: JiraCommentPage = self
+                .transport
+                .execute(reqwest::Method::GET, |generated| async move {
+                    generated
+                        .get_comments()
+                        .issue_id_or_key(issue_id_or_key)
+                        .start_at(limit_i32(start_at.min(i32::MAX as u64) as u32))
+                        .max_results(limit_i32(page_size))
+                        .send()
+                        .await
+                })
+                .await?
+                .into_inner()
+                .into();
 
             let received = page.comments.len() as u64;
             last_total = page.total;
@@ -126,14 +135,16 @@ impl JiraClient {
         issue_id_or_key: &str,
         comment_id: &str,
     ) -> Result<(), ApiError> {
-        generated_request(reqwest::Method::DELETE, || {
-            self.generated
-                .delete_comment()
-                .issue_id_or_key(issue_id_or_key)
-                .id(comment_id)
-                .send()
-        })
-        .await
-        .map(|_| ())
+        self.transport
+            .execute(reqwest::Method::DELETE, |generated| async move {
+                generated
+                    .delete_comment()
+                    .issue_id_or_key(issue_id_or_key)
+                    .id(comment_id)
+                    .send()
+                    .await
+            })
+            .await
+            .map(|_| ())
     }
 }

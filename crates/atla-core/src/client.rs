@@ -206,8 +206,8 @@ impl AtlassianClient {
         reqwest::Client::builder()
             .connect_timeout(self.policy.connect_timeout)
             .timeout(self.policy.request_timeout)
-            // Generated calls use `generated_api::generated_request` so retries can
-            // honor Retry-After and share the raw-request backoff policy.
+            // GeneratedTransport owns retry execution so generated calls honor
+            // Retry-After and share the raw-request backoff policy.
             .retry(reqwest::retry::never())
             .default_headers(headers)
             .build()

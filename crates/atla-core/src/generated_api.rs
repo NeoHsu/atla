@@ -2,10 +2,12 @@
 //!
 //! All three generated crates re-export the same `progenitor_client::Error`
 //! and `ResponseValue` types, so one mapping serves Jira, Confluence v2, and
-//! Confluence v1. Always route calls through [`generated_request`]; its final
-//! error path uses [`generated_error_with_body`] so the API's own explanation
-//! reaches users. Generated retries share the raw-client backoff and
-//! `Retry-After` behavior without retrying ambiguous mutations.
+//! Confluence v1. Product adapters receive only [`GeneratedTransport`], whose
+//! [`GeneratedTransport::execute`] method routes calls through the private retry
+//! engine. Its final error path uses [`generated_error_with_body`] so the API's
+//! own explanation reaches users without retrying ambiguous mutations.
+
+use std::sync::Arc;
 
 use progenitor_client::Error;
 
@@ -67,15 +69,42 @@ fn should_retry(method: &reqwest::Method, error: &Error<()>) -> bool {
     }
 }
 
+/// Owns a generated client without exposing it to the domain adapters.
+///
+/// The only operation available to callers is [`GeneratedTransport::execute`],
+/// so every generated request necessarily passes through the shared retry and
+/// final-error-body policy below.
+#[derive(Debug, Clone)]
+pub(crate) struct GeneratedTransport<C> {
+    client: Arc<C>,
+}
+
+impl<C> GeneratedTransport<C> {
+    pub(crate) fn new(client: C) -> Self {
+        Self {
+            client: Arc::new(client),
+        }
+    }
+
+    pub(crate) async fn execute<T, F, Fut>(
+        &self,
+        method: reqwest::Method,
+        send: F,
+    ) -> Result<T, ApiError>
+    where
+        F: FnOnce(Arc<C>) -> Fut + Clone,
+        Fut: std::future::Future<Output = Result<T, Error<()>>>,
+    {
+        generated_request(method, || send.clone()(Arc::clone(&self.client))).await
+    }
+}
+
 /// Executes a generated-client request with the shared bounded retry policy.
 ///
 /// A received 429 is safe to repeat because the server explicitly rejected the
 /// attempt. Other transient responses and transport failures are retried only
 /// for idempotent methods; mutation failures remain ambiguous and fail closed.
-pub(crate) async fn generated_request<T, F, Fut>(
-    method: reqwest::Method,
-    mut send: F,
-) -> Result<T, ApiError>
+async fn generated_request<T, F, Fut>(method: reqwest::Method, mut send: F) -> Result<T, ApiError>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<T, Error<()>>>,
@@ -140,59 +169,64 @@ mod tests {
     #[test]
     fn generated_calls_use_shared_retry_wrapper() -> Result<(), Box<dyn std::error::Error>> {
         let source_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let mut modules = Vec::new();
+        let mut generated_calls = 0;
         for product in ["confluence", "jira"] {
             for path in rust_source_files(&source_root.join(product))? {
                 let source = std::fs::read_to_string(&path)?;
-                if source.contains("self.generated") {
-                    modules.push((path, source));
-                }
-            }
-        }
-        assert!(
-            !modules.is_empty(),
-            "expected to discover generated-client source modules"
-        );
-
-        for (path, source) in modules {
-            let mut ranges = Vec::new();
-            let mut search_from = 0;
-            while let Some(relative_start) = source[search_from..].find("generated_request(") {
-                let start = search_from + relative_start;
-                let open = start + "generated_request".len();
-                let mut depth = 0_u32;
-                let mut end = None;
-                for (offset, byte) in source.as_bytes()[open..].iter().enumerate() {
-                    match byte {
-                        b'(' => depth += 1,
-                        b')' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                end = Some(open + offset + 1);
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                let Some(end) = end else {
-                    panic!(
-                        "generated_request call in {} has unbalanced parentheses",
-                        path.display()
-                    );
-                };
-                ranges.push(start..end);
-                search_from = end;
-            }
-
-            for (index, _) in source.match_indices("self.generated") {
                 assert!(
-                    ranges.iter().any(|range| range.contains(&index)),
-                    "{} accesses a generated client outside generated_request near byte {index}",
+                    !source.contains("generated_request("),
+                    "{} bypasses GeneratedTransport::execute",
                     path.display()
                 );
+
+                let mut ranges = Vec::new();
+                let mut search_from = 0;
+                while let Some(relative_start) = source[search_from..].find(".execute(") {
+                    let start = search_from + relative_start;
+                    let open = start + ".execute".len();
+                    let mut depth = 0_u32;
+                    let mut end = None;
+                    for (offset, byte) in source.as_bytes()[open..].iter().enumerate() {
+                        match byte {
+                            b'(' => depth += 1,
+                            b')' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    end = Some(open + offset + 1);
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    let Some(end) = end else {
+                        panic!(
+                            "transport execute call in {} has unbalanced parentheses",
+                            path.display()
+                        );
+                    };
+                    if source[start..end].contains("|generated|") {
+                        assert!(
+                            source[start..end].contains(".send()"),
+                            "{} has a generated transport closure without send",
+                            path.display()
+                        );
+                        generated_calls += 1;
+                        ranges.push(start..end);
+                    }
+                    search_from = end;
+                }
+
+                for (index, _) in source.match_indices("|generated|") {
+                    assert!(
+                        ranges.iter().any(|range| range.contains(&index)),
+                        "{} accesses a generated client outside GeneratedTransport::execute near byte {index}",
+                        path.display()
+                    );
+                }
             }
         }
+        assert!(generated_calls > 0, "expected generated transport calls");
         Ok(())
     }
 

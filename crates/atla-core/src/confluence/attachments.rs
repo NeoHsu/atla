@@ -77,22 +77,23 @@ impl ConfluenceClient {
             let page_size = remaining.min(CONFLUENCE_LIST_PAGE_CAP as u64) as u32;
 
             let page_limit = limit_non_zero(page_size)?;
-            let raw = generated_request(reqwest::Method::GET, || {
-                let mut request = self
-                    .generated
-                    .get_page_attachments()
-                    .id(page_id)
-                    .limit(page_limit);
-                if let Some(filename) = &search.filename {
-                    request = request.filename(filename.clone());
-                }
-                if let Some(cursor) = &cursor {
-                    request = request.cursor(cursor.clone());
-                }
-                request.send()
-            })
-            .await?
-            .into_inner();
+            let raw = self
+                .transport
+                .execute(reqwest::Method::GET, |generated| async move {
+                    let mut request = generated
+                        .get_page_attachments()
+                        .id(page_id)
+                        .limit(page_limit);
+                    if let Some(filename) = &search.filename {
+                        request = request.filename(filename.clone());
+                    }
+                    if let Some(cursor) = &cursor {
+                        request = request.cursor(cursor.clone());
+                    }
+                    request.send().await
+                })
+                .await?
+                .into_inner();
 
             let received = raw.results.len();
             collected.extend(raw.results.into_iter().map(ConfluenceAttachment::from));
@@ -121,25 +122,28 @@ impl ConfluenceClient {
 
     pub async fn get_attachment(&self, id: &str) -> Result<ConfluenceAttachment, ApiError> {
         let id = id.strip_prefix("att").unwrap_or(id).to_owned();
-        generated_request(reqwest::Method::GET, || {
-            self.generated
-                .get_attachment_by_id()
-                .id(id.clone())
-                .include_version(true)
-                .send()
-        })
-        .await
-        .map(|response| ConfluenceAttachment::from(response.into_inner()))
+        self.transport
+            .execute(reqwest::Method::GET, |generated| async move {
+                generated
+                    .get_attachment_by_id()
+                    .id(id.clone())
+                    .include_version(true)
+                    .send()
+                    .await
+            })
+            .await
+            .map(|response| ConfluenceAttachment::from(response.into_inner()))
     }
 
     pub async fn delete_attachment(&self, id: &str, purge: bool) -> Result<(), ApiError> {
         let id = parse_i64_id(id)?;
-        generated_request(reqwest::Method::DELETE, || {
-            let request = self.generated.delete_attachment().id(id);
-            let request = if purge { request.purge(true) } else { request };
-            request.send()
-        })
-        .await?;
+        self.transport
+            .execute(reqwest::Method::DELETE, |generated| async move {
+                let request = generated.delete_attachment().id(id);
+                let request = if purge { request.purge(true) } else { request };
+                request.send().await
+            })
+            .await?;
         Ok(())
     }
 
