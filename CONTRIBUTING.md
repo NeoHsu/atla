@@ -50,6 +50,18 @@ Generated API code is built into `OUT_DIR`; do not commit it. For ordinary
 CLI/core iteration, `scripts/check-fast.sh` reuses an opt-in Cargo target cache
 across worktrees; full PR validation still uses the workspace commands above.
 
+## Code architecture
+
+- `operation/registry.rs` declares typed `OperationId` values, safety metadata, and saved-plan
+  route/query contracts together. Runtime command matching may reference those IDs but must not
+  introduce duplicate operation strings or plan allowlists.
+- One `Invocation` owns immutable global arguments and an invocation-local `OutputSession`.
+  Do not add process-global output, receipt, byte-budget, or plan-building state.
+- Product dispatchers stay small. Put substantial issue, sprint, page, or blog behavior in the
+  action-specific module below its dispatcher rather than adding another large match arm.
+- `atla-core` keeps generated clients behind `GeneratedTransport` and exposes hand-written domain
+  models to the CLI. Generated wire types must not leak into CLI command code.
+
 ## Pull requests
 
 Keep changes focused, explain user-visible behavior, and add tests for success and failure paths.
@@ -89,9 +101,10 @@ operation ID, exact local plan construction, route/method/query allowlisting, po
 hash/expiry/input/profile/site checks, ambiguity handling, and E2E coverage.
 
 Never add a retry for a non-idempotent mutation after an uncertain timeout/server response. Return
-`ambiguous_mutation` and require remote-state verification. Generated Jira/Confluence builders
-must run through `generated_api::generated_request(method, ...)`; direct `.send()` bypasses shared
-`Retry-After`, backoff, body-reading, and ambiguity policy.
+`ambiguous_mutation` and require remote-state verification. Generated Jira/Confluence clients
+must stay inside `GeneratedTransport`; execute builders only through `GeneratedTransport::execute`.
+The transport is the type-level boundary that applies shared `Retry-After`, backoff, body-reading,
+and ambiguity policy.
 
 ## API specifications
 

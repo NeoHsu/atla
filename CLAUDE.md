@@ -112,10 +112,10 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 
 ## Critical implementation invariants
 
-- Every generated-client call must flow through `generated_api::generated_request(method, ...)`.
-  It reads final error bodies, honors `Retry-After`/backoff, retries only safe methods except an
-  explicit 429 rejection, and leaves uncertain mutations non-retryable. The source contract test
-  recursively discovers Jira/Confluence modules; never call a generated builder's `.send()`
-  outside the wrapper or map errors with the sync fallback.
+- Generated Jira/Confluence clients must be owned by `generated_api::GeneratedTransport`; every
+  builder executes through `GeneratedTransport::execute(method, ...)`. The transport keeps clients
+  inaccessible outside its closure, reads final error bodies, honors `Retry-After`/backoff, retries
+  only safe methods except an explicit 429 rejection, and leaves uncertain mutations non-retryable.
+  Keep the recursive source contract test and never map final errors with the sync fallback.
 - Shared Basic-auth client construction lives in `AtlassianClient::authed_http_client()`;
   don't hand-roll header setup in Jira/Confluence client constructors.

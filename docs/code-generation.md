@@ -257,24 +257,29 @@ Tracks integrity and provenance for each spec:
 
 progenitor generates a `Client` struct with builder-pattern methods. Core constructs it with the
 shared `AtlassianClient::authed_http_client()` so credentials, timeouts, redirect protection, and
-retry ownership stay centralized. Every generated call must then use the shared wrapper:
+retry ownership stay centralized. The generated client is immediately sealed inside
+`GeneratedTransport`; domain adapters can execute a request but cannot retrieve the client:
 
 ```rust
 let client = atla_jira_api::Client::new_with_client(
     &base_url,
     raw_client.authed_http_client(),
 );
-let result = generated_request(reqwest::Method::POST, || {
-    client.create_issue().body(body.clone()).send()
-})
-.await?;
+let transport = GeneratedTransport::new(client);
+let result = transport
+    .execute(reqwest::Method::POST, move |generated| {
+        let body = body.clone();
+        async move { generated.create_issue().body(body).send().await }
+    })
+    .await?;
 let issue = result.into_inner();
 ```
 
-Do not call a generated builder's `.send()` directly. `generated_request` applies bounded,
-method-aware retry with exponential backoff and `Retry-After`, reads final API error bodies, retries
-an explicit 429 rejection for any method, and otherwise never repeats a non-idempotent mutation.
-Progenitor itself has no auth fields; Basic auth remains in the shared reqwest client.
+Do not expose the generated client or call a builder outside `GeneratedTransport::execute`. The
+transport applies bounded, method-aware retry with exponential backoff and `Retry-After`, reads
+final API error bodies, retries an explicit 429 rejection for any method, and otherwise never
+repeats a non-idempotent mutation. Progenitor itself has no auth fields; Basic auth remains in the
+shared reqwest client.
 
 ---
 

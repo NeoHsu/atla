@@ -7,6 +7,12 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Consolidated typed operation and saved-plan contracts, made output state invocation-local, split
+  large product handlers into action modules, and sealed generated API clients behind the shared
+  retry transport without changing the CLI or JSON contracts.
+
 ## [0.6.1] - 2026-07-31
 
 ### Added
