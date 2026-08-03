@@ -45,6 +45,7 @@ examples in these documents are checked against the real clap definition during 
 
 | Guide | What it covers |
 | --- | --- |
+| [Architecture](architecture.md) | Workspace boundaries, source-of-truth contracts, tests, and quality gates |
 | [Contributing](../CONTRIBUTING.md) | Development checks, CLI contracts, and the PR process |
 | [Security Policy](../SECURITY.md) | Supported versions and vulnerability reporting |
 | [Changelog](../CHANGELOG.md) | User-visible changes by release |

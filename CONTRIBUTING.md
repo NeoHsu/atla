@@ -8,9 +8,9 @@ behavior and machine-readable contracts are part of the public API.
 Install Rust 1.91 or newer. The portable Rust baseline is:
 
 ```bash
-cargo test --workspace
+cargo test --workspace --locked
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets \
+cargo clippy --workspace --all-targets --locked \
   --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
 cargo audit
 cargo deny check
@@ -36,14 +36,17 @@ convenience tasks:
 | `mise run tooling:test` | Python maintenance-tool tests |
 | `mise run skill:version` | Exact CLI/skill/Cargo/docs release-version lockstep |
 | `mise run security:secrets` | Scan committed and uncommitted source files for secrets |
+| `mise run workflow:check` | Validate workflow syntax, immutable Action pins, and release gates |
+| `mise run workflow:security` | Audit GitHub Actions workflows with zizmor |
 | `mise run deny`, `mise run audit`, or `mise run security` | Dependency policy, RustSec, and combined security checks |
 | `mise run coverage` | LCOV generation and the current coverage floor |
-| `mise run check:pr` | Sequential local PR gate: secret scan, lint, tests, tooling, MSRV, deny, and audit |
+| `mise run check:pr` | Sequential local PR gate: secret scan, lint, tests, tooling, MSRV, deny, audit, and workflow security |
 
 After reviewing the tracked `mise.toml`, run `mise trust && mise install` once to provision the
 project toolchain. The config pins Node.js for partial-spec filters, Python for maintenance tools,
-gitleaks for secret scanning, Cargo dependency/size analysis, and the Cargo security, coverage,
-cache, and test tools to versions matching CI where applicable. `.gitleaks.toml` carries the
+actionlint and zizmor for workflow checks, gitleaks for secret scanning, Cargo dependency/size
+analysis, and the Cargo security, coverage, cache, and test tools to versions matching CI where
+applicable. `.gitleaks.toml` carries the
 repository-specific false-positive policy. `deny.toml` rejects unknown registries, Git dependencies,
 wildcard dependency versions, unknown licenses, advisories, and yanked crates. Duplicate transitive
 versions remain warnings so upgrades can remove them incrementally; do not suppress one without a
@@ -56,6 +59,10 @@ are emitted outside the source tree. For ordinary CLI/core iteration, `scripts/c
 reuses an opt-in Cargo target cache across worktrees; full PR validation still uses the workspace
 commands above. Use `mise run size:bloat` periodically or before a release to inspect the `dist`
 profile; it is a diagnostic report, not yet a fixed size budget.
+
+Workflow syntax, immutable Action pins, and workflow security are also checked locally with
+`mise run workflow:check` and `mise run workflow:security`; CI runs the same checks in a dedicated
+job. Cargo validation uses `--locked` so local and CI dependency resolution cannot drift.
 
 `clippy::too_many_lines` is intentionally not part of the blocking Clippy policy. Its default
 threshold flags existing orchestration, formatting, test, and generated functions; without a
@@ -72,6 +79,8 @@ cognitive-complexity findings when deciding whether a function should be split.
   Do not add process-global output, receipt, byte-budget, or plan-building state.
 - Product dispatchers stay small. Put substantial issue, sprint, page, or blog behavior in the
   action-specific module below its dispatcher rather than adding another large match arm.
+- Integration tests are grouped by contract responsibility under `tests/e2e/`; keep the root test
+  file as a module index and put shared process/mock-server helpers in `support.rs`.
 - `atla-core` keeps generated clients behind `GeneratedTransport` and exposes hand-written domain
   models to the CLI. Generated wire types must not leak into CLI command code.
 
@@ -81,9 +90,9 @@ Keep changes focused, explain user-visible behavior, and add tests for success a
 Fill every applicable section of `.github/pull_request_template.md`; explain why any contract or
 security checklist item is not applicable. Before opening a PR:
 
-1. run the gitleaks scan, fmt, Clippy, `cargo machete`, workspace tests, RustSec audit, and
-   `cargo deny check`;
-2. run `cargo +1.91 check --workspace` for changes affecting dependencies/language features;
+1. run the gitleaks scan, fmt, Clippy, `cargo machete`, workspace tests, RustSec audit,
+   `cargo deny check`, workflow syntax, and workflow-security checks;
+2. run `cargo +1.91 check --workspace --all-targets --locked` for changes affecting dependencies/language features;
 3. update `CHANGELOG.md` under Unreleased;
 4. update every affected document and the agent skill;
 5. avoid committing credentials, tenant data, generated SBOMs, or build artifacts.
@@ -96,11 +105,11 @@ Any command/flag change under `crates/atla-cli/src/cli/` must follow this order:
 2. regenerate `docs/cli-surface.txt`:
 
    ```bash
-   UPDATE_CLI_SURFACE=1 cargo test -p atla cli_surface
+   UPDATE_CLI_SURFACE=1 cargo test --locked -p atla cli_surface
    ```
 
 3. update `docs/agent-reference.md`, topic docs, `skills/atla-cli/SKILL.md`, and references;
-4. run `cargo test -p atla doc_examples_parse`.
+4. run `cargo test --locked -p atla doc_examples_parse`.
 
 Runnable examples use concrete values. Angle-bracket placeholders belong only in syntax summaries.
 
@@ -126,8 +135,8 @@ Refresh with:
 
 ```bash
 scripts/update-specs.sh
-cargo check --workspace
-cargo test --workspace
+cargo check --workspace --locked
+cargo test --workspace --locked
 ```
 
 Review `specs/PATCHES.md`, operation pruning, manifest hashes/timestamp, and

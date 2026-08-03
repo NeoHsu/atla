@@ -15,17 +15,18 @@ product features here, not niceties.
 ## Build / test
 
 ```bash
-cargo test --workspace
+cargo test --workspace --locked
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets \
+cargo clippy --workspace --all-targets --locked \
   --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
 ```
 
 CI (`.github/workflows/ci.yml`) enforces equivalent workspace tests with `cargo-nextest` plus a
 separate doctest run, along with formatting, Clippy, secret scanning, and a RustSec dependency
-audit. The CLI package is `atla`, not `atla-cli`: `cargo test -p atla`. For local orchestration, use
-`mise run check:fast` during the inner loop and `mise run check:pr` before pushing; `mise tasks`
-lists focused test, contract, security, and coverage tasks. The explicit Cargo commands above
+audit, workflow syntax/pin checks, and zizmor security analysis. The CLI package is `atla`, not
+`atla-cli`: `cargo test --locked -p atla`. For local orchestration, use `mise run check:fast` during
+the inner loop and `mise run check:pr` before pushing; `mise tasks` lists focused test, contract,
+security, and coverage tasks. The explicit Cargo commands above
 remain the portable baseline.
 
 ## Changing the CLI surface (checklist)
@@ -34,7 +35,7 @@ Any change to commands/flags under `crates/atla-cli/src/cli/` MUST be propagated
 order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
 
 1. Implement the change (`cli/` + `commands/`).
-2. Regenerate the surface snapshot: `UPDATE_CLI_SURFACE=1 cargo test -p atla cli_surface`
+2. Regenerate the surface snapshot: `UPDATE_CLI_SURFACE=1 cargo test --locked -p atla cli_surface`
    (updates `docs/cli-surface.txt`; the test fails until you do this).
 3. Update every doc that mentions the command — all `atla` examples in these files are
    parse-checked against the real clap definition by the `doc_examples_parse` test:
@@ -80,7 +81,8 @@ order. `crates/atla-cli/src/doc_check.rs` enforces steps 2–3 in `cargo test`:
   injection-safe, and cargo-cyclonedx 0.5.9 emits a binary-only CycloneDX 1.5 SBOM with hashes.
 - `allow-dirty = ["ci"]` in `dist-workspace.toml` is intentional. Do not replace release.yml with
   raw `dist generate` output. If regenerating, reapply the hardening and the release-tag skill
-  version gate, verify with pi-lens, then run `dist plan` and artifact smoke tests.
+  version gate, verify with `mise run workflow:check` and `mise run workflow:security`, then run
+  `dist plan` and artifact smoke tests.
 
 ## Agent-facing contracts (do not break)
 

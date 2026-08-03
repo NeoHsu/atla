@@ -14,6 +14,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -36,8 +37,8 @@ jobs:
       - name: Verify generated clients and contracts
         run: |
           cargo fmt --all -- --check
-          cargo check --workspace
-          cargo test --workspace
+          cargo check --workspace --locked
+          cargo test --workspace --locked
       - name: Summarize partial-spec changes
         run: |
           python3 scripts/spec-diff-summary.py \

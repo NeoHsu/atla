@@ -1,9 +1,11 @@
 [tools]
+actionlint = "1.7.12"
 node = "24"
 python = "3.12.13"
 rust = "stable"
 gitleaks = "8.30.1"
 sccache = "0.17.0"
+zizmor = "1.29.0"
 "cargo:cargo-audit" = "0.22.1"
 "cargo:cargo-bloat" = "0.12.1"
 "cargo:cargo-deny" = "0.20.2"
@@ -14,7 +16,7 @@ sccache = "0.17.0"
 [tasks."check:fast"]
 description = "Run the fast atla package check with the shared worktree cache"
 run = "scripts/check-fast.sh"
-run_windows = "cargo check -p atla"
+run_windows = "cargo check --locked -p atla"
 
 [tasks.fmt]
 description = "Format all Rust sources"
@@ -32,41 +34,52 @@ run = "cargo bloat --profile dist --bin atla --crates --locked -n 30"
 description = "Check Rust formatting and run the CI Clippy policy"
 run = [
   "cargo fmt --all -- --check",
-  "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
+  "cargo clippy --workspace --all-targets --locked --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
 ]
 
 [tasks.test]
 description = "Run every workspace test"
-run = "cargo test --workspace"
+run = "cargo test --workspace --locked"
 
 [tasks."test:cli"]
 description = "Run CLI unit, contract, and integration tests"
-run = "cargo test -p atla"
+run = "cargo test --locked -p atla"
 
 [tasks."test:core"]
 description = "Run atla-core unit and integration tests"
-run = "cargo test -p atla-core"
+run = "cargo test --locked -p atla-core"
 
 [tasks."test:e2e"]
 description = "Run the CLI end-to-end test suite"
-run = "cargo test -p atla --test e2e"
+run = "cargo test --locked -p atla --test e2e"
 
 [tasks."test:nextest"]
 description = "Run workspace tests with cargo-nextest (parallel + better failure reporting)"
-run = "cargo nextest run --workspace --status-level all"
+run = [
+  "cargo nextest run --workspace --locked --status-level all",
+  "cargo test --doc --workspace --locked",
+]
 
 [tasks."contract:check"]
 description = "Check CLI, documentation, schema, and operation-catalog contracts"
 run = [
   "python scripts/check-skill-version.py",
-  "cargo test -p atla doc_check",
-  "cargo test -p atla operation::tests::catalog_covers_every_cli_leaf_and_safety_marker",
+  "cargo test --locked -p atla doc_check",
+  "cargo test --locked -p atla operation::tests::catalog_covers_every_cli_leaf_and_safety_marker",
 ]
+
+[tasks."workflow:check"]
+description = "Validate GitHub workflow syntax, Action pins, and release gates"
+run = "scripts/check-workflows.sh"
 
 [tasks."contract:update"]
 description = "Regenerate the checked-in CLI surface snapshot"
 env = { UPDATE_CLI_SURFACE = "1" }
-run = "cargo test -p atla cli_surface"
+run = "cargo test --locked -p atla cli_surface"
+
+[tasks."workflow:security"]
+description = "Audit GitHub Actions workflows with zizmor"
+run = "zizmor --persona pedantic --min-severity medium --min-confidence medium ."
 
 [tasks."tooling:test"]
 description = "Run repository Python tooling tests"
@@ -82,7 +95,7 @@ run = "python scripts/check-skill-version.py"
 
 [tasks.msrv]
 description = "Check the workspace with the minimum supported Rust version"
-run = "cargo +1.91 check --workspace"
+run = "cargo +1.91 check --workspace --all-targets --locked"
 
 [tasks.deny]
 description = "Check dependency licenses, sources, bans, and advisories"
@@ -103,7 +116,7 @@ run = ["gitleaks dir --redact --no-banner .", "cargo deny check", "cargo audit"]
 [tasks.coverage]
 description = "Generate LCOV and enforce the 53 percent line-coverage floor"
 run = [
-  "cargo llvm-cov --workspace --lcov --output-path target/lcov.info",
+  "cargo llvm-cov --workspace --locked --lcov --output-path target/lcov.info",
   "cargo llvm-cov report --summary-only --fail-under-lines 53",
 ]
 
@@ -115,11 +128,13 @@ run = [
   "gitleaks dir --redact --no-banner .",
   "python scripts/check-skill-version.py",
   "cargo fmt --all -- --check",
-  "cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
-  "cargo nextest run --workspace --status-level all",
-  "cargo test --doc -p atla-core -p atla-jira-api",
+  "cargo clippy --workspace --all-targets --locked --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings",
+  "cargo nextest run --workspace --locked --status-level all",
+  "cargo test --doc --locked -p atla-core -p atla-jira-api",
   "python -m unittest discover -s scripts/tests -p \"test_*.py\"",
-  "cargo +1.91 check --workspace",
+  "cargo +1.91 check --workspace --all-targets --locked",
   "cargo deny check",
   "cargo audit",
+  "scripts/check-workflows.sh",
+  "zizmor --persona pedantic --min-severity medium --min-confidence medium .",
 ]

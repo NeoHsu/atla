@@ -47,6 +47,7 @@ jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
     runs-on: "ubuntu-22.04"
+    timeout-minutes: 60
     permissions:
       "contents": "read"
     outputs:
@@ -131,6 +132,7 @@ jobs:
       # - N "local" tasks that build each platform's binaries and platform-specific installers
       matrix: ${{ fromJson(needs.plan.outputs.val).ci.github.artifacts_matrix }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     # cargo-dist owns this generated matrix; release tags run only from trusted repository refs.
     container: ${{ matrix.container && matrix.container.image || null }} # zizmor: ignore[unpinned-images]
     env:
@@ -219,6 +221,7 @@ jobs:
       - plan
       - build-local-artifacts
     runs-on: "ubuntu-22.04"
+    timeout-minutes: 30
     permissions:
       "attestations": "write"
       "contents": "read"
@@ -301,8 +304,8 @@ jobs:
             echo "target/distrib/atla-installer.ps1.sha256"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Verify archives, checksums, and SBOM
-        run: python3 scripts/verify-release-artifacts.py
+      - name: Verify archives, checksums, SBOM, and native binary smoke
+        run: python3 scripts/verify-release-artifacts.py --execute-native
       - name: Attest global artifacts
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
@@ -329,6 +332,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DIST_TAG_FLAG: ${{ needs.plan.outputs.tag-flag }}
     runs-on: "ubuntu-22.04"
+    timeout-minutes: 30
     outputs:
       val: ${{ steps.host.outputs.manifest }}
     steps:

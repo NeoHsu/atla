@@ -31,6 +31,8 @@ EXPECTED_TASKS = {
     "test:e2e",
     "test:nextest",
     "tooling:test",
+    "workflow:check",
+    "workflow:security",
 }
 
 
@@ -57,6 +59,7 @@ class MiseTaskTests(unittest.TestCase):
         self.assertIn(f"cargo-deny@{tools['cargo:cargo-deny']}", workflow)
         self.assertIn(f"cargo-llvm-cov@{tools['cargo:cargo-llvm-cov']}", workflow)
         self.assertIn(f"cargo-nextest@{tools['cargo:cargo-nextest']}", workflow)
+        self.assertIn("github.com/rhysd/actionlint/cmd/actionlint@v1.7.12", workflow)
         self.assertIn(f'GITLEAKS_VERSION: "{tools["gitleaks"]}"', workflow)
         self.assertIn('CARGO_INCREMENTAL: "0"', workflow)
         self.assertIn("RUSTC_WRAPPER: sccache", workflow)
@@ -80,21 +83,44 @@ class MiseTaskTests(unittest.TestCase):
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
         msrv_job = workflow.split("\n  coverage:", 1)[0].split("\n  msrv:", 1)[1]
         self.assertIn("toolchain: 1.91.0", msrv_job)
-        self.assertIn("cargo check --workspace", msrv_job)
+        self.assertIn("cargo check --workspace --all-targets --locked", msrv_job)
+
+    def test_ci_cancels_obsolete_runs_and_bounds_jobs(self) -> None:
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("concurrency:", workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
+        self.assertIn("workflow-security:", workflow)
+        self.assertGreaterEqual(workflow.count("timeout-minutes:"), 5)
+
+    def test_release_runs_native_artifact_smoke(self) -> None:
+        workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(
+            "python3 scripts/verify-release-artifacts.py --execute-native", workflow
+        )
 
     def test_pr_gate_keeps_security_and_msrv_checks(self) -> None:
         commands = self.config["tasks"]["check:pr"]["run"]
         for command in (
             "gitleaks dir --redact --no-banner .",
             "python scripts/check-skill-version.py",
-            "cargo +1.91 check --workspace",
-            "cargo nextest run --workspace --status-level all",
-            "cargo test --doc -p atla-core -p atla-jira-api",
+            "cargo +1.91 check --workspace --all-targets --locked",
+            "cargo nextest run --workspace --locked --status-level all",
+            "cargo test --doc --locked -p atla-core -p atla-jira-api",
             "cargo audit",
             "cargo deny check",
+            "scripts/check-workflows.sh",
+            "zizmor --persona pedantic --min-severity medium --min-confidence medium .",
             'python -m unittest discover -s scripts/tests -p "test_*.py"',
         ):
             self.assertIn(command, commands)
+
+    def test_workflow_security_tasks_use_pinned_tools(self) -> None:
+        tools = self.config["tools"]
+        workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn(f'github.com/rhysd/actionlint/cmd/actionlint@v{tools["actionlint"]}', workflow)
+        self.assertIn(f"version: {tools['zizmor']}", workflow)
+        self.assertIn("zizmorcore/zizmor-action@", workflow)
+        self.assertTrue((ROOT / "scripts/check-workflows.sh").stat().st_mode & 0o111)
 
     def test_secret_scan_is_part_of_local_and_ci_security_gates(self) -> None:
         command = "gitleaks dir --redact --no-banner ."

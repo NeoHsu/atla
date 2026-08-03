@@ -18,4 +18,4 @@ fi
 
 mkdir -p "${CARGO_TARGET_DIR}"
 cd "${repo_root}"
-exec cargo check -p atla "$@"
+exec cargo check --locked -p atla "$@"

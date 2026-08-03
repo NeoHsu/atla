@@ -7,9 +7,14 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       checks: write
       contents: read
@@ -72,12 +77,40 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
-      - run: cargo nextest run --workspace --status-level all
-      - run: cargo test --doc -p atla-core -p atla-jira-api
+      - run: cargo clippy --workspace --all-targets --locked --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings
+      - run: cargo nextest run --workspace --locked --status-level all
+      - run: cargo test --doc --locked -p atla-core -p atla-jira-api
+
+  workflow-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25.0"
+          cache: false
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Validate workflow contracts
+        run: scripts/check-workflows.sh
+      - name: Audit GitHub Actions workflows
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          version: 1.29.0
+          persona: pedantic
+          min-severity: medium
+          min-confidence: medium
+          advanced-security: false
+          annotations: true
 
   msrv:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -88,10 +121,11 @@ jobs:
         with:
           toolchain: 1.91.0
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
-      - run: cargo check --workspace
+      - run: cargo check --workspace --all-targets --locked
 
   coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
@@ -105,7 +139,7 @@ jobs:
         with:
           tool: cargo-llvm-cov@0.8.7
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
-      - run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - run: cargo llvm-cov --workspace --locked --lcov --output-path lcov.info
       - run: cargo llvm-cov report --summary-only --fail-under-lines 53
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -115,6 +149,7 @@ jobs:
   cross-platform:
     name: cross-platform (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
     permissions:
       contents: read
     strategy:
@@ -127,6 +162,6 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
-      - run: cargo check --workspace
-      - run: cargo test -p atla-core secure_file::tests
-      - run: cargo test -p atla --test e2e
+      - run: cargo check --workspace --locked
+      - run: cargo test --locked -p atla-core secure_file::tests
+      - run: cargo test --locked -p atla --test e2e

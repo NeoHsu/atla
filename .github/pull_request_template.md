@@ -9,12 +9,14 @@
 ## Validation
 
 - [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --workspace --all-targets --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings`
+- [ ] `cargo clippy --workspace --all-targets --locked --exclude atla-jira-api --exclude atla-confluence-api --exclude atla-confluence-v1-api -- -D warnings`
 - [ ] `cargo machete`
-- [ ] `cargo test --workspace`
-- [ ] `cargo +1.91.0 check --workspace` when dependencies or language features change
+- [ ] `cargo test --workspace --locked`
+- [ ] `cargo +1.91 check --workspace --all-targets --locked` when dependencies or language features change
 - [ ] `cargo audit`
 - [ ] `cargo deny check`
+- [ ] `scripts/check-workflows.sh`
+- [ ] `zizmor --persona pedantic --min-severity medium --min-confidence medium .`
 
 ## Public contract review
 
