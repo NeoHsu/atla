@@ -12,7 +12,7 @@ doctest = false
 progenitor = "0.14"
 serde_json = "1"
 openapiv3 = "2"
-syn = { version = "2", features = ["full"] }
+syn = { version = "3", features = ["full"] }
 prettyplease = "0.3"
 
 [dependencies]
