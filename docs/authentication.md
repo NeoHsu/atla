@@ -279,7 +279,7 @@ atla doctor --network --timeout 10 --output json
 The bundled skill checks exact compatibility before auth or network access:
 
 ```bash
-atla doctor --skill-version 0.6.1 --output json
+atla doctor --skill-version 0.7.0 --output json
 ```
 
 When versions differ, stdout contains `skillCompatibility` with the installed versions,

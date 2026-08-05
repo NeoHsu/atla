@@ -42,13 +42,13 @@ and tag-pinned installation docs must carry the same SemVer. CI verifies this co
 Before any auth, credential, network, or Atlassian operation, the skill runs:
 
 ```bash
-atla doctor --skill-version 0.6.1 --output json
+atla doctor --skill-version 0.7.0 --output json
 ```
 
 A mismatch exits with code `2` and `kind=version_mismatch`, returns a tagged `updateCommand`, and
 performs no additional checks. The agent shows that command and waits for user approval; neither
 the skill nor CLI updates local agent configuration automatically. Published installation commands
-use `https://github.com/NeoHsu/atla/tree/v0.6.1`, never an unversioned default branch.
+use `https://github.com/NeoHsu/atla/tree/v0.7.0`, never an unversioned default branch.
 
 See [JSON Contracts](json-schemas.md), [Config Migration](migration-v1.md), and
 [Authentication ADR](adr/0001-auth-and-endpoint-model.md).

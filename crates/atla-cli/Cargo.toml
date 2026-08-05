@@ -1,6 +1,6 @@
 [package]
 name = "atla"
-version = "0.6.1"
+version = "0.7.0"
 description = "Unified Atlassian CLI for Jira and Confluence"
 edition.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-atla-core = { path = "../atla-core", version = "0.6.1" }
+atla-core = { path = "../atla-core", version = "0.7.0" }
 base64.workspace = true
 chrono.workspace = true
 clap.workspace = true

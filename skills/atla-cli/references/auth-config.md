@@ -56,7 +56,7 @@ target/cloud ID, policy mode, and token availability/source.
 ### Diagnostics and local discovery
 
 ```bash
-atla doctor --skill-version 0.6.1 --output json
+atla doctor --skill-version 0.7.0 --output json
 atla doctor --output json
 atla doctor --network --timeout 10 --output json
 atla --profile agent explain-policy jira.issue.create --output json

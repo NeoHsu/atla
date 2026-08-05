@@ -8,7 +8,7 @@ description: >
   Jira ticket”, “check my sprint”, “publish this Confluence page”, 「開一張 Jira 票」、
   「建立工單」、「查 sprint」、「更新 Confluence 頁面」、「找我負責的 issue」、
   「搜尋 Confluence」或「上傳附件到頁面」, because `atla` is the installed execution tool.
-compatibility: Requires atla CLI 0.6.1 exactly
+compatibility: Requires atla CLI 0.7.0 exactly
 ---
 
 # atla CLI
@@ -22,19 +22,19 @@ Run these gates before copying a command from the examples below.
 
 ### 0. Verify CLI/skill compatibility
 
-This skill release targets exactly `atla 0.6.1`, as recorded in `compatibility.json`. Before auth,
+This skill release targets exactly `atla 0.7.0`, as recorded in `compatibility.json`. Before auth,
 credentials, network access, or any Atlassian operation, run:
 
 ```bash
-atla doctor --skill-version 0.6.1 --output json
+atla doctor --skill-version 0.7.0 --output json
 ```
 
 Proceed only when `skillCompatibility.compatible` is `true`. If it reports `false`, stop without
 running another `atla` command. Show the user the installed CLI and skill versions plus
 `recommendedAction` and `updateCommand`; ask for approval before running that command, never update
 automatically. If this older CLI does not recognize the gate, run only `atla --version`, report that
-this skill requires `0.6.1`, and offer
-`cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.6.1 atla` with the same
+this skill requires `0.7.0`, and offer
+`cargo install --locked --git https://github.com/NeoHsu/atla --tag v0.7.0 atla` with the same
 approval requirement. After an approved update, rerun the gate. A mismatch intentionally exits
 with code `2` and `kind=version_mismatch`, without reading config, credentials, or contacting
 Atlassian.

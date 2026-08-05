@@ -403,14 +403,14 @@ mod tests {
                 .is_some_and(|command| command.contains(&expected_skill_tag))
         );
 
-        let newer = build_skill_compatibility(&Version::new(0, 7, 0));
+        let newer = build_skill_compatibility(&Version::new(0, 8, 0));
         assert!(!newer.compatible);
         assert_eq!(newer.recommended_action, "update-cli");
         assert!(
             newer
                 .update_command
                 .as_deref()
-                .is_some_and(|command| command.contains("--tag v0.7.0"))
+                .is_some_and(|command| command.contains("--tag v0.8.0"))
         );
         Ok(())
     }
