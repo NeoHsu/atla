@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--tag",
-        help="release tag to verify in addition to checked-in versions (for example v0.7.0)",
+        help="release tag to verify in addition to checked-in versions (for example v0.8.0)",
     )
     return parser.parse_args()
 

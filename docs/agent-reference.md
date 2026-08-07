@@ -19,15 +19,15 @@ profile then routes Jira and Confluence through their product-specific
 
 The repo contains an installable AI-agent skill at `skills/atla-cli`.
 
-Install the skill tag that exactly matches `atla 0.7.0`:
+Install the skill tag that exactly matches `atla 0.8.0`:
 
 ```bash
-npx skills add https://github.com/NeoHsu/atla/tree/v0.7.0 --skill atla-cli
+npx skills add https://github.com/NeoHsu/atla/tree/v0.8.0 --skill atla-cli
 ```
 
 Released CLI/skill versions are exact lockstep. Never install a released skill from an unversioned
 default branch; after a CLI upgrade, reinstall from the matching tag. Every skill execution begins
-with `atla doctor --skill-version 0.7.0 --output json` and stops before config, credentials, or
+with `atla doctor --skill-version 0.8.0 --output json` and stops before config, credentials, or
 network access when versions differ.
 
 From a local checkout of this repo:
@@ -256,7 +256,7 @@ endpoint and never prints a token.
 
 | Command | Args | Flags | Description | Example |
 | --- | --- | --- | --- | --- |
-| `doctor` | none | `--network`, `--skill-version` | Report local configuration and optionally verify exact CLI/skill compatibility or tenant discovery. | `atla doctor --skill-version 0.7.0 --output json` |
+| `doctor` | none | `--network`, `--skill-version` | Report local configuration and optionally verify exact CLI/skill compatibility or tenant discovery. | `atla doctor --skill-version 0.8.0 --output json` |
 | `explain-policy` | `<OPERATION_ID>` | none | Show the matching deny/allow rule or mode and global read-only result. | `atla --profile agent explain-policy jira.issue.create --output json` |
 | `operation list` | none | none | List the complete stable operation registry and safety metadata. | `atla operation list --output json` |
 | `schema list` | none | none | List every bundled public JSON schema. | `atla schema list --output json` |

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "skillVersion": "0.7.0",
-  "cliVersion": "0.7.0",
+  "skillVersion": "0.8.0",
+  "cliVersion": "0.8.0",
   "compatibility": "exact",
-  "releaseTag": "v0.7.0"
+  "releaseTag": "v0.8.0"
 }
