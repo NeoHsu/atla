@@ -16,7 +16,7 @@ atla jira issue
 atla jira issue list --all --assignee --fields --jql --limit --page-token --project --status --type
 atla jira issue create --description --description-file --field --labels --project --summary --type
 atla jira issue update <KEY> --description --description-file --field --labels --summary  (aliases: edit)
-atla jira issue view <KEY> --fields --web --with-github
+atla jira issue view <KEY> --fields --full-comments --web --with-github
 atla jira issue delete <KEY> --delete-subtasks --yes
 atla jira issue assign <KEY> --account-id --to --unassign
 atla jira issue transition <KEY> --field --to

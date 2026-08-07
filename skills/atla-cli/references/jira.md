@@ -107,11 +107,12 @@ atla jira issue update PROJ-123 --labels add:urgent,remove:triage
 
 ### View an issue
 
-```
-atla jira issue view <KEY> [--web] [--fields FIELDS] [--with-github]
+```bash
+atla jira issue view <KEY> [--web] [--fields FIELDS] [--full-comments] [--with-github]
 ```
 
-`--web` opens it in the browser. `--fields '*all'` fetches every field.
+`--web` opens it in the browser. `--fields '*all'` fetches every field. In table output,
+comments are limited to five lines by default; `--full-comments` prints complete comment bodies.
 `--with-github` adds development-panel pull requests and commits. JSON uses one combined object,
 CSV uses one `record_type` header, and keys remain one identifier per line.
 

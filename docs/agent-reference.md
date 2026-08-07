@@ -78,7 +78,7 @@ back to the repo checkout.
 - `atla jira issue create` — create an issue.
 - `atla jira issue update <KEY>` — update summary, description, fields, or labels.
 - `atla jira issue edit <KEY>` — alias for `issue update`.
-- `atla jira issue view <KEY>` — show an issue or open it in the browser.
+- `atla jira issue view <KEY>` — show an issue or open it in the browser; `--full-comments` prints complete table comments.
 - `atla jira issue delete <KEY>` — delete an issue.
 - `atla jira issue assign <KEY>` — assign, reassign, or unassign an issue.
 - `atla jira issue transition <KEY>` — list/select/apply workflow transitions.
@@ -280,7 +280,7 @@ mismatch is the exception: it exits `2` with `kind=version_mismatch`, emits stru
 | `jira issue create` | none | `--project`, `--type`, `--summary`, `--description`, `--description-file`, `--field`, `--labels` | Create an issue. | `atla jira issue create --project PROJ --type Task --summary 'Fix login'` |
 | `jira issue update` | `<KEY>` | `--summary`, `--description`, `--description-file`, `--field`, `--labels` | Update an issue. Alias: `edit`. | `atla jira issue update PROJ-123 --labels add:urgent` |
 | `jira issue fields` | none | `--project`, `--type`, `--required-only` | List create-meta fields (ID, type, allowed values) for `issue create`. | `atla jira issue fields --project PROJ --type Bug --required-only` |
-| `jira issue view` | `<KEY>` | `--web`, `--fields`, `--with-github` | Show issue details or open in browser. | `atla jira issue view PROJ-123 --fields summary,status` |
+| `jira issue view` | `<KEY>` | `--web`, `--fields`, `--full-comments`, `--with-github` | Show issue details or open in browser; table comments are limited to five lines unless `--full-comments` is used. | `atla jira issue view PROJ-123 --full-comments` |
 | `jira issue delete` | `<KEY>` | `--delete-subtasks`, `--yes` | Delete an issue. | `atla jira issue delete PROJ-123 --yes` |
 | `jira issue assign` | `<KEY>` | `--to`, `--account-id`, `--unassign` | Assign or clear assignee. | `atla jira issue assign PROJ-123 --to me` |
 | `jira issue transition` | `<KEY>` | `--to`, `--field` | Apply workflow transition; can prompt unless `--no-input`. | `atla jira issue transition PROJ-123 --to Done` |

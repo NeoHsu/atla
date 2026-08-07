@@ -233,6 +233,8 @@ examples in `references/confluence.md`.
 - Confluence footer-comment replies must identify the parent comment; do not reuse an unrelated
   page/blog comment ID.
 - Confluence `--purge` is a second delete after trashing and requires space-admin permission.
+- Jira issue table views show only the first five lines of each comment by default; pass
+  `--full-comments` to print complete comment bodies.
 - Jira transitions may prompt only when `--to` is omitted and both stdin/stdout are TTYs. Use
   `--no-input` for agents.
 - Treat `--page-token` and plan hashes as opaque. A plan digest detects modification but is not a

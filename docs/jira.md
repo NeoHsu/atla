@@ -178,7 +178,7 @@ atla jira issue update PROJ-123 --summary 'Add SSO support to admin login'   --l
 **Syntax**
 
 ```bash
-atla jira issue view <KEY> [--web] [--fields FIELDS] [--with-github]
+atla jira issue view <KEY> [--web] [--fields FIELDS] [--full-comments] [--with-github]
 ```
 
 **Examples**
@@ -187,11 +187,14 @@ atla jira issue view <KEY> [--web] [--fields FIELDS] [--with-github]
 atla jira issue view PROJ-123
 atla jira issue view PROJ-123 --web
 atla jira issue view PROJ-123 --with-github
+atla jira issue view PROJ-123 --full-comments
 ```
 
-`--with-github` fetches GitHub pull requests and commits linked via the development panel. JSON
-uses one combined object; CSV uses one `record_type` schema; keys remain one issue/PR/commit ID per
-line. See [GitHub Development Links](#github-development-links) for details.
+Table output normally shows only the first five lines of each comment. `--full-comments` prints the
+complete comment bodies. `--with-github` fetches GitHub pull requests and commits linked via the
+development panel. JSON uses one combined object; CSV uses one `record_type` schema; keys remain
+one issue/PR/commit ID per line. See [GitHub Development Links](#github-development-links) for
+details.
 
 ### Delete an issue
 
