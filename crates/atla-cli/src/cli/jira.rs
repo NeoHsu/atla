@@ -139,6 +139,9 @@ pub enum IssueAction {
         /// Comma-separated Jira fields to include, e.g. summary,status,assignee
         #[arg(long)]
         fields: Option<String>,
+        /// Show complete comment bodies in table output instead of the first five lines
+        #[arg(long)]
+        full_comments: bool,
         /// Also fetch GitHub pull requests and commits from the development panel
         #[arg(long)]
         with_github: bool,

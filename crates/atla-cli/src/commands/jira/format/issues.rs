@@ -498,7 +498,7 @@ pub(in crate::commands::jira) fn print_comments_with_footer(
 
 pub(in crate::commands::jira) fn print_issue_comments_section(
     page: &JiraCommentPage,
-    _global: &Invocation,
+    full_comments: bool,
 ) -> anyhow::Result<()> {
     let total = page.total.unwrap_or(page.comments.len() as u32);
     println!();
@@ -513,15 +513,21 @@ pub(in crate::commands::jira) fn print_issue_comments_section(
         let id = comment.id.as_deref().unwrap_or("-");
         println!("  [{id}] {author} — {created}");
         if let Some(body) = &comment.body_text {
-            for line in body.lines().take(5) {
+            for line in displayed_comment_lines(body, full_comments) {
                 println!("    {line}");
-            }
-            if body.lines().count() > 5 {
-                println!("    ...");
             }
         }
     }
     Ok(())
+}
+
+fn displayed_comment_lines(body: &str, full_comments: bool) -> Vec<String> {
+    let mut lines: Vec<String> = body.lines().map(str::to_owned).collect();
+    if !full_comments && lines.len() > 5 {
+        lines.truncate(5);
+        lines.push("...".to_owned());
+    }
+    lines
 }
 
 pub(in crate::commands::jira) fn print_comment(
@@ -726,4 +732,39 @@ pub(in crate::commands::jira) fn print_github_commits(
             .collect(),
         None,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::displayed_comment_lines;
+
+    #[test]
+    fn comment_preview_keeps_the_existing_five_line_limit() {
+        assert_eq!(
+            displayed_comment_lines("one\ntwo\nthree\nfour\nfive\nsix", false),
+            vec![
+                "one".to_owned(),
+                "two".to_owned(),
+                "three".to_owned(),
+                "four".to_owned(),
+                "five".to_owned(),
+                "...".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn full_comments_keeps_all_body_lines() {
+        assert_eq!(
+            displayed_comment_lines("one\ntwo\nthree\nfour\nfive\nsix", true),
+            vec![
+                "one".to_owned(),
+                "two".to_owned(),
+                "three".to_owned(),
+                "four".to_owned(),
+                "five".to_owned(),
+                "six".to_owned(),
+            ]
+        );
+    }
 }

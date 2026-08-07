@@ -186,6 +186,30 @@ fn jira_comment_add_accepts_attachment_options() {
 }
 
 #[test]
+fn jira_issue_view_accepts_full_comments_flag() {
+    let cli = Cli::try_parse_from([
+        "atla",
+        "jira",
+        "issue",
+        "view",
+        "PROJ-123",
+        "--full-comments",
+    ])
+    .expect("parse cli");
+
+    let Command::Jira(command) = cli.command else {
+        panic!("expected jira command");
+    };
+    let JiraResource::Issue(command) = command.resource else {
+        panic!("expected issue command");
+    };
+    let IssueAction::View { full_comments, .. } = command.action else {
+        panic!("expected issue view action");
+    };
+    assert!(full_comments);
+}
+
+#[test]
 fn page_comment_add_accepts_attachment_options() {
     let cli = Cli::try_parse_from([
         "atla",

@@ -5,6 +5,7 @@ pub(super) async fn run(action: IssueAction, global: &Invocation) -> anyhow::Res
         key,
         web,
         fields,
+        full_comments,
         with_github,
     } = action
     else {
@@ -94,7 +95,7 @@ pub(super) async fn run(action: IssueAction, global: &Invocation) -> anyhow::Res
             )
         })?;
         if !comment_page.comments.is_empty() {
-            print_issue_comments_section(&comment_page, global)?;
+            print_issue_comments_section(&comment_page, full_comments)?;
         }
     }
 
