@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-03T10:08:50.442416Z",
+  "generated_at": "2026-09-07T12:44:22.619690Z",
   "generator": {
     "tool": "progenitor",
     "version": "progenitor-0.14"
@@ -7,19 +7,19 @@
   "specs": {
     "jira": {
       "source_file": "specs/jira-v3-partial.json",
-      "source_sha256": "88271b26f8d41610e1e08113f1a1c8dc6fc2f0293aa6618a3f172363a180d41f",
+      "source_sha256": "65c36e08f32066295a53bf11108c1d748f35ccd680f93992c5b6c8f2645e5fc2",
       "upstream_source_file": "specs/jira-v3.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
-      "upstream_sha256": "90d1546f74f824416a43d9925cb3ede7313e7b04a0b06c9a5f6f972625cc0d0d",
+      "upstream_sha256": "713089acf94527c571cf0e8e7296e0ce6f886390e681c94a1f14c272881de6dd",
       "partial_spec_script": "scripts/jira-v3-partial-spec.js",
       "description": "Jira REST API v3 (partial, filtered to used endpoints)"
     },
     "confluence": {
       "source_file": "specs/confluence-v2-partial.json",
-      "source_sha256": "4e2fd3eb7d34af447cb7193ea111d41bab45d5aebcebf556939d99d2d02decf6",
+      "source_sha256": "275e559ed35cb1029ea7ad2ba78839884f390bce4f3f8fed68a56a2b42b50dc2",
       "upstream_source_file": "specs/confluence-v2.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json",
-      "upstream_sha256": "c4bd1ed570f21cd6dee2360d9cda0d5aa09933233491c8286d60cc4fa16c5df5",
+      "upstream_sha256": "451377c5a598ee8155acc11b611404f309bed4a4292ea87f88ed3bfed38fa0a8",
       "description": "Confluence REST API v2 (partial, filtered to used endpoints)",
       "partial_spec_script": "scripts/confluence-v2-partial-spec.js"
     },
