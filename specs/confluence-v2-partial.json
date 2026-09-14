@@ -2156,7 +2156,8 @@
               "type": "string",
               "enum": [
                 "current",
-                "archived"
+                "archived",
+                "trashed"
               ]
             }
           },
@@ -4821,7 +4822,8 @@
       "SpaceStatus": {
         "enum": [
           "current",
-          "archived"
+          "archived",
+          "trashed"
         ],
         "type": "string",
         "description": "The status of the space."
