@@ -11,7 +11,7 @@
     },
     "termsOfService": "https://developer.atlassian.com/platform/marketplace/atlassian-developer-terms/",
     "title": "The Jira Cloud platform REST API - Atla partial",
-    "version": "1001.0.0-SNAPSHOT-5de4cd1ec6c43e0dfabe1527f1798e32137e38ef"
+    "version": "1001.0.0-SNAPSHOT-cb5afcc2a0901f4ca3e6469acd6245b98aa5a2ca"
   },
   "servers": [
     {
@@ -1966,6 +1966,7 @@
               "read:attachment:jira": "View issue attachments.",
               "read:audit-log:jira": "View audit logs.",
               "read:avatar:jira": "View system and custom avatars.",
+              "read:bulk-job:jira": "View bulk jobs and their results.",
               "read:comment.property:jira": "View issue comment properties.",
               "read:comment:jira": "View issue comments.",
               "read:custom-field-contextual-configuration:jira": "Read custom field contextual configurations.",
@@ -2049,6 +2050,7 @@
               "write:app-data:jira": "Write app data.",
               "write:attachment:jira": "Create and update issue attachments.",
               "write:avatar:jira": "Create and update system and custom avatars.",
+              "write:bulk-job:jira": "Create and manage bulk jobs, including uploads, retries, and cancellation.",
               "write:comment.property:jira": "Create and update issue comment properties.",
               "write:comment:jira": "Create and update issue comments.",
               "write:custom-field-contextual-configuration:jira": "Save custom field contextual configurations.",
