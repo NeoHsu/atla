@@ -560,7 +560,7 @@ async fn confluence_delete_options_are_omitted_unless_enabled() {
         .await
         .expect("request recording should be enabled");
     assert_eq!(requests.len(), 6);
-    for pair in requests.chunks_exact(2) {
+    for pair in requests.as_chunks::<2>().0 {
         let first_query = pair[0]
             .url
             .query_pairs()
