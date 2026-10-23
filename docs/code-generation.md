@@ -97,12 +97,16 @@ Key points:
 
 ```toml
 [build-dependencies]
-progenitor = "0.14"
+progenitor = { version = "0.14", default-features = false }
 serde_json = "1"
 openapiv3 = "2"
-syn = { version = "2", features = ["full"] }
-prettyplease = "0.2"
+syn = { version = "3", features = ["full"] }
+prettyplease = "0.3"
 ```
+
+The build scripts call `Generator` directly and parse JSON with `serde_json`.
+Keep Progenitor's default macro feature disabled: it is unused here and brings in
+unmaintained YAML dependencies.
 
 ### Runtime dependencies
 
