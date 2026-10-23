@@ -109,11 +109,20 @@ impl AtlassianClient {
         let Some(max_pages) = self.max_pages else {
             return true;
         };
-        self.pages_fetched
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                (current < max_pages).then_some(current + 1)
-            })
-            .is_ok()
+        // Keep the bounded update compatible with the MSRV without deprecated APIs.
+        let mut current = self.pages_fetched.load(Ordering::Relaxed);
+        while current < max_pages {
+            match self.pages_fetched.compare_exchange_weak(
+                current,
+                current + 1,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => return true,
+                Err(observed) => current = observed,
+            }
+        }
+        false
     }
 
     pub(crate) fn effective_item_limit(&self, requested: u32) -> u32 {
@@ -471,6 +480,78 @@ pub async fn read_empty(request: reqwest::RequestBuilder) -> Result<(), ApiError
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn page_budget_allows_unlimited_pages() {
+        let client = AtlassianClient::new(
+            AtlassianInstance::new("https://example.atlassian.net"),
+            "neo@example.com",
+            "token",
+        );
+        for _ in 0..10 {
+            assert!(client.take_page());
+        }
+        assert_eq!(client.pages_fetched.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn page_budget_never_exceeds_limit() {
+        for max_pages in [0, 1, 3] {
+            let client = AtlassianClient::new(
+                AtlassianInstance::new("https://example.atlassian.net"),
+                "neo@example.com",
+                "token",
+            )
+            .with_execution_limits(Some(max_pages), None);
+            for _ in 0..max_pages {
+                assert!(client.take_page());
+            }
+            assert!(!client.take_page());
+            assert_eq!(client.pages_fetched.load(Ordering::Relaxed), max_pages);
+        }
+    }
+
+    #[test]
+    fn page_budget_handles_u32_max() {
+        let client = AtlassianClient::new(
+            AtlassianInstance::new("https://example.atlassian.net"),
+            "neo@example.com",
+            "token",
+        )
+        .with_execution_limits(Some(u32::MAX), None);
+        client.pages_fetched.store(u32::MAX - 1, Ordering::Relaxed);
+        assert!(client.take_page());
+        assert!(!client.take_page());
+        assert_eq!(client.pages_fetched.load(Ordering::Relaxed), u32::MAX);
+    }
+
+    #[test]
+    fn page_budget_is_shared_atomically_across_clones() {
+        let client = AtlassianClient::new(
+            AtlassianInstance::new("https://example.atlassian.net"),
+            "neo@example.com",
+            "token",
+        )
+        .with_execution_limits(Some(137), None);
+        let barrier = Arc::new(std::sync::Barrier::new(8));
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let client = client.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    (0..64).filter(|_| client.take_page()).count()
+                })
+            })
+            .collect();
+        let accepted: usize = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("page-budget worker should not panic"))
+            .sum();
+        assert_eq!(accepted, 137);
+        assert_eq!(client.pages_fetched.load(Ordering::Relaxed), 137);
+        assert!(!client.take_page());
+    }
 
     #[test]
     fn joins_base_url_and_paths() {
