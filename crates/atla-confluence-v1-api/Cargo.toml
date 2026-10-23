@@ -9,7 +9,8 @@ repository.workspace = true
 doctest = false
 
 [build-dependencies]
-progenitor = "0.14"
+# Build scripts use Generator directly; the macro feature pulls in deprecated YAML.
+progenitor = { version = "0.14", default-features = false }
 serde_json = "1"
 openapiv3 = "2"
 syn = { version = "3", features = ["full"] }
