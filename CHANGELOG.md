@@ -10,6 +10,7 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Updated patch-level Rust dependencies without changing the CLI or JSON contracts.
+- Updated SHA-pinned GitHub Actions for CI, artifact handling, and release attestations.
 
 ### Security
 
