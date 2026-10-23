@@ -223,7 +223,8 @@ executes the update script, verifies fmt/check/workspace tests, and opens a
 review PR containing only `specs/**` changes; it never pushes directly to
 `main`. `scripts/spec-diff-summary.py` adds per-spec line/size/hash totals, operation-ID/schema-count
 deltas, and normalized parameter/request/response/schema contract facts to the PR body and
-workflow summary. This exposes nested field, requiredness, enum, type, and default changes that
+workflow summary. This includes response status additions/removals even when a response
+has no body, plus nested field, requiredness, enum, type, and default changes that
 counts alone miss. Review every invariant in `specs/PATCHES.md` and all contract diffs before
 merging.
 

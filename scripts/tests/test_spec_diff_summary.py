@@ -120,6 +120,36 @@ class SpecDiffSummaryTests(unittest.TestCase):
         self.assertIn("schema OldSchema property spaceOwnerId", result.stdout)
         self.assertIn("schema OldSchema requires spaceOwnerId", result.stdout)
 
+    def test_reports_bodyless_response_additions(self) -> None:
+        for response in (
+            {"description": "Conflict"},
+            {"description": "Conflict", "content": {}},
+        ):
+            with self.subTest(response=response):
+                changed = spec("oldOperation0", "OldSchema")
+                changed["paths"]["/items"]["get"]["responses"]["409"] = response
+                (self.root / SPEC_PATHS[0]).write_text(json.dumps(changed) + "\n")
+
+                result = self.run_script()
+
+                self.assertIn("`GET /items response 409`", result.stdout)
+
+    def test_reports_bodyless_response_removals(self) -> None:
+        changed = spec("oldOperation0", "OldSchema")
+        changed["paths"]["/items"]["get"]["responses"] = {
+            "204": {"description": "No content"}
+        }
+        (self.root / SPEC_PATHS[0]).write_text(json.dumps(changed) + "\n")
+
+        result = self.run_script()
+
+        self.assertIn("Removed or changed-from contract facts:", result.stdout)
+        added, removed = result.stdout.split(
+            "Removed or changed-from contract facts:", 1
+        )
+        self.assertIn("`GET /items response 204`", added)
+        self.assertIn("`GET /items response 200`", removed)
+
     def test_writes_requested_output_file(self) -> None:
         output = self.root / "summary.md"
 
