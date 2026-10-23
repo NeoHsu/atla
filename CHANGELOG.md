@@ -7,6 +7,18 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Updated patch-level Rust dependencies without changing the CLI or JSON contracts.
+
+### Security
+
+- Updated HTTP/TLS dependencies to address RustSec advisories, including optional
+  dependencies retained in the lockfile, and replaced a yanked ChaCha20 release.
+- Removed the unused Progenitor macro feature and its unmaintained YAML build dependencies.
+- Pinned the Rust toolchain Action to its append-only source history and selected
+  toolchains explicitly, preserving SHA pinning and the Rust 1.91 MSRV.
+
 ## [0.8.0] - 2026-08-07
 
 ### Added
