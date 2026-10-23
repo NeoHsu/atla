@@ -416,6 +416,100 @@ async fn confluence_attachment_upload_json_is_a_versioned_object() {
     assert_eq!(uploaded["schemaVersion"], 1);
     assert_eq!(uploaded["operation"], "confluence.attachment.upload");
     assert_eq!(uploaded["results"][0]["id"], "att456");
+    let requests = server
+        .received_requests()
+        .await
+        .expect("request recording should be enabled");
+    assert_eq!(requests.len(), 1);
+    let body = std::str::from_utf8(&requests[0].body).expect("UTF-8 multipart fixture");
+    assert!(!body.contains("Content-Disposition: form-data; name=\"comment\""));
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn confluence_attachment_upload_encodes_utf8_comments() {
+    let server = MockServer::start().await;
+    let (directory, config) = setup(&server.uri()).await;
+    let file = directory.path().join("evidence.txt");
+    std::fs::write(&file, b"evidence\n").expect("write attachment");
+    let cases = [
+        ("test comment", false),
+        ("test comment", true),
+        ("測試附件註解 🦀", false),
+        ("測試附件註解 🦀", true),
+        ("", false),
+        ("", true),
+    ];
+    Mock::given(method("PUT"))
+        .and(path("/wiki/rest/api/content/123/child/attachment"))
+        .and(query_param("status", "current"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{
+                "id": "att456",
+                "type": "attachment",
+                "status": "current",
+                "title": "evidence.txt",
+                "version": {"number": 1}
+            }],
+            "size": 1
+        })))
+        .expect(cases.len() as u64)
+        .mount(&server)
+        .await;
+
+    for (comment, minor_edit) in cases {
+        let mut args = vec![
+            "--no-input",
+            "--output",
+            "json",
+            "confluence",
+            "attachment",
+            "upload",
+            "123",
+            file.to_str().expect("UTF-8 temp path"),
+            "--comment",
+            comment,
+        ];
+        if minor_edit {
+            args.push("--minor-edit");
+        }
+        let output = atla(&config, &args);
+        assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+        let uploaded: serde_json::Value =
+            serde_json::from_str(&stdout(&output)).expect("versioned attachment result");
+        assert_eq!(uploaded["schemaVersion"], 1);
+        assert_eq!(uploaded["operation"], "confluence.attachment.upload");
+        assert_eq!(uploaded["results"][0]["id"], "att456");
+    }
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("request recording should be enabled");
+    assert_eq!(requests.len(), cases.len());
+    for (request, (comment, minor_edit)) in requests.iter().zip(cases) {
+        let body = std::str::from_utf8(&request.body).expect("UTF-8 multipart fixture");
+        let expected_comment = format!(
+            "Content-Disposition: form-data; name=\"comment\"\r\n\
+             Content-Type: text/plain; charset=utf-8\r\n\r\n{comment}\r\n"
+        );
+        assert!(
+            body.contains(&expected_comment),
+            "missing UTF-8 text comment part for {comment:?} (minorEdit={minor_edit}): {body}"
+        );
+        assert_eq!(
+            body.matches("Content-Disposition: form-data; name=\"comment\"")
+                .count(),
+            1
+        );
+        assert!(body.contains(&format!(
+            "Content-Disposition: form-data; name=\"minorEdit\"\r\n\r\n{minor_edit}\r\n"
+        )));
+        assert!(body.contains(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"evidence.txt\"\r\n\
+             Content-Type: application/octet-stream\r\n\r\nevidence\n\r\n"
+        ));
+    }
     server.verify().await;
 }
 
