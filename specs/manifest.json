@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-03T10:08:50.442416Z",
+  "generated_at": "2026-10-23T17:59:49Z",
   "generator": {
     "tool": "progenitor",
     "version": "progenitor-0.14"
@@ -7,19 +7,19 @@
   "specs": {
     "jira": {
       "source_file": "specs/jira-v3-partial.json",
-      "source_sha256": "88271b26f8d41610e1e08113f1a1c8dc6fc2f0293aa6618a3f172363a180d41f",
+      "source_sha256": "a7033c18ccedc2fe51cc784a037753438952932d0d241f331a2d94f33f1d3263",
       "upstream_source_file": "specs/jira-v3.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/jira/platform/swagger-v3.v3.json",
-      "upstream_sha256": "90d1546f74f824416a43d9925cb3ede7313e7b04a0b06c9a5f6f972625cc0d0d",
+      "upstream_sha256": "ae048ce3f43809abb18e96523e22c8adb67b6f720bfc4bf4c59594822c3cb325",
       "partial_spec_script": "scripts/jira-v3-partial-spec.js",
       "description": "Jira REST API v3 (partial, filtered to used endpoints)"
     },
     "confluence": {
       "source_file": "specs/confluence-v2-partial.json",
-      "source_sha256": "4e2fd3eb7d34af447cb7193ea111d41bab45d5aebcebf556939d99d2d02decf6",
+      "source_sha256": "9ef71fc682b1e1e9afd48c783cff4e91dfc3432efa91190aad6632abb321ce3e",
       "upstream_source_file": "specs/confluence-v2.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json",
-      "upstream_sha256": "c4bd1ed570f21cd6dee2360d9cda0d5aa09933233491c8286d60cc4fa16c5df5",
+      "upstream_sha256": "246e0eec8f432eae39c32250a0ca1a32b233c166f86a80ff1de4dac7f92b9380",
       "description": "Confluence REST API v2 (partial, filtered to used endpoints)",
       "partial_spec_script": "scripts/confluence-v2-partial-spec.js"
     },
@@ -28,7 +28,7 @@
       "source_sha256": "a78278f5e5e2da0cdb0adfcf6862ae0942a97bff458b308ab1fe64ec90074ec1",
       "upstream_source_file": "specs/confluence-v1.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/confluence/swagger.v3.json",
-      "upstream_sha256": "70088490f4069e0a5b082411ac5296b822041b2848256444f0dfca3f3d319e73",
+      "upstream_sha256": "6c66a606fa7535268512f07f599fe1e3f9de2ba0b1da7eb6ead405509875577e",
       "partial_spec_script": "scripts/confluence-v1-partial-spec.js",
       "description": "Confluence REST API v1 (partial, filtered and patched)"
     }

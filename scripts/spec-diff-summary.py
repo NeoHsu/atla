@@ -223,6 +223,7 @@ def collect_contract_facts(document: dict[str, Any]) -> frozenset[str]:
                         response = resolve_local_ref(document, raw_response)
                         if not isinstance(response, dict):
                             continue
+                        facts.add(f"{operation_prefix} response {status}")
                         content = response.get("content", {})
                         if not isinstance(content, dict):
                             continue

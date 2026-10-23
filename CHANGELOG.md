@@ -11,11 +11,17 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated patch-level Rust dependencies without changing the CLI or JSON contracts.
 - Updated SHA-pinned GitHub Actions for CI, artifact handling, and release attestations.
+- Refreshed Atlassian partial specs, including trashed space statuses and Confluence
+  page-update approval-conflict responses.
 
 ### Fixed
 
 - Kept atomic page-budget accounting compatible with current Rust and the Rust 1.91
   MSRV, including overflow-safe exhaustion at the maximum `u32` page budget.
+- Included bodyless response status changes in spec-refresh contract summaries so
+  newly documented errors cannot disappear from review output.
+- Preserved actionable Confluence approval-conflict response bodies across spec
+  refreshes instead of reducing documented bodyless errors to `()`.
 
 ### Security
 

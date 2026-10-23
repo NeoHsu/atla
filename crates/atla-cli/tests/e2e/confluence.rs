@@ -2,6 +2,107 @@
 use super::support::*;
 
 #[tokio::test]
+async fn confluence_space_list_preserves_trashed_status_and_owner() {
+    let server = MockServer::start().await;
+    let (_dir, config) = setup(&server.uri()).await;
+    Mock::given(method("GET"))
+        .and(path("/wiki/api/v2/spaces"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{
+                "id": "123",
+                "key": "DOCS",
+                "name": "Trashed docs",
+                "type": "global",
+                "status": "trashed",
+                "spaceOwnerId": "owner-123"
+            }]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let output = atla(
+        &config,
+        &["--output", "json", "confluence", "space", "list"],
+    );
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr(&output));
+    let spaces: serde_json::Value = serde_json::from_str(&stdout(&output)).expect("space JSON");
+    assert_eq!(spaces["schemaVersion"], 1);
+    assert_eq!(spaces["results"][0]["status"], "trashed");
+    assert_eq!(spaces["results"][0]["spaceOwnerId"], "owner-123");
+    assert_eq!(spaces["pagination"]["isLast"], true);
+    server.verify().await;
+}
+
+#[tokio::test]
+async fn confluence_page_approval_conflicts_preserve_body_without_retry() {
+    for (title_only, route) in [
+        (false, "/wiki/api/v2/pages/456"),
+        (true, "/wiki/api/v2/pages/456/title"),
+    ] {
+        let server = MockServer::start().await;
+        let (_dir, config) = setup(&server.uri()).await;
+        if !title_only {
+            Mock::given(method("GET"))
+                .and(path("/wiki/api/v2/pages/456"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "id": "456",
+                    "title": "Existing page",
+                    "status": "current",
+                    "spaceId": "123",
+                    "version": {"number": 7}
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+        }
+        Mock::given(method("PUT"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(409).set_body_json(serde_json::json!({
+                "message": "Content approval is required before publishing"
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let mut arguments = vec![
+            "--output",
+            "json",
+            "confluence",
+            "page",
+            "update",
+            "456",
+            "--title",
+            "Awaiting approval",
+        ];
+        if !title_only {
+            arguments.extend([
+                "--body",
+                "<p>Review required</p>",
+                "--representation",
+                "storage",
+                "--version",
+                "8",
+            ]);
+        }
+        let output = atla(&config, &arguments);
+        assert_eq!(output.status.code(), Some(1), "stderr: {}", stderr(&output));
+        assert!(stdout(&output).is_empty());
+        let error: serde_json::Value =
+            serde_json::from_str(&stderr(&output)).expect("structured approval error");
+        assert_eq!(error["error"]["kind"], "other");
+        assert_eq!(error["error"]["status"], 409);
+        assert_eq!(error["error"]["retryable"], false);
+        assert!(
+            stderr(&output).contains("Content approval is required before publishing"),
+            "stderr: {}",
+            stderr(&output)
+        );
+        server.verify().await;
+    }
+}
+
+#[tokio::test]
 async fn confluence_page_dry_run_prints_converted_request_body_without_network() {
     let server = MockServer::start().await;
     let (_dir, config) = setup(&server.uri()).await;
