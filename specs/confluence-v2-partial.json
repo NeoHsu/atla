@@ -1599,10 +1599,6 @@
           },
           "404": {
             "description": "Returned if:\n- The provided page does not exist\n- The user does not have permissions to view the page\n- The user does not have the needed permissions to update a page in the space\n- The user provides a parentId for a page that does not exist or they do not have permission to view\n- There are no spaces associated with the given spaceId"
-          },
-          "409": {
-            "description": "Returned if content approvals are enabled for the site and the page's space is configured to require approval before publishing.\nSave the changes as a draft, then complete the approval workflow to publish.",
-            "content": {}
           }
         },
         "security": [
@@ -2068,10 +2064,6 @@
           },
           "404": {
             "description": "Returned if:\n- The provided page does not exist\n- The user does not have permissions to view the page\n- The user does not have the needed permissions to update a page in the space\n- The user provides a parentId for a page that does not exist or they do not have permission to view\n- There are no spaces associated with the given spaceId"
-          },
-          "409": {
-            "description": "Returned if content approvals are enabled for the site and the page's space is configured to require approval before publishing.\nSave the title change as a draft, then complete the approval workflow to publish.",
-            "content": {}
           }
         },
         "security": [

@@ -78,6 +78,15 @@ class SpecFilterTests(unittest.TestCase):
                     f"{name} {hash_key} does not match {metadata[file_key]}",
                 )
 
+    def test_page_approval_conflicts_preserve_raw_error_bodies(self) -> None:
+        upstream = json.loads((ROOT / "specs/confluence-v2.json").read_text())
+        partial = json.loads((ROOT / "specs/confluence-v2-partial.json").read_text())
+        for route in ("/pages/{id}", "/pages/{id}/title"):
+            with self.subTest(route=route):
+                response = upstream["paths"][route]["put"]["responses"]["409"]
+                self.assertEqual(response.get("content", {}), {})
+                self.assertNotIn("409", partial["paths"][route]["put"]["responses"])
+
     def test_jira_project_type_key_remains_open_ended(self) -> None:
         path = ROOT / "specs/jira-v3-partial.json"
         try:

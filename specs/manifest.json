@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-19T13:32:50.784371Z",
+  "generated_at": "2026-10-23T17:59:49Z",
   "generator": {
     "tool": "progenitor",
     "version": "progenitor-0.14"
@@ -16,7 +16,7 @@
     },
     "confluence": {
       "source_file": "specs/confluence-v2-partial.json",
-      "source_sha256": "955f5d74f0ea5ee65270f644b062bdbe19f3ca7d80037fa2ffcc0d0a830aa560",
+      "source_sha256": "9ef71fc682b1e1e9afd48c783cff4e91dfc3432efa91190aad6632abb321ce3e",
       "upstream_source_file": "specs/confluence-v2.json",
       "upstream_url": "https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json",
       "upstream_sha256": "246e0eec8f432eae39c32250a0ca1a32b233c166f86a80ff1de4dac7f92b9380",

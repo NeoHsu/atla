@@ -101,6 +101,18 @@ function normalizeKnownUpstreamDefects(document) {
 	for (const pathItem of Object.values(document.paths ?? {})) {
 		for (const method of HTTP_METHODS) {
 			const operation = pathItem[method];
+			// A bodyless 409 becomes ErrorResponse(()) in progenitor, discarding the
+			// server's approval explanation. Leave these conflicts to the shared
+			// transport's UnexpectedResponse path so it can read the raw body.
+			const conflict = operation?.responses?.["409"];
+			if (
+				["updatePage", "updatePageTitle"].includes(operation?.operationId) &&
+				conflict &&
+				!conflict.$ref &&
+				Object.keys(conflict.content ?? {}).length === 0
+			) {
+				delete operation.responses["409"];
+			}
 			for (const parameter of operation?.parameters ?? []) {
 				const schema = parameter?.schema;
 				if (

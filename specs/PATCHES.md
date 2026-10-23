@@ -124,3 +124,19 @@ previous direct scalar `{"$ref":"..."}`.
 **Reason:** `items` is valid only for array schemas. Keeping the direct enum
 reference preserves both the API's scalar query contract and the generated
 method signature.
+
+### 4. Page-update approval conflicts — preserve raw error bodies
+
+**Applied automatically** by `scripts/confluence-v2-partial-spec.js`.
+
+**Location:** The bodyless `409` responses of `updatePage` and `updatePageTitle`
+(`/pages/{id}` and `/pages/{id}/title`).
+
+**Change:** Exclude these responses from the partial spec while their upstream
+`content` is absent or empty. The upstream snapshots remain unchanged.
+
+**Reason:** Progenitor turns a documented bodyless error into
+`ErrorResponse(ResponseValue<()>)`, discarding the server's actual response body.
+Leaving the status undeclared routes it through `UnexpectedResponse`, allowing
+`GeneratedTransport` to read the approval explanation and preserve the existing
+non-retryable HTTP 409 classification. Both update paths have mock E2E coverage.
