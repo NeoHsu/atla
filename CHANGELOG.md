@@ -11,6 +11,11 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Updated patch-level Rust dependencies without changing the CLI or JSON contracts.
 
+### Fixed
+
+- Kept atomic page-budget accounting compatible with current Rust and the Rust 1.91
+  MSRV, including overflow-safe exhaustion at the maximum `u32` page budget.
+
 ### Security
 
 - Updated HTTP/TLS dependencies to address RustSec advisories, including optional
