@@ -91,6 +91,14 @@ class MiseTaskTests(unittest.TestCase):
         release_workflow = RELEASE_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn(python_pin, release_workflow)
 
+    def test_rust_toolchain_actions_select_an_explicit_toolchain(self) -> None:
+        for path in (CI_WORKFLOW, SPEC_REFRESH_WORKFLOW):
+            workflow = path.read_text(encoding="utf-8")
+            for step in workflow.split("\n      - "):
+                if step.startswith("uses: dtolnay/rust-toolchain@"):
+                    with self.subTest(path=path, action=step.splitlines()[0]):
+                        self.assertIn("\n        with:\n          toolchain: ", step)
+
     def test_ci_msrv_job_pins_the_toolchain_as_an_input(self) -> None:
         workflow = CI_WORKFLOW.read_text(encoding="utf-8")
         msrv_job = workflow.split("\n  coverage:", 1)[0].split("\n  msrv:", 1)[1]

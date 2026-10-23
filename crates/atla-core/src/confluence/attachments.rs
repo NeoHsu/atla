@@ -33,7 +33,11 @@ impl ConfluenceClient {
             .part("file", part)
             .text("minorEdit", upload.minor_edit.to_string());
         if let Some(comment) = &upload.comment {
-            form = form.text("comment", comment.clone());
+            // Confluence requires an explicit UTF-8 text Content-Type for comments.
+            let comment_part = reqwest::multipart::Part::text(comment.clone())
+                .mime_str("text/plain; charset=utf-8")
+                .map_err(|error| ApiError::Decode(format!("invalid MIME type: {error}")))?;
+            form = form.part("comment", comment_part);
         }
 
         let page: generated_v1_types::ContentArray = read_json(
