@@ -22,7 +22,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
-regress = "0.11"
+regress = "0.12"
 
 # These runtime dependencies are referenced by the Progenitor output generated in OUT_DIR.
 [package.metadata.cargo-machete]
