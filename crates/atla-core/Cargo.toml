@@ -15,7 +15,7 @@ chrono.workspace = true
 comrak = { version = "0.54", default-features = false }
 httpdate.workspace = true
 keyring.workspace = true
-progenitor-client = "0.14"
+progenitor-client = "0.15"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
