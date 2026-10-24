@@ -23,7 +23,7 @@ chrono = { version = "0.4", default-features = false, features = [
 ] }
 clap = { version = "4", features = ["derive", "env"] }
 clap_complete = "4"
-comfy-table = "7"
+comfy-table = "8"
 dialoguer = "0.12"
 directories = "6"
 keyring = { version = "3", features = [
