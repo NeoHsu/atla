@@ -17,7 +17,7 @@ syn = { version = "3", features = ["full"] }
 prettyplease = "0.3"
 
 [dependencies]
-progenitor-client = "0.14"
+progenitor-client = "0.15"
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
