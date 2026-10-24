@@ -7,6 +7,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-24
+
 ### Changed
 
 - Updated patch-level Rust dependencies without changing the CLI or JSON contracts.
@@ -16,6 +18,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fixed multipart encoding of `confluence attachment upload --comment` by explicitly
+  sending comments as UTF-8 `text/plain` parts.
 - Kept atomic page-budget accounting compatible with current Rust and the Rust 1.91
   MSRV, including overflow-safe exhaustion at the maximum `u32` page budget.
 - Included bodyless response status changes in spec-refresh contract summaries so
@@ -200,7 +204,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Accepted numeric Jira attachment identifiers.
 
-[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/NeoHsu/atla/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/NeoHsu/atla/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/NeoHsu/atla/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/NeoHsu/atla/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/NeoHsu/atla/compare/v0.6.0...v0.6.1
